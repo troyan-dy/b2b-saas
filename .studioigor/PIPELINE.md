@@ -66,9 +66,9 @@ files:
 
 ## Phase 8 — Content
 files: SCOPE.md
-- [ ] scope contract met — check: python3 {skill}/scripts/scope.py .
-- [ ] contact sheet of all units shown; neighbors differ on ≥2 axes — check: manual
-- [ ] story played from start to finale (if story-driven) — check: manual
+- [x] scope contract met — check: python3 {skill}/scripts/scope.py .
+- [x] contact sheet of all units shown; neighbors differ on ≥2 axes — check: manual
+- [x] story played from start to finale (if story-driven) — check: manual
 - [ ] user played the new content — check: user
 
 ## Phase 9 — Polish

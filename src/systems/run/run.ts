@@ -1,5 +1,6 @@
 import { createRng, type Rng } from '../../core/rng';
 import blocksData from '../../data/balance/blocks.json';
+import clientsData from '../../data/balance/clients.json';
 import effectsData from '../../data/balance/effects.json';
 import eventsData from '../../data/balance/events.json';
 import ideasData from '../../data/balance/ideas.json';
@@ -37,6 +38,31 @@ const EFFECTS = effectsData as Record<string, Record<string, number>>;
 export const TUNING = tuningData;
 export const IDEAS = ideasData;
 
+export type ClientType = 'small' | 'mid' | 'startup' | 'corp' | 'gov';
+interface ClientRule {
+  id: ClientType;
+  title: string;
+  from_stage: number;
+  /** a lead is tried against the types in the order of the file; the first roll that succeeds decides */
+  chance: number;
+  /** how many of this type the sheet holds at once */
+  max: number;
+  /** where the name and the picture come from: the audience of the idea or a list of its own */
+  pool: 'aud' | 'corp' | 'startup' | 'gov';
+  /** what it waits for: one of the market's asks or one of the purchasing department's */
+  asks: 'market' | 'corp';
+  /** subscription per sprint; 0 — the audience's cheque times `aud_mult` */
+  pay: number;
+  aud_mult: number;
+  patience: number;
+  /** the chance per release that it closes by itself, happy or not */
+  churn: number;
+  /** pays while it waits for its block; a state customer signs only when everything is there */
+  pays_waiting: boolean;
+}
+export const CLIENT_TYPES = clientsData as ClientRule[];
+const CLIENT_RULE = Object.fromEntries(CLIENT_TYPES.map((t) => [t.id, t])) as Record<ClientType, ClientRule>;
+
 export interface Agent {
   id: number;
   tier: Tier;
@@ -61,7 +87,7 @@ export interface Client {
   id: number;
   texture: string;
   name: string;
-  size: 'small' | 'mid' | 'corp';
+  type: ClientType;
   /** base subscription per sprint, before the idea and the links */
   pay: number;
   /** the block this client is waiting for */
@@ -82,6 +108,8 @@ export interface Report {
   shipped: string[];
   came: number;
   left: number;
+  /** clients that closed by themselves: a startup like yours ran out of money first */
+  closed: number;
   reasons: string[];
   mrr: number;
   tokens: number;
@@ -96,7 +124,8 @@ export type RunEvent =
   | { type: 'live'; kind: string }
   | { type: 'release'; report: Report }
   | { type: 'client'; id: number }
-  | { type: 'left'; id: number; name: string; reason: string }
+  /** `closed` — nothing was wrong with the product: the client itself is no more */
+  | { type: 'left'; id: number; name: string; reason: string; closed?: boolean }
   | { type: 'reveal'; kind: string }
   | { type: 'down' }
   | { type: 'stage'; stage: number }
@@ -180,6 +209,8 @@ export interface Run {
     promises: number;
     kept: number;
     broken: number;
+    /** the most links the product ever had at once */
+    links: number;
   };
   nextId: number;
   /** agents are numbered in the order they are hired */
@@ -246,7 +277,7 @@ export function createRun(seed: number, idea: Idea, perks: readonly string[] = [
     leads: 0,
     insight: 0,
     asks: shuffle(rng, askable).slice(0, 3),
-    corpAsks: shuffle(rng, corp),
+    corpAsks: shuffle(rng, corp).slice(0, TUNING.corp_asks),
     known: [],
     clients: [],
     down: false,
@@ -261,7 +292,7 @@ export function createRun(seed: number, idea: Idea, perks: readonly string[] = [
     events: [],
     over: null,
     lastReport: null,
-    stats: { clients: 0, left: 0, downs: 0, peakMrr: 0, shipped: 0, corp: 0, soldFor: 0, tokens: 0, firstClientAt: 0, profitAt: 0, promises: 0, kept: 0, broken: 0 },
+    stats: { clients: 0, left: 0, downs: 0, peakMrr: 0, shipped: 0, corp: 0, soldFor: 0, tokens: 0, firstClientAt: 0, profitAt: 0, promises: 0, kept: 0, broken: 0, links: 0 },
     nextId: 1,
     nextAgent: 2,
     live: new Set(),
@@ -289,6 +320,7 @@ export function isLive(run: Run, kind: string): boolean {
 function refresh(run: Run): void {
   run.live = new Set(run.blocks.filter((b) => b.live).map((b) => b.kind));
   run.linkCount = links(run).length;
+  run.stats.links = Math.max(run.stats.links, run.linkCount);
   const eff: Effects = { patience: 0, word_of_mouth: 1, corp_pay: 1, small_pay: 1, promo: 1, tokens: 1 };
   for (const [kind, e] of Object.entries(EFFECTS)) {
     if (!run.live.has(kind)) continue;
@@ -325,14 +357,24 @@ export function priceMult(run: Run): number {
 
 /** what a client is worth per sprint: its subscription at today's prices, whether it pays right now or not */
 function clientWorth(run: Run, c: Client): number {
-  const own = c.size === 'corp' ? run.eff.corp_pay : run.eff.small_pay;
+  const own = CLIENT_RULE[c.type].asks === 'corp' ? run.eff.corp_pay : run.eff.small_pay;
   return c.pay * c.deal * priceMult(run) * own * (c.happy ? TUNING.clients.happy_bonus : 1);
+}
+
+/** the contract is still being approved: this client pays nothing until its block ships */
+export function signing(c: Client): boolean {
+  return !c.happy && !CLIENT_RULE[c.type].pays_waiting;
 }
 
 /** what a client pays per sprint right now */
 export function clientPay(run: Run, c: Client): number {
-  if (run.down || !isLive(run, 'pay')) return 0;
+  if (run.down || !isLive(run, 'pay') || signing(c)) return 0;
   return clientWorth(run, c);
+}
+
+/** squares of research before the market says one more thing it wants */
+export function researchNeed(run: Run): number {
+  return Math.max(1, Math.round(TUNING.research_work_per_reveal * run.idea.tech.research));
 }
 
 /** what a client costs in tokens per sprint: free users burn them too */
@@ -498,10 +540,25 @@ export function answerCall(run: Run, sure: boolean): void {
   if (sure) {
     c.deal = TUNING.call.sure_mult;
     c.promised = true;
-    c.patience = TUNING.call.sure_patience;
+    c.patience = promiseSprints(run);
     run.stats.promises++;
-  } else c.deal = TUNING.call.honest_mult;
+  } else c.deal = honestMult(run);
   seat(run, c);
+}
+
+/** sprints a promised block may take; a founder who has kept his word before is given one more */
+export function promiseSprints(run: Run): number {
+  return run.perks.includes('word') ? TUNING.call.sure_patience_perk : TUNING.call.sure_patience;
+}
+
+/** what an honest «not yet» leaves of the cheque */
+export function honestMult(run: Run): number {
+  return run.perks.includes('no') ? TUNING.call.honest_mult_perk : TUNING.call.honest_mult;
+}
+
+/** seconds of life the bank gives for the flat */
+export function mortgageSeconds(run: Run): number {
+  return run.perks.includes('banker') ? TUNING.mortgage_s_perk : TUNING.mortgage_s;
 }
 
 /** The money is gone. Mortgaging the flat buys a minute of life, once. */
@@ -545,7 +602,7 @@ export function step(run: Run, dt: number): void {
     if (net >= 0) return;
     if (run.mortgaged) end(run, 'broke');
     else {
-      run.lastChance = Math.ceil((-net * TUNING.mortgage_s) / 10) * 10;
+      run.lastChance = Math.ceil((-net * mortgageSeconds(run)) / 10) * 10;
       run.events.push({ type: 'lastchance', sum: run.lastChance });
     }
   }
@@ -571,7 +628,7 @@ function deliver(run: Run, a: Agent): void {
       run.debt = Math.max(0, run.debt - TUNING.fix_per_work);
       return;
     case 'promo':
-      run.leads += (run.idea.tech.hype * run.idea.form.hype * run.eff.promo * run.mod.promo) / TUNING.promo_work_per_lead;
+      run.leads += (run.idea.tech.hype * run.idea.form.hype * run.idea.aud.hype * run.eff.promo * run.mod.promo) / TUNING.promo_work_per_lead;
       run.debt += dirty * 0.5;
       run.events.push({ type: 'work', agent: a.id, lane: a.lane });
       return;
@@ -580,7 +637,7 @@ function deliver(run: Run, a: Agent): void {
       run.events.push({ type: 'work', agent: a.id, lane: a.lane, idle: unknown.length === 0 });
       if (unknown.length === 0) return;
       run.insight++;
-      if (run.insight >= TUNING.research_work_per_reveal) {
+      if (run.insight >= researchNeed(run)) {
         run.insight = 0;
         run.known.push(unknown[0]);
         run.events.push({ type: 'reveal', kind: unknown[0] });
@@ -592,43 +649,39 @@ function deliver(run: Run, a: Agent): void {
 
 /** A lead becomes a client-to-be: who it is, what it pays and what it waits for. Not on the sheet yet. */
 function makeClient(run: Run): Client {
-  const C = TUNING.clients;
-  const slot = -1;
-  const corps = run.clients.filter((c) => c.size === 'corp').length;
-  const patienceMods = run.idea.tech.patience + run.idea.form.patience + run.eff.patience;
-  let client: Client;
-  if (run.stage >= 3 && corps < 4 && run.rng.next() < C.corp_chance) {
-    const taken = new Set(run.clients.map((c) => c.name));
-    const pool = IDEAS.corp.filter((c) => !taken.has(c.name));
-    const who = run.rng.pick(pool.length > 0 ? pool : IDEAS.corp);
-    const want = run.rng.pick(run.corpAsks);
-    client = { id: run.nextId++, texture: who.texture, name: who.name, size: 'corp', pay: C.corp_pay, want, patience: Math.max(1, C.corp_patience + patienceMods), happy: false, slot, deal: 1, promised: false };
-  } else {
-    const taken = new Set(run.clients.map((c) => c.name));
-    const pool = run.idea.aud.clients.filter((n) => !taken.has(n));
+  const count = (type: ClientType): number => run.clients.filter((c) => c.type === type).length;
+  // a founder with a name on the market is found by a bigger first client
+  const known = run.perks.includes('name') && run.stats.clients === 0;
+  const rule =
+    (known ? CLIENT_RULE.mid : undefined) ??
+    CLIENT_TYPES.find((t) => run.stage >= t.from_stage && count(t.id) < t.max && (t.chance >= 1 || run.rng.next() < t.chance)) ??
+    CLIENT_RULE.small;
+
+  const taken = new Set(run.clients.map((c) => c.name));
+  const all = rule.pool === 'aud' ? run.idea.aud.clients.map((name) => ({ name, texture: run.idea.aud.texture })) : IDEAS[rule.pool];
+  const pool = all.filter((c) => !taken.has(c.name));
+  const who = run.rng.pick(pool.length > 0 ? pool : all);
+  let name = who.name;
+  if (pool.length === 0) {
     // the names ran out: the same business opens another branch
-    let name = run.rng.pick(pool.length > 0 ? pool : run.idea.aud.clients);
-    if (pool.length === 0) {
-      const tails = [' II', ' III', ' IV'];
-      name += tails.find((x) => !taken.has(name + x)) ?? tails[0];
-    }
-    const mid = run.rng.next() < C.mid_chance;
-    const want = run.rng.pick(run.asks);
-    client = {
-      id: run.nextId++,
-      texture: run.idea.aud.texture,
-      name,
-      size: mid ? 'mid' : 'small',
-      pay: run.idea.aud.pay * (mid ? C.mid_pay_mult : 1),
-      want,
-      patience: Math.max(1, C.patience + patienceMods),
-      happy: false,
-      slot,
-      deal: 1,
-      promised: false,
-    };
+    const tails = [' II', ' III', ' IV'];
+    name += tails.find((x) => !taken.has(name + x)) ?? tails[0];
   }
-  return client;
+  // how long this market waits: the idea, the shipped blocks and, for its own audience, the audience itself
+  const patience = rule.patience + run.idea.tech.patience + run.idea.form.patience + run.eff.patience + (rule.pool === 'aud' ? run.idea.aud.patience : 0);
+  return {
+    id: run.nextId++,
+    texture: who.texture,
+    name,
+    type: rule.id,
+    pay: rule.pay > 0 ? rule.pay : run.idea.aud.pay * rule.aud_mult,
+    want: run.rng.pick(rule.asks === 'corp' ? run.corpAsks : run.asks),
+    patience: Math.max(1, patience),
+    happy: false,
+    slot: -1,
+    deal: 1,
+    promised: false,
+  };
 }
 
 /** The client takes its place on the sheet and starts to count. */
@@ -645,7 +698,7 @@ function seat(run: Run, client: Client): void {
   }
   run.clients.push(client);
   run.stats.clients++;
-  if (client.size === 'corp') run.stats.corp++;
+  if (CLIENT_RULE[client.type].asks === 'corp') run.stats.corp++;
   if (run.stats.firstClientAt === 0) run.stats.firstClientAt = run.t;
   run.events.push({ type: 'client', id: client.id });
 }
@@ -653,7 +706,7 @@ function seat(run: Run, client: Client): void {
 /** The end of a sprint: what is built ships, the market answers. */
 function release(run: Run): void {
   const C = TUNING.clients;
-  const report: Report = { sprint: run.sprint, shipped: [], came: 0, left: 0, reasons: [], mrr: 0, tokens: 0, debt: 0, down: false };
+  const report: Report = { sprint: run.sprint, shipped: [], came: 0, left: 0, closed: 0, reasons: [], mrr: 0, tokens: 0, debt: 0, down: false };
 
   for (const b of run.blocks) {
     if (b.built && !b.live) {
@@ -686,6 +739,14 @@ function release(run: Run): void {
   // clients who got what they waited for stay; the rest lose patience
   const stay: Client[] = [];
   for (const c of run.clients) {
+    const churn = CLIENT_RULE[c.type].churn;
+    if (churn > 0 && run.rng.next() < churn) {
+      // a startup like yours: it ran out of money first, and nothing in the product could have kept it
+      report.closed++;
+      run.stats.left++;
+      run.events.push({ type: 'left', id: c.id, name: c.name, reason: '', closed: true });
+      continue;
+    }
     if (isLive(run, c.want)) {
       if (c.promised) {
         c.promised = false;
@@ -820,7 +881,8 @@ function news(run: Run): void {
       }
     }
     run.newsWait = N.cooldown;
-    run.events.push({ type: 'news', id: e.id, text: e.text, arg, good: e.kind === 'leads' || e.kind === 'money' || (e.kind === 'promo' && e.mult > 1) });
+    const good = e.kind === 'leads' || e.kind === 'money' || (e.kind === 'promo' && e.mult > 1) || (e.kind === 'tokens' && e.mult < 1);
+    run.events.push({ type: 'news', id: e.id, text: e.text, arg, good });
   }
 
   const mod = { tokens: 1, price: 1, promo: 1 };

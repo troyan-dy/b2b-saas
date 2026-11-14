@@ -5,7 +5,7 @@
   "living_per_s": 3,
   "upkeep_per_block_s": 0.5,
   "sites_max": 2,
-  "link_bonus": 0.1,
+  "link_bonus": 0.08,
   "tiers": {
     "fast": { "cost_per_s": 5, "work_per_s": 0.2, "debt_per_work": 0.5 },
     "normal": { "cost_per_s": 8, "work_per_s": 0.16, "debt_per_work": 0.2 },
@@ -13,8 +13,10 @@
   },
   "review_boost": 1.25,
   "crunch": { "max": 6, "regen_s": 5, "debt": 1 },
-  "call": { "chance": 0.5, "honest_mult": 0.75, "sure_mult": 1.35, "sure_patience": 2, "refund_sprints": 2 },
+  "call": { "chance": 0.5, "honest_mult": 0.75, "honest_mult_perk": 0.85, "sure_mult": 1.35, "sure_patience": 2, "sure_patience_perk": 3, "refund_sprints": 2 },
   "mortgage_s": 60,
+  "mortgage_s_perk": 90,
+  "corp_asks": 3,
   "news": { "from_sprint": 4, "chance": 0.3, "chance_stage3": 0.5, "cooldown": 2 },
   "fix_per_work": 2,
   "promo_work_per_lead": 9,
@@ -22,14 +24,7 @@
   "debt": { "slow_per_point": 0.012, "slow_max": 0.6, "down_at": 30, "down_relief": 12 },
   "clients": {
     "token_share": 0.38,
-    "free_token_per_s": 0.5,
-    "patience": 3,
     "word_of_mouth": 0.12,
-    "mid_chance": 0.25,
-    "mid_pay_mult": 2.2,
-    "corp_pay": 600,
-    "corp_patience": 4,
-    "corp_chance": 0.25,
     "happy_bonus": 1.25
   },
   "stages": [

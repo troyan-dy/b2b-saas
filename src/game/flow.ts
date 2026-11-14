@@ -1,5 +1,6 @@
 import { CREDITS } from '../content/credits';
 import { clock, ENDING_TITLE, endingPost, endingStats } from '../content/endings';
+import { AGAIN_SAYS } from '../content/texts';
 import { money } from '../ui/format';
 import type { Terminal } from '../ui/terminal/terminal';
 import { finish, LESSONS, saveMeta, type Meta } from '../systems/meta/meta';
@@ -85,7 +86,7 @@ export async function mixIdea(term: Terminal, seed: number, meta: Meta): Promise
   term.clear();
   term.print(`${tech.adj} ИИ-${form.name} для…`, 'mid');
   await term.type(['Слово третье. Кому это продаём?'], '');
-  const aud = deal.aud[await term.ask(deal.aud.map((c) => ({ title: `для ${c.name} — ${c.note}`, note: `подписка от $${c.pay} за спринт` })))];
+  const aud = deal.aud[await term.ask(deal.aud.map((c) => ({ title: `для ${c.name} — ${c.note}`, note: `подписка от $${c.pay} за спринт${c.does ? ` · ${c.does}` : ''}` })))];
 
   const idea: Idea = { tech, form, aud };
   term.clear();
@@ -97,6 +98,10 @@ export async function mixIdea(term: Terminal, seed: number, meta: Meta): Promise
     `Их хватит минут на ${String(minutes).replace('.', ',')}, если ничего не продадим.`,
     `Цель: выйти в плюс за ${TUNING.last_sprint} спринтов. Или хотя бы красиво закрыться.`,
   ];
+  const last = meta.runs[meta.runs.length - 1];
+  // the same founder, a new session of Claude: the past is told to him, not remembered
+  if (last) lines.splice(1, 0, AGAIN_SAYS[last.ending] ?? AGAIN_SAYS.broke);
+  if (meta.runs.length >= 3) lines.push(`Это твой ${meta.runs.length + 1}-й стартап. В резюме это называется «опыт».`);
   if (meta.lessons.length > 0) lines.push(`С тобой твой опыт: уроков — ${meta.lessons.length}.`);
   await term.type(lines, '');
   if (meta.runs.length === 0) {

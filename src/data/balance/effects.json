@@ -4,5 +4,9 @@
   "dash": { "corp_pay": 1.2 },
   "mobile": { "small_pay": 1.2 },
   "api": { "promo": 1.5 },
-  "cheap": { "tokens": 0.5 }
+  "cheap": { "tokens": 0.5 },
+  "wait": { "promo": 1.15 },
+  "onb": { "small_pay": 1.1 },
+  "ref": { "word_of_mouth": 1.5 },
+  "c1": { "corp_pay": 1.15 }
 }

@@ -1,17 +1,29 @@
 import { describe, expect, it } from 'vitest';
 import { playBot, SENSIBLE, type BotStyle } from '../src/gyms/bot';
-import { answerLastChance, createRun, IDEAS, mrr, step, TUNING, type Idea, type Run } from '../src/systems/run/run';
+import { answerLastChance, CLIENT_TYPES, createRun, IDEAS, mrr, step, TUNING, type Idea, type Run } from '../src/systems/run/run';
 
 const STEP = 1 / 4;
 
+/** who came to all the startups played here, by type, and how many of them closed by themselves */
+const met = new Map<string, number>();
+let closed = 0;
+
 function play(seed: number, idea: Idea, style: BotStyle | null): Run {
   const run = createRun(seed, idea);
+  let read = 0;
   for (let k = 0; k < 60 * 60 * 4 && !run.over; k++) {
     if (style) playBot(run, style);
     // nobody at the desk: the bank's call goes unanswered, the startup closes
     else if (run.lastChance !== null) answerLastChance(run, false);
     if (run.offer !== null) run.offer = null; // the bot never sells: we want to see the whole run
     step(run, STEP);
+    for (; read < run.events.length; read++) {
+      const e = run.events[read];
+      if (e.type === 'client') {
+        const type = run.clients.find((c) => c.id === e.id)?.type ?? '?';
+        met.set(type, (met.get(type) ?? 0) + 1);
+      } else if (e.type === 'left' && e.closed) closed++;
+    }
   }
   return run;
 }
@@ -61,7 +73,8 @@ describe('economy', () => {
   });
 
   it('test_run_links_and_research_pay_off', () => {
-    const seeds = Array.from({ length: 24 }, (_, k) => 500 + k);
+    // forty-eight startups: with fewer, one lucky seed moves the share of survivors by four points
+    const seeds = Array.from({ length: 48 }, (_, k) => 500 + k);
     const full = summary(seeds.map((s, k) => play(s, ideaOf(k), SENSIBLE)));
     const noLinks = summary(seeds.map((s, k) => play(s, ideaOf(k), { ...SENSIBLE, links: false })));
     const blind = summary(seeds.map((s, k) => play(s, ideaOf(k), { ...SENSIBLE, research: false })));
@@ -79,12 +92,20 @@ describe('economy', () => {
   });
 
   it('test_run_every_idea_can_be_won_and_lost', () => {
-    for (let k = 0; k < 12; k++) {
+    // sixteen mixes: every card of every deck is in at least one of them
+    for (let k = 0; k < 16; k++) {
       const runs = Array.from({ length: 12 }, (_, s) => play(900 + s * 7 + k, ideaOf(k), SENSIBLE));
       const alive = runs.filter((r) => r.over !== 'broke').length;
       console.log(`idea ${k}: ${ideaOf(k).tech.id}/${ideaOf(k).form.id}/${ideaOf(k).aud.id} alive ${alive}/12 peak ${Math.round(runs.reduce((a, r) => a + r.stats.peakMrr, 0) / 12)}`);
       expect(alive).toBeGreaterThan(0);
     }
+  });
+
+  it('test_run_every_client_type_comes_and_startups_close', () => {
+    // counted over every startup played above: content that never shows up is not content
+    console.log(`clients met: ${[...met].map(([type, n]) => `${type} ${n}`).join(', ')} · closed by themselves ${closed}`);
+    for (const t of CLIENT_TYPES) expect(met.get(t.id) ?? 0).toBeGreaterThan(0);
+    expect(closed).toBeGreaterThan(0);
   });
 
   it('test_run_income_never_negative_and_money_matches_flows', () => {

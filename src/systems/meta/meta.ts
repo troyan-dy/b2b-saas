@@ -79,6 +79,16 @@ function happened(run: Run, when: string): boolean {
       return run.stats.corp > 0;
     case 'asked':
       return run.known.length >= 2;
+    case 'kept':
+      return run.stats.kept >= 2;
+    case 'broken':
+      return run.stats.broken > 0;
+    case 'pawn':
+      return run.mortgaged && run.over !== 'broke';
+    case 'links':
+      return run.stats.links >= 3;
+    case 'many':
+      return run.stats.clients >= 10;
     case 'sold':
       return run.over === 'sold';
     case 'profit':

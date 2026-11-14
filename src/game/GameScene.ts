@@ -1,6 +1,24 @@
 import Phaser from 'phaser';
 import { BLOCK_BY_ID } from '../content/blocks';
-import { BANK_ANSWERS, BANK_TEXT, CALL_ANSWERS, CALL_ASK, LANE_ACC, LANE_NAME, LEFT_KNOWN, LEFT_UNKNOWN, NEWS, NEWS_EVENT, releaseLines, TIER_NAME } from '../content/texts';
+import {
+  BANK_ANSWERS,
+  BANK_TEXT,
+  callAnswers,
+  CALL_ASK,
+  CLIENT_SAYS,
+  CLIENT_TYPE_NOTE,
+  effectLine,
+  FIRST_CLIENT_SAYS,
+  LANE_ACC,
+  LANE_NAME,
+  LEFT_CLOSED,
+  LEFT_KNOWN,
+  LEFT_UNKNOWN,
+  NEWS,
+  NEWS_EVENT,
+  releaseLines,
+  TIER_NAME,
+} from '../content/texts';
 import { logEvent, metrics } from '../core/metrics';
 import type { Rng } from '../core/rng';
 import { playSound, unlockSound } from '../core/sound';
@@ -19,22 +37,29 @@ import {
   freeCells,
   friendsAt,
   hire,
+  honestMult,
   IDEAS,
   incomePerS,
   isLive,
   LANES,
   links,
+  mortgageSeconds,
   netPerS,
   pitch,
   place,
+  promiseSprints,
+  researchNeed,
+  RULES,
   setLane,
   setReview,
   shelf,
+  signing,
   sites,
   step,
   TIERS,
   TUNING,
   workNeed,
+  type ClientType,
   type Lane,
   type Run,
   type RunEvent,
@@ -46,6 +71,15 @@ import { Squares } from '../view/squares';
 import { AGENT_SLOTS, BUS_GAP, BUS_Y, CLIENT_SLOTS, DESK, MARKET, MONEY_RECT, STAGE_VIEW, TRUNK_X, VIEW_AT } from './layout';
 
 const STEP = 1 / 60;
+
+/** How a client of each type stands on the sheet: the height of its picture and how many squares one payment is. */
+export const CLIENT_LOOK: Record<ClientType, { height: number; squares: number }> = {
+  small: { height: 118, squares: 1 },
+  mid: { height: 136, squares: 1 },
+  startup: { height: 112, squares: 1 },
+  corp: { height: 150, squares: 3 },
+  gov: { height: 158, squares: 4 },
+};
 
 export interface GameHooks {
   /** called every simulated step, before it: a bot plays here */
@@ -93,6 +127,8 @@ export class GameScene extends Phaser.Scene {
   private pauseCard = false;
   /** when Claude may next repeat what stops the money */
   private nagAt = 0;
+  /** what clients say aloud: a line over the building of client `id` until the clock reaches `until` */
+  private readonly quotes = new Map<number, { text: string; until: number }>();
 
   constructor(run: Run, rng: Rng, paper: Paper, hooks: GameHooks) {
     super('game');
@@ -103,7 +139,8 @@ export class GameScene extends Phaser.Scene {
   }
 
   preload(): void {
-    const keys = ['desk', 'laptop', this.run.idea.aud.texture, ...IDEAS.corp.map((c) => c.texture)];
+    const others = [...IDEAS.corp, ...IDEAS.startup, ...IDEAS.gov].map((c) => c.texture);
+    const keys = new Set(['desk', 'laptop', this.run.idea.aud.texture, ...others]);
     for (const key of keys) this.load.image(`node_${key}`, `assets/img/nodes/${key}.webp`);
   }
 
@@ -356,7 +393,9 @@ export class GameScene extends Phaser.Scene {
         const c = run.clients.find((x) => x.id === e.id);
         if (!c) return;
         const [x, y] = CLIENT_SLOTS[c.slot % CLIENT_SLOTS.length];
-        const h = c.size === 'corp' ? 150 : c.size === 'mid' ? 136 : 118;
+        const h = CLIENT_LOOK[c.type].height;
+        // a chain is seen at once: a second branch stands behind the first
+        if (c.type === 'mid') this.place(`c${c.id}b`, c.texture, x - 46, y - 20, h * 0.82, true);
         const img = this.place(`c${c.id}`, c.texture, x, y, h, true);
         this.board.route(`c${c.id}`, [
           [TRUNK_X - 80, 0],
@@ -369,20 +408,29 @@ export class GameScene extends Phaser.Scene {
         const [sx, sy] = this.board.onScreen(x, y - 150);
         this.paper.pop(sx, sy, '+ клиент', 'good');
         playSound('all');
-        logEvent('client');
-        if (run.stats.clients === 1) this.news(NEWS_EVENT.firstClient);
+        logEvent(`client:${c.type}`);
+        if (run.stats.clients === 1) {
+          this.news(NEWS_EVENT.firstClient);
+          this.quotes.set(c.id, { text: FIRST_CLIENT_SAYS, until: this.clock + 9 });
+        } else if (CLIENT_TYPE_NOTE[c.type] && !this.said.has(`type:${c.type}`)) {
+          // a new kind of client: it says a line of its own, and the news line says once how it pays
+          this.said.add(`type:${c.type}`);
+          this.news(`Новый клиент — ${CLIENT_TYPE_NOTE[c.type]}`);
+          this.quotes.set(c.id, { text: CLIENT_SAYS[c.type], until: this.clock + 9 });
+        }
         break;
       }
       case 'left': {
         const [x, y] = this.board.onScreen(...this.nodePos(`c${e.id}`));
-        const pool = e.reason ? LEFT_KNOWN : LEFT_UNKNOWN;
+        const pool = e.closed ? LEFT_CLOSED : e.reason ? LEFT_KNOWN : LEFT_UNKNOWN;
         this.paper.pop(x, y - 150 * this.board.zoom, pool[e.id % pool.length].replace('%s', BLOCK_BY_ID[e.reason]?.short ?? ''), 'bad');
         this.board.dropNode(`c${e.id}`);
+        this.board.dropNode(`c${e.id}b`);
         this.board.dropRoute(`c${e.id}`);
         this.paper.dropTag(`c${e.id}`);
         playSound('waste');
-        logEvent('left');
-        if (!this.said.has('left')) {
+        logEvent(e.closed ? 'closed' : 'left');
+        if (!e.closed && !this.said.has('left')) {
           this.said.add('left');
           this.news(NEWS_EVENT.firstLeft);
         }
@@ -561,7 +609,7 @@ export class GameScene extends Phaser.Scene {
       const [x, y] = board.onScreen(MARKET[0], MARKET[1] + 10);
       const unknown = [...run.asks, ...(run.stage >= 2 ? run.corpAsks : [])].filter((k) => !run.known.includes(k)).length;
       const parts = [`лиды <b>${run.leads.toFixed(1).replace('.', ',')}</b>`];
-      parts.push(unknown > 0 ? `разведка <b>${run.insight}/${TUNING.research_work_per_reveal}</b>` : 'все запросы известны');
+      parts.push(unknown > 0 ? `разведка <b>${run.insight}/${researchNeed(run)}</b>` : 'все запросы известны');
       this.paper.tag('market', x, y, `рынок · ${parts.join(' · ')}`, 'small');
     }
 
@@ -572,17 +620,35 @@ export class GameScene extends Phaser.Scene {
       const pay = clientPay(run, c);
       // two short lines: the name, then the money and the mood — twelve of them must fit side by side
       const paid = pay > 0 ? `<em>${money(pay)}</em>` : run.down ? 'лежим' : 'бесплатно';
+      // twelve buildings stand close on the wide sheet: their captions are set tighter
+      const cls = z < 0.7 ? 'small tight' : 'small';
       let mood: string;
       // nothing to charge with: this is said on every client, in coral — «free and happy» reads as «all is well»
       if (!isLive(run, 'pay')) {
-        this.paper.tag(`c${c.id}`, x, y, `<b>${c.name}</b><i class="bad">не платит: нет «оплаты»</i>`, 'small');
+        this.paper.tag(`c${c.id}`, x, y, `<b>${c.name}</b><i class="bad">не платит: нет «оплаты»</i>`, cls);
         continue;
       }
       if (c.happy) mood = `<i>${paid} · доволен</i>`;
       else if (c.promised) mood = `<i class="bad">обещан «${BLOCK_BY_ID[c.want]?.short}» · ${c.patience} спр.</i>`;
       else if (run.known.includes(c.want)) mood = `<i class="bad">ждёт «${BLOCK_BY_ID[c.want]?.short}» · ${c.patience} спр.</i>`;
-      else mood = `<i class="bad">чего-то ждёт · ${c.patience} спр.</i>`;
-      this.paper.tag(`c${c.id}`, x, y, `<b>${c.name}</b>${c.happy ? '' : ` · ${paid}`}${mood}`, 'small');
+      else mood = `<i class="bad">ждёт молча · ${c.patience} спр.</i>`;
+      // a waiting client says what it waits for; the one that pays nothing until then says that too
+      this.paper.tag(`c${c.id}`, x, y, `<b>${c.name}</b>${signing(c) ? ' · <u>$0</u>' : ''}${mood}`, cls);
+    }
+    // what a client says aloud stands by its building for a few seconds
+    for (const [id, q] of this.quotes) {
+      const c = run.clients.find((x) => x.id === id);
+      if (!c || this.clock > q.until) {
+        this.quotes.delete(id);
+        this.paper.dropTag(`q${id}`);
+        continue;
+      }
+      const [sx, sy] = CLIENT_SLOTS[c.slot % CLIENT_SLOTS.length];
+      // the line ends at the building and runs to the left of it: the shelf is to the right.
+      // Over the roof — except in the top row, where the goal is written: there it goes under the caption
+      const top = c.slot % 4 === 0;
+      const [x, y] = board.onScreen(sx + 30, top ? sy : sy - CLIENT_LOOK[c.type].height);
+      this.paper.tag(`q${id}`, x, top ? y + 52 : y - 36, q.text, 'say');
     }
 
     // money and time
@@ -608,12 +674,13 @@ export class GameScene extends Phaser.Scene {
         options: ['Вернуться к стартапу', 'Бросить стартап и выйти в меню'],
       });
     } else if (run.lastChance !== null) {
-      this.paper.call({ who: 'ЗВОНОК · БАНК', text: BANK_TEXT.replace('%s', money(run.lastChance)), options: BANK_ANSWERS });
+      const life = mortgageSeconds(run) > 60 ? 'полторы минуты' : 'минута';
+      this.paper.call({ who: 'ЗВОНОК · БАНК', text: BANK_TEXT.replace('%s', money(run.lastChance)).replace('%t', life), options: BANK_ANSWERS });
     } else if (run.call) {
       this.paper.call({
         who: `ЗВОНОК · ${run.call.name.toUpperCase()}`,
         text: CALL_ASK[run.call.want] ?? `А «${BLOCK_BY_ID[run.call.want]?.name}» у вас есть? Нам без этого никак.`,
-        options: CALL_ANSWERS,
+        options: callAnswers(honestMult(run), TUNING.call.sure_mult, promiseSprints(run)),
       });
     } else if (run.offer !== null) {
       this.paper.call({
@@ -707,12 +774,20 @@ export class GameScene extends Phaser.Scene {
   private shelfView(): ShelfSection[] {
     const run = this.run;
     const full = sites(run).length >= TUNING.sites_max;
+    // a founder who has seen an architecture reads on the shelf which blocks go side by side
+    const arch = run.perks.includes('arch');
+    const note = (kind: string): string => {
+      const gives = effectLine(kind);
+      const friends = arch ? `дружит: ${RULES[kind].friends.map((f) => BLOCK_BY_ID[f]?.short ?? f).join(', ')}` : '';
+      const facts = [gives, friends].filter((x) => x !== '').join(' · ');
+      return BLOCK_BY_ID[kind].note + (facts ? `<span>${facts}</span>` : '');
+    };
     const items: ShelfItem[] = shelf(run).map((kind) => ({
       id: kind,
       title: BLOCK_BY_ID[kind].name,
       // clients are here and there is nothing to charge them with: the shelf says so on the block itself
       mark: kind === 'pay' && run.clients.length > 0 ? 'нужен сейчас' : run.known.includes(kind) ? 'просят' : '',
-      note: BLOCK_BY_ID[kind].note,
+      note: note(kind),
       price: `<u></u>${workNeed(run, kind)}`,
       state: this.picked === kind ? 'on' : full ? 'off' : 'can',
       // nothing is built and nothing is picked: the first card of the shelf asks to be clicked
@@ -842,7 +917,7 @@ export class GameScene extends Phaser.Scene {
     const c = paying[this.payTurn++ % paying.length];
     const [sx, sy] = CLIENT_SLOTS[c.slot % CLIENT_SLOTS.length];
     const [x, y] = this.board.onScreen(sx, sy - 70);
-    this.squares.fly({ x: x - 20, y: y - 14, w: 40, h: 28 }, MONEY_RECT, c.size === 'corp' ? 3 : 1, PALETTE.money, 200, [0.9, 1.3], PALETTE.money);
+    this.squares.fly({ x: x - 20, y: y - 14, w: 40, h: 28 }, MONEY_RECT, CLIENT_LOOK[c.type].squares, PALETTE.money, 200, [0.9, 1.3], PALETTE.money);
     if (this.payTurn % 6 === 0) this.paper.popMoney();
   }
 

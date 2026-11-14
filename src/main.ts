@@ -19,6 +19,7 @@ import { GameScene } from './game/GameScene';
 import { playBot, SENSIBLE } from './gyms/bot';
 import { mountGymKeys } from './gyms/keys';
 import { LookdevScene } from './gyms/lookdev/LookdevScene';
+import { SheetScene } from './gyms/sheet/SheetScene';
 import { emptyMeta, loadMeta } from './systems/meta/meta';
 import { createRun, IDEAS, type Idea, type Run } from './systems/run/run';
 import { createHud } from './ui/hud';
@@ -134,9 +135,11 @@ async function play(): Promise<void> {
   await term.leave();
 }
 
-// ?gym=hello — environment check · ?gym=lookdev — the key frame · ?gym=build — a run with a fixed idea, straight on the sheet
+// ?gym=hello — environment check · ?gym=lookdev — the key frame · ?gym=sheet — every unit of content side by side ·
+// ?gym=build — a run with a fixed idea, straight on the sheet
 if (__TOOLS__ && args.gym === 'hello') start(new HelloScene(rng, createHud(over)));
 else if (__TOOLS__ && args.gym === 'lookdev') start(new LookdevScene(rng, createPaper(under, over)));
+else if (__TOOLS__ && args.gym === 'sheet') start(new SheetScene(args.state, over));
 else if (__TOOLS__ && args.gym === 'build') {
   const pick = <T,>(items: readonly T[], k: number): T => items[k % items.length];
   const n = Number(args.state) || 0;
