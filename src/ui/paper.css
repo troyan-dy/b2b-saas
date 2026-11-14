@@ -385,7 +385,54 @@
   font: 400 15px var(--mono);
   color: var(--ink);
 }
-/* work is counted in Claude's squares */
+/* the shelf of blocks: small tiles in two columns — every option is seen at once */
+.bl-scroll.grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 6px;
+  align-content: start;
+}
+.bl-item.tile {
+  margin: 0;
+  padding: 5px 10px 6px;
+  gap: 0 8px;
+  border-radius: 9px;
+  line-height: 1.2;
+}
+.bl-item.tile b {
+  font-size: 17px;
+}
+.bl-item.tile b i {
+  margin-left: 7px;
+  font-size: 13px;
+}
+.bl-item.tile small {
+  font: 400 12.5px/1.25 var(--mono);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.bl-item.tile .price {
+  font-size: 15px;
+  line-height: 1.4;
+}
+.bl-item.tile .price u {
+  width: 10px;
+  height: 10px;
+  margin-right: 6px;
+}
+/* what the block gives: the reason to build it */
+.bl-item.tile small i {
+  font-style: normal;
+  font-weight: 700;
+  color: var(--coral);
+}
+/* one quiet line under a title of the shelf: what unlocks the rest */
+.bl-note {
+  margin: -2px 0 6px;
+  font: 400 13px/1.3 var(--mono);
+  color: var(--dim);
+}/* work is counted in Claude's squares */
 .bl-item .price u {
   display: inline-block;
   width: 13px;

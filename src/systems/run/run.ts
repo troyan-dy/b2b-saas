@@ -473,10 +473,16 @@ export function tokens(run: Run): number {
   return sum;
 }
 
+/** An agent is paid for the tokens it burns: one with nothing to do on its lane burns none. */
 export function agentCost(run: Run): number {
   let sum = 0;
-  for (const a of run.agents) sum += TUNING.tiers[a.tier].cost_per_s;
+  for (const a of run.agents) if (busy(run, a)) sum += TUNING.tiers[a.tier].cost_per_s;
   return sum;
+}
+
+/** the agent has work on its lane right now */
+export function busy(run: Run, a: Agent): boolean {
+  return handy(run, a.lane);
 }
 
 export function burnPerS(run: Run): number {
@@ -676,7 +682,8 @@ export function handy(run: Run, lane: Lane): boolean {
     case 'fix':
       return run.debt > 0;
     case 'promo':
-      return sellable(run);
+      // no room for a client and a queue of leads at the door: one more post changes nothing
+      return sellable(run) && (run.clients.length < clientsMax(run) || run.leads < 1);
     case 'research':
       return unknownAsks(run).length > 0 && run.clients.length > 0;
   }
@@ -920,6 +927,8 @@ export function step(run: Run, dt: number): void {
 
   const slow = 1 - Math.min(TUNING.debt.slow_max, run.debt * TUNING.debt.slow_per_point);
   for (const a of run.agents) {
+    // nothing to do on the lane: the agent waits, for free
+    if (!busy(run, a)) continue;
     let rate = TUNING.tiers[a.tier].work_per_s;
     if (a.lane === run.review) rate *= TUNING.review_boost;
     if (a.lane === 'build') rate *= slow;

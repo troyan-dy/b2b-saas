@@ -6,6 +6,8 @@ export interface ShelfItem {
   /** right after the title, coral: «×2», «строится» */
   mark?: string;
   note: string;
+  /** said by the browser when the pointer rests on the card: the joke of the block */
+  tip?: string;
   price: string;
   /** the price is money (green), not work */
   cash?: boolean;
@@ -30,6 +32,10 @@ export interface ShelfSection {
   id: string;
   title: string;
   hint?: string;
+  /** one quiet line under the title: what unlocks the rest */
+  note?: string;
+  /** the cards are small tiles in two columns: many options seen at once */
+  grid?: boolean;
   items?: readonly ShelfItem[];
   /** the cards scroll inside a box of this height, px */
   scroll?: number;
@@ -175,10 +181,11 @@ export function createPaper(under: HTMLElement, over: HTMLElement): Paper {
       let html = '';
       for (const s of sections) {
         html += `<h2>${s.title}${s.hint ? `<em>${s.hint}</em>` : ''}</h2>`;
-        if (s.scroll) html += `<div class="bl-scroll" style="max-height:${s.scroll}px">`;
+        if (s.note) html += `<p class="bl-note">${s.note}</p>`;
+        if (s.scroll) html += `<div class="bl-scroll${s.grid ? ' grid' : ''}" style="max-height:${s.scroll}px">`;
         for (const it of s.items ?? []) {
           html +=
-            `<div class="bl-item ${it.state === 'poor' ? '' : it.state === 'on' ? 'can on' : it.state}${it.pulse ? ' pulse' : ''}" data-s="${s.id}" data-i="${it.id}">` +
+            `<div class="bl-item${s.grid ? ' tile' : ''} ${it.state === 'poor' ? '' : it.state === 'on' ? 'can on' : it.state}${it.pulse ? ' pulse' : ''}" data-s="${s.id}" data-i="${it.id}"${it.tip ? ` title="${it.tip.replace(/"/g, '&quot;')}"` : ''}>` +
             `<b>${it.title}${it.mark ? `<i>${it.mark}</i>` : ''}</b>` +
             `<span class="price${it.cash ? ' cash' : ''}">${it.price}</span>` +
             `<small>${it.note}</small></div>`;

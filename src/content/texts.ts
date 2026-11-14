@@ -17,6 +17,32 @@ function effectWords(k: string, v: number): string {
   return `${EFFECT_NAME[k] ?? k} ×${String(v).replace('.', ',')}`;
 }
 
+/** Everything a block gives, each thing in two words — for a small tile of the shelf; the main one first. */
+export function benefits(kind: string): string[] {
+  const e = (effects as Record<string, Record<string, number>>)[kind];
+  if (!e) return [];
+  const x = (v: number): string => `×${String(v).replace('.', ',')}`;
+  return Object.entries(e).map(([k, v]) => {
+    switch (k) {
+      case 'seats':
+        return `+${v} ${plural(v, ['место', 'места', 'мест'])}`;
+      case 'patience':
+        return `терпение +${v}`;
+      case 'small_pay':
+        return `чек малых ${x(v)}`;
+      case 'corp_pay':
+        return `чек крупных ${x(v)}`;
+      case 'promo':
+        return `промо ${x(v)}`;
+      case 'word_of_mouth':
+        return `сарафан ${x(v)}`;
+      case 'tokens':
+        return `токены ${x(v)}`;
+      default:
+        return `${k} ${x(v)}`;
+    }
+  });
+}
 /** The main thing a block gives, in two or three words: the shelf writes it next to the name. */
 export function benefit(kind: string): string {
   const e = (effects as Record<string, Record<string, number>>)[kind];

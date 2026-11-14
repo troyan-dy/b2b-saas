@@ -49,11 +49,13 @@ function summary(runs: Run[]): { alive: number; profit: number; peak: number; fi
 }
 
 describe('economy', () => {
-  it('test_run_doing_nothing_goes_broke_in_five_to_eight_minutes', () => {
+  it('test_run_doing_nothing_goes_broke_on_the_cost_of_living_alone', () => {
+    // an agent with nothing to build is free: an idle founder is eaten by rent and food only
     const run = play(1, plain, null);
-    expect(run.over).toBe('broke');
-    expect(run.t / 60).toBeGreaterThan(5);
-    expect(run.t / 60).toBeLessThan(8);
+    // …and never ends well: broke, or out of time and still in the red if a windfall kept it afloat
+    expect(['broke', 'late']).toContain(run.over);
+    expect(run.t / 60).toBeGreaterThan(12);
+    expect(run.stats.clients).toBe(0);
   });
 
   it('test_run_sensible_founder_usually_survives_and_first_client_comes_early', () => {

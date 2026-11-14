@@ -3,12 +3,11 @@ import { BLOCK_BY_ID } from '../content/blocks';
 import {
   BANK_ANSWERS,
   BANK_TEXT,
-  benefit,
+  benefits,
   callAnswers,
   CALL_ASK,
   CLIENT_SAYS,
   CLIENT_TYPE_NOTE,
-  effectLine,
   FIRST_CLIENT_SAYS,
   HAND_DONE,
   HAND_IDLE,
@@ -36,7 +35,7 @@ import {
   answerDilemma,
   answerLastChance,
   answerOffer,
-  burnPerS,
+  busy,
   canHire,
   clientPay,
   clientsMax,
@@ -51,7 +50,6 @@ import {
   hire,
   honestMult,
   IDEAS,
-  incomePerS,
   isDemo,
   isLive,
   isSite,
@@ -711,9 +709,10 @@ export class GameScene extends Phaser.Scene {
       const [x, y] = board.onScreen(sx, sy + 8);
       const id = `a${a.id}`;
       keepA.add(id);
-      const idle = this.idle.has(a.id);
+      // an agent with nothing to do on its lane waits for free: the caption says both
+      const idle = !busy(run, a);
       // on a wide sheet the laptops stand close: their captions are set smaller
-      this.paper.tag(id, x, y, `<b>${LANE_NAME[a.lane]}</b><i${idle ? ' class="bad"' : ''}>№${a.id} · ${idle ? 'простаивает' : TIER_NAME[a.tier]}</i>`, z < 0.8 ? 'small' : '');
+      this.paper.tag(id, x, y, `<b>${LANE_NAME[a.lane]}</b><i${idle ? ' class="bad"' : ''}>№${a.id} · ${idle ? 'без дела · $0' : TIER_NAME[a.tier]}</i>`, z < 0.8 ? 'small' : '');
     });
     this.paper.pruneTags('a', keepA);
 
@@ -961,8 +960,8 @@ export class GameScene extends Phaser.Scene {
     if (run.stage >= 2 && run.energy >= TUNING.crunch.max && run.sprintT > 10) {
       if (tell('t:hands', ['Силы — не только на код. Справа внизу,', 'в строке «руками»: напиши пост', 'или позвони клиенту сам.'])) return;
     }
-    if (this.idle.size > 0 && sites(run).length === 0 && shelf(run).length > 0 && run.blocks.length > 0) {
-      if (tell('t:idle', ['Строить нечего, агент простаивает', 'за твои деньги. Выбери блок справа', 'или дай ему другое дело.'])) return;
+    if (run.agents.some((a) => a.lane === 'build' && !busy(run, a)) && shelf(run).length > 0 && run.blocks.length > 0) {
+      if (tell('t:idle', ['Агенту на стройке нечего делать.', 'Без дела он денег не берёт, но и', 'пользы нет: выбери блок справа.'])) return;
     }
     if (netPerS(run) >= 0 && run.clients.length > 0) {
       if (tell('t:profit', ['Мы в плюсе. Дальше — расти:', 'на третьем этапе у компании появится', 'оценка, и покупатель начнёт звонить.', 'Чем она выше к концу — тем лучше.'])) return;
@@ -987,41 +986,50 @@ export class GameScene extends Phaser.Scene {
     const full = sites(run).length >= TUNING.sites_max;
     // a founder who has seen an architecture reads on the shelf which blocks go side by side
     const arch = run.perks.includes('arch');
+    // a tile is two short lines: the name with why to build it, then what else it gives and what it costs to run
     const note = (kind: string): string => {
-      const gives = effectLine(kind, true);
+      // what it gives stands first, in coral: more clients or a bigger cheque is why a block is built
+      const [main, ...rest] = benefits(kind);
       const friends = arch ? `дружит: ${RULES[kind].friends.map((f) => BLOCK_BY_ID[f]?.short ?? f).join(', ')}` : '';
       // every shipped block is paid for every second: the shelf says how much before it is built
-      const host = `хостинг ${rate(RULES[kind].host)}/с`;
-      const facts = [gives, host, friends].filter((x) => x !== '').join(' · ');
-      return BLOCK_BY_ID[kind].note + (facts ? `<span>${facts}</span>` : '');
+      const host = `хост ${rate(RULES[kind].host)}/с`;
+      return [main ? `<i>${main}</i>` : '', ...rest, host, friends].filter((x) => x !== '').join(' · ');
     };
     const items: ShelfItem[] = shelf(run).map((kind) => ({
       id: kind,
       title: BLOCK_BY_ID[kind].name,
       // clients are here and there is nothing to charge them with: the shelf says so on the block itself
       // next to the name — why to build it: someone asks for it, or what it gives (more clients, a bigger cheque)
-      mark: kind === 'pay' && run.clients.length > 0 ? 'нужен сейчас' : [run.known.includes(kind) ? 'просят' : '', benefit(kind)].filter((x) => x !== '').join(' · '),
+      mark: kind === 'pay' && run.clients.length > 0 ? 'нужен сейчас' : run.known.includes(kind) ? 'просят' : '',
       note: note(kind),
+      // the joke of the block is said when the pointer rests on its tile
+      tip: BLOCK_BY_ID[kind].note,
       price: `<u></u>${workNeed(run, kind)}`,
       state: this.picked === kind ? 'on' : full ? 'off' : 'can',
       // nothing is built and nothing is picked: the first card of the shelf asks to be clicked
       pulse: run.blocks.length === 0 && this.picked === null,
     }));
     // what clients are known to ask for goes to the top of the shelf
-    const asked = (it: ShelfItem): number => Number(it.mark === 'нужен сейчас' || (it.mark ?? '').startsWith('просят'));
-    items.sort((a, b) => asked(b) - asked(a));
+    items.sort((a, b) => Number(b.mark !== '') - Number(a.mark !== ''));
     // and above everything — the reworks clients asked for by name
     const more = Math.round((TUNING.rework.pay_mult - 1) * 100);
     const ups: ShelfItem[] = reworks(run).map((r) => ({
       id: `up:${r.kind}`,
       title: `${BLOCK_BY_ID[r.kind].name} v${r.level}`,
       mark: 'доработка',
-      note: `просит ${r.who.join(', ')}<span>заплатит на ${more}% больше · хостинг +${rate(RULES[r.kind].host * TUNING.rework.host_mult)}/с</span>`,
+      note: `${r.who[0]}${r.who.length > 1 ? ` и ещё ${r.who.length - 1}` : ''}: +${more}% к чеку · хостинг +${rate(RULES[r.kind].host * TUNING.rework.host_mult)}/с`,
       price: `<u></u>${reworkNeed(run, run.blocks.find((b) => b.kind === r.kind)!)}`,
       state: full ? 'off' : 'can',
     }));
     items.unshift(...ups);
     const rule = TUNING.stages[run.stage - 1];
+    // what opens the stronger agents and more desks is written out: it is a goal, not a secret
+    const unlock =
+      run.stage === 1
+        ? 'обычный и думающий агенты и ещё два места — после первого платящего клиента'
+        : run.stage === 2
+          ? `ещё два места для агентов — когда подписки дойдут до ${rate(TUNING.stage3_mrr / TUNING.sprint_s)}/с`
+          : '';
     const rows: ShelfKeys[] = [
       {
         owner: 'hire',
@@ -1040,12 +1048,15 @@ export class GameScene extends Phaser.Scene {
         title: 'БЛОКИ · ЧТО СТРОИМ ДАЛЬШЕ',
         hint: this.picked ? 'теперь клетка на чертеже' : full ? `стройка занята: ${TUNING.sites_max} из ${TUNING.sites_max}` : items.length === 0 ? 'всё построено' : '',
         items,
-        scroll: 348,
+        grid: true,
+        // the list takes all the height the agents leave: at best every block is seen without scrolling
+        scroll: 733 - 39 * run.agents.length - (unlock ? 22 : 0),
       },
       {
         id: 'agents',
         title: `АГЕНТЫ · ${run.agents.length} ИЗ ${rule.agents_max}`,
-        hint: `−${money(burnPerS(run) - incomePerS(run) > 0 ? burnPerS(run) : burnPerS(run))}/с всего`,
+        hint: `${rate(-flows(run).agents)}/с · без дела — бесплатно`,
+        note: unlock,
         rows,
       },
       {
