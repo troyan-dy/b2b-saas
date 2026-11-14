@@ -1,7 +1,7 @@
 # studioigor — B2B SaaS
 
 PROJECT: B2B SaaS
-PHASE: 1 — Idea
+PHASE: 2 — Style
 UPDATED: 2026-11-14
 
 ## Now
