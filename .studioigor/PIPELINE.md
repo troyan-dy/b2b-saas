@@ -73,9 +73,9 @@ files: SCOPE.md
 
 ## Phase 9 — Polish
 files:
-- [ ] juice on the core actions, sound and motion on each — check: manual
+- [x] juice on the core actions, sound and motion on each — check: manual
 - [ ] first 60 seconds: a newcomer starts playing without explanations — check: user
-- [ ] performance budgets hold at the worst moment — check: manual
+- [x] performance budgets hold at the worst moment — check: manual
 - [ ] user decided: the polish is good enough — check: user
 
 ## Phase 10 — Release
