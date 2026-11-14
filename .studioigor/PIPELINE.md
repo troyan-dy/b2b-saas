@@ -41,14 +41,14 @@ files: ENV.md
 - [ ] full setup installed: engine, CLI, plugin/skills, MCP, tests, linter, export — check: python3 {skill}/scripts/envcheck.py --engine {engine} SKIP: Windows: envcheck требует brew и ищет кэш Playwright по пути macOS; фактически всё установлено — studio.py verify прошёл
 - [ ] editor MCP connected: `claude mcp list` ✔ and a real tool call succeeded — check: manual SKIP: у веб-стека нет редактора; Phaser Editor и Game Agent требуют входа в аккаунт; кадры снимает tools/capture.mjs
 - [x] hello project: TEST and CAPTURE pass (studio.py verify) — check: grep -q "^VERIFIED: yes" .studioigor/ENV.md
-- [x] user saw the project running on their machine — check: user PROXY 2026-11-14
+- [x] user saw the project running on their machine — check: user
 
 ## Phase 5 — Assets and look-dev
 files: ASSETS.md
 - [x] asset and pipeline research done — check: test -s .studioigor/research/assets.md
-- [x] strategy by category agreed — check: user PROXY 2026-11-14
+- [x] strategy by category agreed — check: user
 - [x] look-dev scene built per the art bible and captured — check: ls .studioigor/captures/lookdev/*.png
-- [x] user approved the look-dev: "this is how the game will look" — check: user PROXY 2026-11-14
+- [x] user approved the look-dev: "this is how the game will look" — check: user
 - [x] everything third-party is in the license registry — check: manual
 
 ## Phase 6 — Mechanics
@@ -60,7 +60,7 @@ files:
 files:
 - [x] full loop: menu → game → result → restart/next — check: manual
 - [x] game-ness checklist passed for the vertical slice (references/production.md) — check: manual
-- [x] post-slice boost ideas (synergies, new mechanics) shown and decided by the user — check: user PROXY 2026-11-14
+- [x] post-slice boost ideas (synergies, new mechanics) shown and decided by the user — check: user
 - [x] vertical slice with real assets, sound and story delivery — check: manual
 - [x] user played through the vertical slice, it's fun; verdict recorded — check: user
 
