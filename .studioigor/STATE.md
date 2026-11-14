@@ -8,7 +8,8 @@ UPDATED: 2026-11-14
 Project created. Next: phase 1, the idea interview.
 
 ## Open questions
-- none
+- мета между забегами: «новые возможности» и (или) «репутация основателя» — пользователь отложил до среза (M12)
+- идёт ли время, пока игрок раздаёт агентов — 2–3 варианта в тестовой сцене спринта (M01)
 
 ## Session log
 | date | phase | done | next |
