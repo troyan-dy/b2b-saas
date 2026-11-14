@@ -26,10 +26,12 @@ export function benefit(kind: string): string {
 }
 
 /** What a shipped block gives, in the words of the shelf: «продвижение ×1,5». Empty for a block that only stands there. */
-export function effectLine(kind: string): string {
+export function effectLine(kind: string, rest = false): string {
   const e = (effects as Record<string, Record<string, number>>)[kind];
   if (!e) return '';
+  // `rest` — without the first effect: the shelf has already written it next to the name
   return Object.entries(e)
+    .slice(rest ? 1 : 0)
     .map(([k, v]) => effectWords(k, v))
     .join(' · ');
 }

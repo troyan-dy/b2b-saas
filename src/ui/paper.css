@@ -544,7 +544,7 @@
   position: absolute;
   /* to the left of the product, under Claude's card: a call must not cover what is being built */
   left: 24px;
-  top: 186px;
+  top: 204px;
   width: 372px;
   box-sizing: border-box;
   padding: 16px 20px 14px;

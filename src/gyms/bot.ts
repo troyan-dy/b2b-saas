@@ -1,10 +1,12 @@
 import {
   answerCall,
+  answerDilemma,
   answerLastChance,
   burnPerS,
   canHire,
   clientsMax,
   crunch,
+  dilemmaOf,
   EFFECTS,
   freeCells,
   friendsAt,
@@ -50,6 +52,10 @@ export function playBot(run: Run, style: BotStyle = SENSIBLE): void {
   } else if (run.lastChance !== null) answerLastChance(run, true);
   // a client asks about a block that is not there: promise it only when there is room and money to build it
   if (style.calls && run.call) answerCall(run, sites(run).length < TUNING.sites_max && run.money > burnPerS(run) * 90);
+
+  // a choice with a price: the careful answer is written on the dilemma itself
+  const d = dilemmaOf(run);
+  if (style.calls && d) answerDilemma(run, d.bot);
 
   // a client asked to improve a block: the rework goes first, unless something was promised on a call
   const promised = run.clients.some((c) => c.promised && shelf(run).includes(c.want));

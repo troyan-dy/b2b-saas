@@ -1,6 +1,7 @@
 import { createRng, type Rng } from '../../core/rng';
 import blocksData from '../../data/balance/blocks.json';
 import clientsData from '../../data/balance/clients.json';
+import dilemmasData from '../../data/balance/dilemmas.json';
 import effectsData from '../../data/balance/effects.json';
 import eventsData from '../../data/balance/events.json';
 import ideasData from '../../data/balance/ideas.json';
@@ -65,6 +66,31 @@ interface ClientRule {
 }
 export const CLIENT_TYPES = clientsData as ClientRule[];
 const CLIENT_RULE = Object.fromEntries(CLIENT_TYPES.map((t) => [t.id, t])) as Record<ClientType, ClientRule>;
+
+/** One thing a chosen answer does. */
+export type Fx =
+  | { k: 'work' | 'debt' | 'leads' | 'money' | 'energy'; n: number }
+  | { k: 'mod'; kind: string; mult: number; sprints: number; tag: string }
+  | { k: 'deal'; who: string; mult: number }
+  | { k: 'leave'; who: string; p: number; say: string }
+  /** a lie that may come out: for three releases, chance `p` each, `n` clients walk out */
+  | { k: 'risk'; p: number; n: number; say: string; text: string };
+
+/** A small choice with a price: Claude offers to cut a corner, or someone calls and wants an answer. */
+export interface Dilemma {
+  id: string;
+  /** who speaks: claude, client, blogger, rival, press */
+  who: string;
+  /** when it makes sense: site, sellable, client, clients2, debt, money, tired, stage2 */
+  needs: string;
+  weight: number;
+  text: string;
+  /** the last option is the refusal: it is what happens if nobody answers */
+  options: { label: string; note: string; result: string; fx: Fx[] }[];
+  /** what a careful founder answers: bots play it */
+  bot: number;
+}
+export const DILEMMAS = dilemmasData as Dilemma[];
 
 export interface Agent {
   id: number;
@@ -136,13 +162,19 @@ export type RunEvent =
   | { type: 'release'; report: Report }
   | { type: 'client'; id: number }
   /** `closed` — nothing was wrong with the product: the client itself is no more */
-  | { type: 'left'; id: number; name: string; reason: string; closed?: boolean; demo?: boolean }
+  /** `say` — its own parting words, when it leaves over a dilemma */
+  | { type: 'left'; id: number; name: string; reason: string; closed?: boolean; demo?: boolean; say?: string }
   /** the demo day: something shipped and people came to look — or nothing did, and `name` walked out */
   | { type: 'demo'; ok: boolean; name: string }
   /** a promised block finished by hand in the last sprint of its term */
   | { type: 'hero'; id: number }
   /** the founder asked the buyer for the whole valuation */
   | { type: 'haggle'; ok: boolean; price: number }
+  | { type: 'dilemma'; id: string }
+  /** `text` — what the news line says about the answer; empty for a refusal */
+  | { type: 'answered'; id: string; option: number; text: string }
+  /** a lie came out */
+  | { type: 'exposed'; text: string }
   | { type: 'reveal'; kind: string }
   /** a happy client asks to improve a block: it waits for version `level` */
   | { type: 'rework'; id: number; kind: string; level: number }
@@ -203,6 +235,12 @@ export interface Run {
   offer: number | null;
   /** a client on the line, asking about a block that is not there; it takes its place when answered */
   call: Client | null;
+  /** a choice waiting for an answer until the release; `client` — whom it is about, 0 — nobody */
+  dilemma: { id: string; client: number; name: string } | null;
+  /** the last dilemmas shown: they are not repeated at once */
+  seen: string[];
+  /** lies that may still come out */
+  risks: { left: number; p: number; n: number; say: string; text: string }[];
   /** the money is gone and the bank offers this much for the flat; the clock waits for the answer */
   lastChance: number | null;
   mortgaged: boolean;
@@ -234,6 +272,9 @@ export interface Run {
     /** reworks shipped on clients' requests */
     reworks: number;
     heroes: number;
+    /** corners Claude offered to cut, and how many of them the founder agreed to */
+    offered: number;
+    shortcuts: number;
     /** what the company was valued at by the last release it was up for */
     value: number;
   };
@@ -313,6 +354,9 @@ export function createRun(seed: number, idea: Idea, perks: readonly string[] = [
     downWhy: null,
     offer: null,
     call: null,
+    dilemma: null,
+    seen: [],
+    risks: [],
     lastChance: null,
     mortgaged: false,
     mods: [],
@@ -321,7 +365,7 @@ export function createRun(seed: number, idea: Idea, perks: readonly string[] = [
     events: [],
     over: null,
     lastReport: null,
-    stats: { clients: 0, left: 0, downs: 0, peakMrr: 0, shipped: 0, corp: 0, soldFor: 0, tokens: 0, firstClientAt: 0, profitAt: 0, promises: 0, kept: 0, broken: 0, links: 0, reworks: 0, heroes: 0, value: 0 },
+    stats: { clients: 0, left: 0, downs: 0, peakMrr: 0, shipped: 0, corp: 0, soldFor: 0, tokens: 0, firstClientAt: 0, profitAt: 0, promises: 0, kept: 0, broken: 0, links: 0, reworks: 0, heroes: 0, offered: 0, shortcuts: 0, value: 0 },
     nextId: 1,
     nextAgent: 2,
     live: new Set(),
@@ -754,6 +798,106 @@ export function mortgageSeconds(run: Run): number {
   return run.perks.includes('banker') ? TUNING.mortgage_s_perk : TUNING.mortgage_s;
 }
 
+/** the dilemma on the table, with its words and options */
+export function dilemmaOf(run: Run): Dilemma | null {
+  return run.dilemma ? (DILEMMAS.find((d) => d.id === run.dilemma?.id) ?? null) : null;
+}
+
+function fits(run: Run, d: Dilemma): boolean {
+  switch (d.needs) {
+    case 'site':
+      return run.blocks.some(isSite);
+    case 'sellable':
+      return sellable(run);
+    case 'client':
+      return run.clients.length >= 1;
+    case 'clients2':
+      return run.clients.length >= 2;
+    case 'debt':
+      return run.debt >= 10 && run.money >= 600;
+    case 'money':
+      return sellable(run) && run.money >= 600;
+    case 'tired':
+      return run.energy < TUNING.crunch.max / 2;
+    case 'stage2':
+      return run.stage >= 2;
+    default:
+      return true;
+  }
+}
+
+/** A new sprint: now and then it starts with a choice. */
+function propose(run: Run): void {
+  const D = TUNING.dilemma;
+  if (run.sprint < D.from_sprint || run.call || run.offer !== null || run.rng.next() >= D.chance) return;
+  const pool = DILEMMAS.filter((d) => !run.seen.includes(d.id) && fits(run, d));
+  if (pool.length === 0) return;
+  let roll = run.rng.next() * pool.reduce((s, d) => s + d.weight, 0);
+  const d = pool.find((x) => (roll -= x.weight) < 0) ?? pool[0];
+  // a client's own question is about that client; a rival goes for the one that pays most
+  const about = d.who === 'client' ? run.rng.pick(run.clients) : d.who === 'rival' ? [...run.clients].sort((a, b) => clientWorth(run, b) - clientWorth(run, a))[0] : undefined;
+  run.dilemma = { id: d.id, client: about?.id ?? 0, name: about?.name ?? '' };
+  run.seen = [...run.seen, d.id].slice(-D.no_repeat);
+  if (d.who === 'claude') run.stats.offered++;
+  run.events.push({ type: 'dilemma', id: d.id });
+}
+
+/** The founder answers; no answer by the release is the refusal — the last option. */
+export function answerDilemma(run: Run, option: number): void {
+  const d = dilemmaOf(run);
+  const about = run.dilemma;
+  if (!d || !about || run.over) return;
+  run.dilemma = null;
+  const o = d.options[Math.min(Math.max(option, 0), d.options.length - 1)];
+  if (d.who === 'claude' && o !== d.options[d.options.length - 1]) run.stats.shortcuts++;
+  const one = run.clients.find((c) => c.id === about.client);
+  const walk = (c: Client, say: string): void => {
+    run.clients = run.clients.filter((x) => x !== c);
+    run.stats.left++;
+    run.events.push({ type: 'left', id: c.id, name: c.name, reason: '', say });
+  };
+  for (const f of o.fx) {
+    switch (f.k) {
+      case 'work': {
+        for (let k = 0; k < f.n; k++) {
+          const site = run.blocks.find(isSite);
+          if (!site) break;
+          run.events.push({ type: 'work', agent: 0, lane: 'build', i: site.i, j: site.j });
+          addWork(run, site);
+        }
+        break;
+      }
+      case 'debt':
+        run.debt = Math.max(0, run.debt + f.n);
+        break;
+      case 'leads':
+        run.leads += f.n;
+        break;
+      case 'money':
+        run.money += f.n;
+        break;
+      case 'energy':
+        run.energy = Math.min(TUNING.crunch.max, Math.max(0, run.energy + f.n));
+        break;
+      case 'mod':
+        run.mods = run.mods.filter((m) => m.kind !== f.kind);
+        run.mods.push({ kind: f.kind as Mod['kind'], mult: f.mult, left: f.sprints, tag: f.tag });
+        run.mod[f.kind as Mod['kind']] = f.mult;
+        break;
+      case 'deal':
+        for (const c of f.who === 'all' ? run.clients : one ? [one] : []) c.deal *= f.mult;
+        break;
+      case 'leave':
+        for (const c of f.who === 'all' ? [...run.clients] : one ? [one] : []) if (run.rng.next() < f.p) walk(c, f.say);
+        break;
+      case 'risk':
+        run.risks.push({ left: 3, p: f.p, n: f.n, say: f.say, text: f.text });
+        break;
+    }
+  }
+  run.events.push({ type: 'answered', id: d.id, option, text: o.result });
+}
+
 /** The money is gone. Mortgaging the flat buys a minute of life, once. */
 export function answerLastChance(run: Run, accept: boolean): void {
   if (run.lastChance === null || run.over) return;
@@ -981,6 +1125,26 @@ function release(run: Run): void {
   }
   run.clients = stay;
 
+  // nobody answered: the refusal it is
+  const pending = dilemmaOf(run);
+  if (pending) answerDilemma(run, pending.options.length - 1);
+
+  // a lie may come out: those who believed it walk out
+  for (const r of run.risks) {
+    r.left--;
+    if (run.rng.next() >= r.p) continue;
+    r.left = 0;
+    run.events.push({ type: 'exposed', text: r.text });
+    for (const c of run.clients.slice(0, r.n)) {
+      report.left++;
+      report.reasons.push('');
+      run.stats.left++;
+      run.events.push({ type: 'left', id: c.id, name: c.name, reason: '', say: r.say });
+    }
+    run.clients = run.clients.slice(r.n);
+  }
+  run.risks = run.risks.filter((r) => r.left > 0);
+
   // the demo day: everyone watches this release. Something shipped — people come to look; nothing — one walks out
   if (isDemo(run) && run.clients.length > 0) {
     if (report.shipped.length > 0) {
@@ -1075,6 +1239,7 @@ function release(run: Run): void {
   run.sprint++;
   run.sprintT = 0;
   run.reviewLocked = false;
+  if (run.sprint <= TUNING.last_sprint) propose(run);
   if (run.sprint > TUNING.last_sprint) end(run, netPerS(run) >= 0 ? 'profit' : 'late');
 }
 

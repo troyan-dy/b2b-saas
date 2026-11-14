@@ -23,6 +23,7 @@ export function endingPost(run: Run): string[] {
   const s = run.stats;
   // what was said on the calls and what became of the flat: a postscript to any ending
   if (s.promises > 0) lines.push(`P.S. Клиентам я пообещал ${s.promises} ${plural(s.promises, ['функцию', 'функции', 'функций'])}, «уже в проде». Построил ${s.kept}.`);
+  if (s.offered > 0) lines.push(`P.S. Клод ${s.offered} ${plural(s.offered, TIMES)} предлагал срезать угол. Я согласился ${s.shortcuts}.`);
   if (run.mortgaged) lines.push(run.over === 'broke' ? 'P.P.S. Квартиру тоже забрали. Пишу из коворкинга.' : 'P.P.S. Квартиру, кстати, выкупил.');
   return lines;
 }

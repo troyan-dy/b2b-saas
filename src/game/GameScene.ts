@@ -33,6 +33,7 @@ import { money, plural, rate } from '../ui/format';
 import type { Paper, ShelfItem, ShelfKeys, ShelfSection } from '../ui/paper';
 import {
   answerCall,
+  answerDilemma,
   answerLastChance,
   answerOffer,
   burnPerS,
@@ -40,6 +41,7 @@ import {
   clientPay,
   clientsMax,
   crunch,
+  dilemmaOf,
   fire,
   flows,
   freeCells,
@@ -325,7 +327,8 @@ export class GameScene extends Phaser.Scene {
     // one card at a time, the most urgent first: the bank, a client on the line, the buyer
     if (this.run.lastChance !== null) answerLastChance(this.run, k === 0);
     else if (this.run.call) answerCall(this.run, k === 1);
-    else answerOffer(this.run, k === 0 ? 'sell' : k === 1 ? 'haggle' : 'no');
+    else if (this.run.offer !== null) answerOffer(this.run, k === 0 ? 'sell' : k === 1 ? 'haggle' : 'no');
+    else answerDilemma(this.run, k);
     this.paper.call(null);
   }
 
@@ -352,9 +355,11 @@ export class GameScene extends Phaser.Scene {
     }
     const digit = /^Digit([1-9])$/.exec(e.code);
     if (!digit) return;
-    if (this.run.offer !== null || this.run.call || this.run.lastChance !== null) {
-      // the buyer's card has a third answer: to haggle
-      const answers = this.run.lastChance === null && !this.run.call ? 3 : 2;
+    const dilemma = dilemmaOf(this.run);
+    if (this.run.offer !== null || this.run.call || this.run.lastChance !== null || dilemma) {
+      // the bank and a client on the line have two answers, the buyer three, a dilemma — as many as it has
+      const urgent = this.run.lastChance !== null || this.run.call;
+      const answers = urgent ? 2 : this.run.offer !== null ? 3 : (dilemma?.options.length ?? 2);
       if (Number(digit[1]) <= answers) this.onAnswer(Number(digit[1]) - 1);
       return;
     }
@@ -472,7 +477,7 @@ export class GameScene extends Phaser.Scene {
       case 'left': {
         const [x, y] = this.board.onScreen(...this.nodePos(`c${e.id}`));
         const pool = e.demo ? LEFT_DEMO : e.closed ? LEFT_CLOSED : e.reason ? LEFT_KNOWN : LEFT_UNKNOWN;
-        this.paper.pop(x, y - 150 * this.board.zoom, pool[e.id % pool.length].replace('%s', BLOCK_BY_ID[e.reason]?.short ?? ''), 'bad');
+        this.paper.pop(x, y - 150 * this.board.zoom, e.say ?? pool[e.id % pool.length].replace('%s', BLOCK_BY_ID[e.reason]?.short ?? ''), 'bad');
         this.board.dropNode(`c${e.id}`);
         this.board.dropNode(`c${e.id}b`);
         this.board.dropRoute(`c${e.id}`);
@@ -573,6 +578,26 @@ export class GameScene extends Phaser.Scene {
           playSound('waste');
         }
         logEvent(`haggle:${e.ok ? 'ok' : 'fail'}`);
+        break;
+      case 'dilemma':
+        playSound('quip');
+        logEvent(`dilemma:${e.id}`);
+        break;
+      case 'answered':
+        // what came of the answer goes to the news line; a refusal makes no news
+        if (e.text) {
+          this.news(e.text);
+          playSound('buy', 3);
+        }
+        logEvent(`answered:${e.id}:${e.option}`);
+        break;
+      case 'exposed':
+        this.news(e.text);
+        this.newsHold = 18;
+        this.newsAt = 18;
+        this.cameras.main.shake(200, 0.004);
+        playSound('waste');
+        logEvent('exposed');
         break;
       case 'lastchance':
         playSound('waste');
@@ -798,6 +823,18 @@ export class GameScene extends Phaser.Scene {
           'Отказаться',
         ],
       });
+    } else if (dilemmaOf(run) && run.dilemma) {
+      // a choice with a price: Claude offers to cut a corner, or someone calls and wants an answer
+      const d = dilemmaOf(run)!;
+      const name = run.dilemma.name.toUpperCase();
+      const who: Record<string, string> = {
+        claude: 'КЛОД ПРЕДЛАГАЕТ',
+        client: `ЗВОНОК · ${name}`,
+        blogger: 'ЗВОНОК · БЛОГЕР',
+        rival: `КОНКУРЕНТ · ЦЕЛЬ: ${name}`,
+        press: 'ЗВОНОК · ПРЕССА',
+      };
+      this.paper.call({ who: who[d.who] ?? 'ЗВОНОК', text: d.text, options: d.options.map((o) => `${o.label} <span>— ${o.note}</span>`) });
     } else this.paper.call(null);
 
     if (this.termUntil > 0 && this.clock > this.termUntil) {
@@ -948,7 +985,7 @@ export class GameScene extends Phaser.Scene {
     // a founder who has seen an architecture reads on the shelf which blocks go side by side
     const arch = run.perks.includes('arch');
     const note = (kind: string): string => {
-      const gives = effectLine(kind);
+      const gives = effectLine(kind, true);
       const friends = arch ? `дружит: ${RULES[kind].friends.map((f) => BLOCK_BY_ID[f]?.short ?? f).join(', ')}` : '';
       // every shipped block is paid for every second: the shelf says how much before it is built
       const host = `хостинг ${rate(RULES[kind].host)}/с`;
