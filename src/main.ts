@@ -21,7 +21,7 @@ import { mountGymKeys } from './gyms/keys';
 import { LookdevScene } from './gyms/lookdev/LookdevScene';
 import { mountMusicDemo } from './gyms/music/MusicDemo';
 import { SheetScene } from './gyms/sheet/SheetScene';
-import { emptyMeta, loadMeta } from './systems/meta/meta';
+import { emptyMeta, loadMeta, traitLevels } from './systems/meta/meta';
 import { createRun, IDEAS, type Idea, type Run } from './systems/run/run';
 import { createHud } from './ui/hud';
 import { createPaper } from './ui/paper';
@@ -134,8 +134,8 @@ async function play(): Promise<void> {
       audio.toggle(choice);
     }
   }
-  const idea = await mixIdea(term, args.seed, meta);
-  const run = createRun(args.seed, idea, meta.lessons);
+  const { idea, boost } = await mixIdea(term, args.seed, meta);
+  const run = createRun(args.seed, idea, meta.lessons, traitLevels(meta, boost));
   const scene = new GameScene(run, rng, paper, {
     beforeStep: args.bot ? (r) => playBot(r) : undefined,
     onEnd: (r: Run) => {

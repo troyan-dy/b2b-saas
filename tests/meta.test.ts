@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { emptyMeta, finish, learn, migrate } from '../src/systems/meta/meta';
-import { answerLastChance, createRun, IDEAS, isLive, shelf, step, TUNING, type Idea } from '../src/systems/run/run';
+import { emptyMeta, finish, learn, migrate, raise, traitChoices, traitLevels, TRAITS } from '../src/systems/meta/meta';
+import { answerLastChance, createRun, IDEAS, isLive, priceMult, shelf, step, TUNING, type Idea } from '../src/systems/run/run';
 
 const idea: Idea = { tech: IDEAS.tech[0], form: IDEAS.form[3], aud: IDEAS.aud[0] };
 
@@ -39,6 +39,27 @@ describe('founder', () => {
     expect(second.some((l) => first.includes(l))).toBe(false);
   });
 
+  it('test_meta_old_record_keeps_its_past_and_traits_grow_and_double', () => {
+    // a record written before traits existed: the startups and lessons stay, the traits start from zero
+    const m = migrate({ v: 1, runs: [{ pitch: 'x', ending: 'profit', lived: 900, peakMrr: 5000, clients: 9, soldFor: 0 }], lessons: ['posts'] });
+    expect(m.runs).toHaveLength(1);
+    expect(m.lessons).toEqual(['posts']);
+    expect(m.traits).toEqual({});
+    const three = traitChoices(m, 7);
+    expect(three).toHaveLength(3);
+    raise(m, 'sales');
+    raise(m, 'sales');
+    expect(migrate(JSON.parse(JSON.stringify(m))).traits).toEqual({ sales: 2 });
+    // the bet of a startup doubles one trait for that startup only
+    expect(traitLevels(m, 'sales').sales).toBe(4);
+    expect(traitLevels(m).sales).toBe(2);
+    for (let k = 0; k < 9; k++) raise(m, 'sales');
+    expect(m.traits.sales).toBe(TRAITS.find((t) => t.id === 'sales')?.max);
+    // a founder who sells better is paid more by the same client
+    const plain = createRun(5, idea);
+    const seller = createRun(5, idea, [], traitLevels(m));
+    expect(priceMult(seller)).toBeGreaterThan(priceMult(plain));
+  });
   it('test_meta_lessons_change_the_start_of_the_next_startup', () => {
     const plain = createRun(5, idea);
     const wise = createRun(5, idea, ['template', 'posts', 'ear', 'cash', 'cheapEarly']);

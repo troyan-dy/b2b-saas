@@ -1,0 +1,7 @@
+[
+  { "id": "sales", "title": "Продажи", "note": "Ты научился называть цену и не моргать", "gives": "чек клиентов +%s", "unit": "pct", "per_level": 0.06, "max": 5, "art": "handshake" },
+  { "id": "marketing", "title": "Маркетинг", "note": "Твои посты читают. Иногда даже до конца", "gives": "продвижение +%s", "unit": "pct", "per_level": 0.1, "max": 5, "art": "mall" },
+  { "id": "engineering", "title": "Инженерия", "note": "Ты знаешь, какую половину кода не писать", "gives": "блоки дешевле на %s", "unit": "pct", "per_level": 0.05, "max": 5, "art": "laptop" },
+  { "id": "thrift", "title": "Бережливость", "note": "Ты нашёл тариф дешевле. И ещё один", "gives": "жизнь и хостинг дешевле на %s", "unit": "pct", "per_level": 0.06, "max": 5, "art": "bank" },
+  { "id": "network", "title": "Связи", "note": "Кто-то из прошлых клиентов всё ещё берёт трубку", "gives": "сбережения на старте +%s", "unit": "money", "per_level": 400, "max": 5, "art": "cityblock" }
+]

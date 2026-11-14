@@ -5,6 +5,18 @@ export interface Option {
   note?: string;
 }
 
+/** One of the few cards dealt to choose from: a picture, a name, a line of flavour and what it does. */
+export interface Card {
+  /** small caps over the name: which deck it is from */
+  kicker?: string;
+  title: string;
+  note?: string;
+  /** what it does, one fact a line */
+  facts?: readonly string[];
+  /** a picture of the sheet: its file name without the extension */
+  art?: string;
+}
+
 export interface Terminal {
   /** shows the terminal over the sheet; `title` goes into its bar */
   open(title: string): void;
@@ -17,6 +29,8 @@ export interface Terminal {
   type(lines: readonly string[], cls?: string): Promise<void>;
   /** a question with numbered answers: digits, arrows + Enter, or a click */
   ask(options: readonly Option[], hint?: string): Promise<number>;
+  /** deals a few cards face up and waits for one to be picked: digits, arrows + Enter, or a click */
+  cards(cards: readonly Card[], hint?: string): Promise<number>;
   /** waits for Enter, Space or a click */
   wait(hint: string): Promise<void>;
   readonly shown: boolean;
@@ -160,6 +174,61 @@ export function createTerminal(root: HTMLElement, sound: (name: 'ui' | 'yes') =>
           const row = (e.target as HTMLElement).closest('.tm-opt') as HTMLElement | null;
           if (row && Number(row.dataset.k) !== at) {
             at = Number(row.dataset.k);
+            mark();
+          }
+        });
+      });
+    },
+    cards(cards, hint = '') {
+      return new Promise((resolve) => {
+        const box = document.createElement('div');
+        box.className = 'tm-cards';
+        box.innerHTML = cards
+          .map(
+            (c, k) =>
+              `<div class="tm-card" data-k="${k}"><i>${k + 1}</i>` +
+              `<div class="tm-art">${c.art ? `<img src="assets/img/nodes/${c.art}.webp" alt="">` : ''}</div>` +
+              `${c.kicker ? `<small>${c.kicker}</small>` : ''}<b>${c.title}</b>${c.note ? `<p>${c.note}</p>` : ''}` +
+              `<ul>${(c.facts ?? []).map((f) => `<li>${f}</li>`).join('')}</ul></div>`,
+          )
+          .join('');
+        body.append(box);
+        foot.innerHTML = `<kbd>1</kbd>–<kbd>${cards.length}</kbd> взять карту · <kbd>←</kbd><kbd>→</kbd> и <kbd>Enter</kbd>${hint ? ` · ${hint}` : ''}`;
+        const all = [...box.querySelectorAll('.tm-card')] as HTMLElement[];
+        let at = -1;
+        const mark = (): void => all.forEach((el, k) => el.classList.toggle('on', k === at));
+        const pick = (k: number): void => {
+          onKey = null;
+          onClick = null;
+          sound('yes');
+          // the chosen card rises, the others fade: the choice is seen before the screen moves on
+          all[k].classList.add('hit');
+          box.classList.add('done');
+          foot.innerHTML = '';
+          window.setTimeout(() => resolve(k), 420);
+        };
+        onKey = (e) => {
+          const digit = /^(?:Digit|Numpad)([1-9])$/.exec(e.code);
+          if (digit && Number(digit[1]) <= cards.length) pick(Number(digit[1]) - 1);
+          else if (e.code === 'ArrowRight' || e.code === 'KeyD') {
+            at = (at + 1) % cards.length;
+            mark();
+            sound('ui');
+          } else if (e.code === 'ArrowLeft' || e.code === 'KeyA') {
+            at = (at + cards.length - 1) % cards.length;
+            mark();
+            sound('ui');
+          } else if ((e.code === 'Enter' || e.code === 'NumpadEnter' || e.code === 'Space') && at >= 0) pick(at);
+        };
+        onClick = (e) => {
+          const card = (e.target as HTMLElement).closest('.tm-card') as HTMLElement | null;
+          if (card) pick(Number(card.dataset.k));
+        };
+        box.addEventListener('mousemove', (e) => {
+          const card = (e.target as HTMLElement).closest('.tm-card') as HTMLElement | null;
+          const k = card ? Number(card.dataset.k) : -1;
+          if (k !== at) {
+            at = k;
             mark();
           }
         });

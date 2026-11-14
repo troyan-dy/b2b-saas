@@ -6,6 +6,7 @@ import effectsData from '../../data/balance/effects.json';
 import eventsData from '../../data/balance/events.json';
 import ideasData from '../../data/balance/ideas.json';
 import tuningData from '../../data/balance/run.json';
+import traitsData from '../../data/balance/traits.json';
 
 /**
  * One run = one startup, from an empty sheet to an ending. Pure logic: no Phaser, no DOM.
@@ -205,6 +206,8 @@ export interface Run {
   rng: Rng;
   idea: Idea;
   perks: readonly string[];
+  /** levels of the founder's traits this startup is played with */
+  traits: Readonly<Record<string, number>>;
   /** seconds since the start */
   t: number;
   /** the sprint that is running now, from 1 */
@@ -309,14 +312,22 @@ function shuffle<T>(rng: Rng, items: readonly T[]): T[] {
   return a;
 }
 
-/** Three cards of each deck to choose from. */
-export function dealIdea(seed: number): { tech: TechCard[]; form: FormCard[]; aud: AudCard[] } {
+/** Three cards of each deck to choose from; `runs` — startups behind the founder: some cards come only with experience. */
+export function dealIdea(seed: number, runs = 99): { tech: TechCard[]; form: FormCard[]; aud: AudCard[] } {
   const rng = createRng(seed);
+  const open = <T extends { unlock: number }>(deck: readonly T[]): T[] => deck.filter((c) => c.unlock <= runs);
   return {
-    tech: shuffle(rng, IDEAS.tech).slice(0, 3),
-    form: shuffle(rng, IDEAS.form).slice(0, 3),
-    aud: shuffle(rng, IDEAS.aud).slice(0, 3),
+    tech: shuffle(rng, open(IDEAS.tech)).slice(0, 3),
+    form: shuffle(rng, open(IDEAS.form)).slice(0, 3),
+    aud: shuffle(rng, open(IDEAS.aud)).slice(0, 3),
   };
+}
+
+const TRAIT_STEP = Object.fromEntries(traitsData.map((t) => [t.id, t.per_level])) as Record<string, number>;
+
+/** what a trait of the founder adds in this startup: its level times the step of the trait */
+function trait(run: Run, id: string): number {
+  return (run.traits[id] ?? 0) * (TRAIT_STEP[id] ?? 0);
 }
 
 /** «Голосовой ИИ-тиндер для стоматологий» */
@@ -324,7 +335,7 @@ export function pitch(idea: Idea): string {
   return `${idea.tech.adj} ИИ-${idea.form.name} для ${idea.aud.name}`;
 }
 
-export function createRun(seed: number, idea: Idea, perks: readonly string[] = []): Run {
+export function createRun(seed: number, idea: Idea, perks: readonly string[] = [], traits: Readonly<Record<string, number>> = {}): Run {
   const rng = createRng(seed);
   const askable = Object.keys(RULES).filter((k) => RULES[k].role === 'ask');
   const corp = Object.keys(RULES).filter((k) => RULES[k].role === 'corp');
@@ -333,10 +344,11 @@ export function createRun(seed: number, idea: Idea, perks: readonly string[] = [
     rng,
     idea,
     perks,
+    traits,
     t: 0,
     sprint: 1,
     sprintT: 0,
-    money: TUNING.start_money + (perks.includes('cash') ? 1500 : 0),
+    money: TUNING.start_money + (perks.includes('cash') ? 1500 : 0) + (traits.network ?? 0) * (TRAIT_STEP.network ?? 0),
     stage: 1,
     blocks: [],
     agents: [{ id: 1, tier: 'fast', lane: 'build', carry: 0 }],
@@ -412,7 +424,7 @@ function refresh(run: Run): void {
 
 /** how many squares of work a block takes in this run */
 export function workNeed(run: Run, kind: string): number {
-  return Math.ceil(RULES[kind].work * run.idea.tech.work * run.idea.form.work);
+  return Math.ceil(RULES[kind].work * run.idea.tech.work * run.idea.form.work * Math.max(0.5, 1 - trait(run, 'engineering')));
 }
 
 /** Pairs of live blocks that stand side by side and are friends: «лендинг + оплата». */
@@ -430,7 +442,7 @@ export function links(run: Run): [string, string][] {
 }
 
 export function priceMult(run: Run): number {
-  return run.idea.tech.price * run.idea.form.price * (1 + TUNING.link_bonus * run.linkCount) * run.mod.price;
+  return run.idea.tech.price * run.idea.form.price * (1 + TUNING.link_bonus * run.linkCount) * run.mod.price * (1 + trait(run, 'sales'));
 }
 
 /** what a client is worth per sprint: its subscription at today's prices, whether it pays right now or not */
@@ -493,10 +505,10 @@ export function burnPerS(run: Run): number {
 /** Where the money goes and comes from, $ per second: the sheet shows every line of it. */
 export function flows(run: Run): { living: number; agents: number; hosting: number; tokens: number; income: number } {
   return {
-    living: TUNING.living_per_s,
+    living: TUNING.living_per_s * (1 - trait(run, 'thrift')),
     agents: agentCost(run),
     // every shipped block has to be hosted and kept alive: a feature is a commitment
-    hosting: run.host,
+    hosting: run.host * (1 - trait(run, 'thrift')),
     tokens: tokens(run) / TUNING.sprint_s,
     income: mrr(run) / TUNING.sprint_s,
   };
@@ -696,7 +708,7 @@ export function unknownAsks(run: Run): string[] {
 
 /** how much of a lead one square of promotion is */
 export function leadsPerWork(run: Run): number {
-  const trust = 1 + TUNING.logos.promo * logos(run);
+  const trust = (1 + TUNING.logos.promo * logos(run)) * (1 + trait(run, 'marketing'));
   return (run.idea.tech.hype * run.idea.form.hype * run.idea.aud.hype * run.eff.promo * run.mod.promo * trust) / TUNING.promo_work_per_lead;
 }
 
