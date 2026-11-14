@@ -9,7 +9,7 @@ const KEY = 'b2b-saas-settings';
 
 /** What the player chose in the menu; survives a restart. */
 export function loadSettings(): Settings {
-  const s: Settings = { sound: true, music: true, track: 'bossa' };
+  const s: Settings = { sound: true, music: true, track: 'chip' };
   try {
     const raw = JSON.parse(localStorage.getItem(KEY) ?? '{}') as Partial<Settings>;
     if (typeof raw.sound === 'boolean') s.sound = raw.sound;

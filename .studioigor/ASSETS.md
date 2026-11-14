@@ -22,7 +22,7 @@
 | A014 UI_Terminal | UI-герой | полноэкранный терминал: смесь идеи, меню, некролог | HTML/CSS | код | plan |
 | A015 FNT | шрифты | JetBrains Mono 400/700, Source Serif 4 400/600, кириллица | woff2 | Fontsource (OFL) | done |
 | A016 SFX | звук | блок поставлен, квадрат дошёл, релиз, клиент пришёл и ушёл, падение, банкротство | параметры в коде | ZzFX | plan |
-| A017 MUS | музыка | двенадцать зацикленных треков на выбор игрока (демо-страница `?gym=music`); после выбора пользователя лишние убрать | ≤ 3 МБ каждый | CC0, OpenGameArt | final |
+| A017 MUS | музыка | четыре зацикленных трека: «Чиптюн» по умолчанию (выбор пользователя), «Забытая тропа», босса-нова, лоу-фай; переключаются в меню, в паузе и на странице `?gym=music` | ≤ 3 МБ каждый | CC0, OpenGameArt | final |
 
 ## Strategy by category
 | category | source (pack / Blender / procedural / generation / user) | why | status |
@@ -46,7 +46,7 @@
 - каждый новый ассет сначала ставится в сцену вида (`?gym=lookdev`) и снимается
 
 ## Requests to the user
-- музыка: пользователь попросил другую (PT-10) — демо-страница с двенадцатью треками CC0 (`?gym=music`), выбранный играет в игре; какой оставить по умолчанию и какие убрать — скажет после прослушивания
+- музыка: пользователь попросил другую (PT-10) — решено: «Чиптюн» по умолчанию; в игре оставлены четыре трека
 - новые картинки (если захочется отдельных значков для блоков или персонажей клиентов) — генерация на аккаунте пользователя
 
 ## License registry
@@ -59,14 +59,6 @@
 | ZzFX | https://github.com/KilledByAPixel/ZzFX | MIT | Frank Force | node_modules/zzfx | в титрах |
 | музыка «Bossa Nova» | https://opengameart.org/content/bossa-nova | CC0 | Joth | public/assets/audio/bossa_nova.ogg | в титрах (не требуется) |
 | музыка «Chill lofi inspired [loop edit]» | https://opengameart.org/content/chill-lofi-inspired-loop-edit | CC0 | omfgdude, петля — qubodup | public/assets/audio/chill_lofi.ogg | в титрах (не требуется) |
-| музыка «Shop Theme» | https://opengameart.org/content/shop-theme | CC0 | Cleyton Kauffman | public/assets/audio/shop_theme.ogg | в титрах (не требуется) |
-| музыка «Elevator Music» | https://opengameart.org/content/elevator-music | CC0 | Pro Sensory | public/assets/audio/elevator.ogg | в титрах (не требуется) |
-| музыка «Blue Skies» (Happy Lo-Fi) | https://opengameart.org/content/happy-lo-fi-lofi-collection | CC0 | Holizna | public/assets/audio/blue_skies.ogg | в титрах (не требуется) |
-| музыка «Funky Menu Loop» | https://opengameart.org/content/funky-menu-loop | CC0 | iamoneabe | public/assets/audio/funky_menu.ogg | в титрах (не требуется) |
 | музыка «Chiploop» | https://opengameart.org/content/chiploop | CC0 | iamoneabe | public/assets/audio/chiploop.ogg | в титрах (не требуется) |
 | музыка «forgotten path» | https://opengameart.org/content/forgotten-path | CC0 | johndekale | public/assets/audio/forgotten_path.ogg | в титрах (не требуется) |
-| музыка «Simple menu/background music loop» | https://opengameart.org/content/simple-menubackground-music-loop | CC0 | polosik | public/assets/audio/simple_loop.ogg | в титрах (не требуется) |
-| музыка «Menu Chill Music» | https://opengameart.org/content/menu-chill-music | CC0 | etrock | public/assets/audio/menu_chill.ogg | в титрах (не требуется) |
-| музыка «Calm Loop» | https://opengameart.org/content/calm-loop | CC0 | wipics | public/assets/audio/calm_loop.ogg | в титрах (не требуется) |
-| музыка «In the Lobby» | https://opengameart.org (взята из Yes-Driven Development) | CC0 | Umplix | public/assets/audio/in_the_lobby.ogg | в титрах (не требуется) |
 | lil-gui (только dev-панель настроек) | https://github.com/georgealways/lil-gui | MIT | George Michael Brower | node_modules/lil-gui | не входит в сборку игры |
