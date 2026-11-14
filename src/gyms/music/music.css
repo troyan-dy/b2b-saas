@@ -1,0 +1,97 @@
+/* the music demo: a sheet of cards, one per loop */
+.mu {
+  position: absolute;
+  inset: 0;
+  box-sizing: border-box;
+  padding: 56px 90px 0;
+  pointer-events: auto;
+  color: var(--ink);
+}
+.mu h1 {
+  margin: 0;
+  font: 600 76px/1 var(--serif);
+  letter-spacing: -0.02em;
+}
+.mu-how {
+  margin: 14px 0 34px;
+  font: 400 20px/1 var(--mono);
+  color: var(--dim);
+}
+.mu-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 22px;
+}
+.mu-card {
+  position: relative;
+  display: grid;
+  gap: 8px;
+  padding: 22px 24px 20px;
+  background: var(--card);
+  border: 1.5px solid var(--ink);
+  border-radius: 14px;
+  cursor: pointer;
+}
+.mu-card:hover {
+  background: #fff;
+}
+.mu-card i {
+  position: absolute;
+  right: 20px;
+  top: 16px;
+  font: 400 16px/1 var(--mono);
+  font-style: normal;
+  color: var(--dim);
+}
+.mu-card b {
+  font: 600 30px/1.15 var(--serif);
+}
+.mu-card span {
+  font: 400 17px/1.3 var(--mono);
+}
+.mu-card small {
+  font: 400 14px/1 var(--mono);
+  color: var(--dim);
+}
+/* the ruler of the loop: runs while it plays */
+.mu-card u {
+  height: 6px;
+  margin-top: 6px;
+  border: 1.5px solid var(--ink);
+  border-radius: 2px;
+  background: var(--paper);
+}
+.mu-card s {
+  display: block;
+  width: 0;
+  height: 100%;
+  background: var(--coral);
+}
+.mu-card em {
+  justify-self: start;
+  margin-top: 6px;
+  padding: 7px 14px 8px;
+  border: 1.5px solid var(--ink);
+  border-radius: 9px;
+  font: 400 16px/1 var(--mono);
+  font-style: normal;
+}
+.mu-card em:hover {
+  background: var(--ink);
+  color: var(--paper);
+}
+/* playing: the card is Claude's colour */
+.mu-card.on {
+  border-color: var(--coral);
+  outline: 2.5px solid var(--coral);
+}
+/* chosen for the game */
+.mu-card.picked em {
+  background: var(--ink);
+  color: var(--paper);
+}
+.mu-foot {
+  margin: 30px 0 0;
+  font: 400 18px/1 var(--mono);
+  color: var(--dim);
+}

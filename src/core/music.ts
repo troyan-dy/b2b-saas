@@ -1,9 +1,26 @@
-/** The background music: one loop out of a short list, started by the first key press or click. */
-export const TRACKS: readonly { id: string; title: string; file: string }[] = [
-  { id: 'bossa', title: 'босса-нова для лифта', file: 'assets/audio/bossa_nova.ogg' },
-  { id: 'lofi', title: 'лоу-фай', file: 'assets/audio/chill_lofi.ogg' },
-  { id: 'shop', title: 'тема магазина', file: 'assets/audio/shop_theme.ogg' },
-  { id: 'lobby', title: 'в лобби', file: 'assets/audio/in_the_lobby.ogg' },
+export interface Track {
+  id: string;
+  title: string;
+  /** two or three words on how it sounds */
+  mood: string;
+  author: string;
+  file: string;
+}
+
+/** The background music: one loop out of a list, started by the first key press or click. All of it is CC0 from OpenGameArt. */
+export const TRACKS: readonly Track[] = [
+  { id: 'bossa', title: 'Босса-нова для лифта', mood: 'иронично · 8 бит · бодро', author: 'Joth', file: 'assets/audio/bossa_nova.ogg' },
+  { id: 'elevator', title: 'Музыка в лифте', mood: 'мягкий джаз · спокойно', author: 'Pro Sensory', file: 'assets/audio/elevator.ogg' },
+  { id: 'lofi', title: 'Лоу-фай', mood: 'бит для работы · тепло', author: 'omfgdude, qubodup', file: 'assets/audio/chill_lofi.ogg' },
+  { id: 'blue', title: 'Голубое небо', mood: 'лоу-фай · светло · неспешно', author: 'Holizna', file: 'assets/audio/blue_skies.ogg' },
+  { id: 'shop', title: 'Тема магазина', mood: 'лёгкая мелодия · уютно', author: 'Cleyton Kauffman', file: 'assets/audio/shop_theme.ogg' },
+  { id: 'funky', title: 'Фанк в меню', mood: 'фанк · бас · с настроением', author: 'iamoneabe', file: 'assets/audio/funky_menu.ogg' },
+  { id: 'chip', title: 'Чиптюн', mood: '8 бит · ровный ритм', author: 'iamoneabe', file: 'assets/audio/chiploop.ogg' },
+  { id: 'path', title: 'Забытая тропа', mood: '8 бит · задумчиво', author: 'johndekale', file: 'assets/audio/forgotten_path.ogg' },
+  { id: 'simple', title: 'Простая петля', mood: 'синтезатор · нейтрально', author: 'polosik', file: 'assets/audio/simple_loop.ogg' },
+  { id: 'menu', title: 'Тихое меню', mood: 'эмбиент · короткая петля', author: 'etrock', file: 'assets/audio/menu_chill.ogg' },
+  { id: 'calm', title: 'Спокойная петля', mood: 'эмбиент · почти тишина', author: 'wipics', file: 'assets/audio/calm_loop.ogg' },
+  { id: 'lobby', title: 'В лобби', mood: 'прежний трек · лоу-фай', author: 'Umplix', file: 'assets/audio/in_the_lobby.ogg' },
 ];
 const VOLUME = 0.3;
 
@@ -45,8 +62,9 @@ export function nextTrack(id: string): string {
   return TRACKS[(k + 1) % TRACKS.length].id;
 }
 
+/** the name of a loop as the menu writes it */
 export function trackTitle(id: string): string {
-  return (TRACKS.find((t) => t.id === id) ?? TRACKS[0]).title;
+  return (TRACKS.find((t) => t.id === id) ?? TRACKS[0]).title.toLowerCase();
 }
 
 /** Browsers start audio only after a gesture: call from the first key press or click. */
