@@ -80,9 +80,9 @@ files:
 
 ## Phase 10 — Release
 files:
-- [ ] platform requirements research — check: ls .studioigor/research/release-*.md
+- [x] platform requirements research — check: ls .studioigor/research/release-*.md
 - [x] no stubs, debug, cheat keys, console.log — check: manual
 - [x] soak session with no leaks or degradation; saves compatible — check: manual
 - [x] end credits/CREDITS built from the license registry — check: manual
 - [x] release builds made for each platform — check: manual
-- [ ] user decided whether and where to publish — check: user
+- [x] user decided whether and where to publish — check: user
