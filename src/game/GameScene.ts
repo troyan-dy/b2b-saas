@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { BLOCK_BY_ID } from '../content/blocks';
-import { LANE_ACC, LANE_NAME, LEFT_KNOWN, LEFT_UNKNOWN, NEWS, NEWS_EVENT, releaseLines, TIER_NAME } from '../content/texts';
+import { BANK_ANSWERS, BANK_TEXT, CALL_ANSWERS, CALL_ASK, LANE_ACC, LANE_NAME, LEFT_KNOWN, LEFT_UNKNOWN, NEWS, NEWS_EVENT, releaseLines, TIER_NAME } from '../content/texts';
 import { logEvent, metrics } from '../core/metrics';
 import type { Rng } from '../core/rng';
 import { playSound, unlockSound } from '../core/sound';
@@ -8,6 +8,8 @@ import { PALETTE } from '../data/palette';
 import { money, plural } from '../ui/format';
 import type { Paper, ShelfItem, ShelfKeys, ShelfSection } from '../ui/paper';
 import {
+  answerCall,
+  answerLastChance,
   answerOffer,
   burnPerS,
   canHire,
@@ -235,7 +237,10 @@ export class GameScene extends Phaser.Scene {
       this.paused = false;
       return;
     }
-    answerOffer(this.run, k === 0);
+    // one card at a time, the most urgent first: the bank, a client on the line, the buyer
+    if (this.run.lastChance !== null) answerLastChance(this.run, k === 0);
+    else if (this.run.call) answerCall(this.run, k === 1);
+    else answerOffer(this.run, k === 0);
     this.paper.call(null);
   }
 
@@ -261,7 +266,7 @@ export class GameScene extends Phaser.Scene {
     }
     const digit = /^Digit([1-9])$/.exec(e.code);
     if (!digit) return;
-    if (this.run.offer !== null) {
+    if (this.run.offer !== null || this.run.call || this.run.lastChance !== null) {
       if (digit[1] === '1' || digit[1] === '2') this.onAnswer(Number(digit[1]) - 1);
       return;
     }
@@ -396,6 +401,34 @@ export class GameScene extends Phaser.Scene {
         playSound('quip');
         logEvent('offer');
         break;
+      case 'call':
+        playSound('quip');
+        logEvent(`call:${e.kind}`);
+        break;
+      case 'hungup': {
+        const [x, y] = this.board.onScreen(MARKET[0], MARKET[1]);
+        this.paper.pop(x, y - 20, `${e.name}: не дозвонились и ушли`, 'bad');
+        logEvent('hungup');
+        break;
+      }
+      case 'kept': {
+        const [x, y] = this.board.onScreen(...this.nodePos(`c${e.id}`));
+        this.paper.pop(x, y - 170 * this.board.zoom, 'обещание выполнено', 'good');
+        logEvent('kept');
+        break;
+      }
+      case 'refund': {
+        const [x, y] = this.board.onScreen(...this.nodePos(`c${e.id}`));
+        this.paper.pop(x, y - 190 * this.board.zoom, `возврат ${money(-e.sum)}`, 'bad');
+        this.cameras.main.shake(140, 0.003);
+        logEvent('refund');
+        break;
+      }
+      case 'lastchance':
+        playSound('waste');
+        this.cameras.main.shake(220, 0.005);
+        logEvent('lastchance');
+        break;
       case 'end':
         logEvent(`end:${e.ending}`);
         this.ended = true;
@@ -508,6 +541,7 @@ export class GameScene extends Phaser.Scene {
       const paid = pay > 0 ? `<em>${money(pay)}</em>` : run.down ? 'лежим' : 'бесплатно';
       let mood: string;
       if (c.happy) mood = `<i>${paid} · доволен</i>`;
+      else if (c.promised) mood = `<i class="bad">обещан «${BLOCK_BY_ID[c.want]?.short}» · ${c.patience} спр.</i>`;
       else if (run.known.includes(c.want)) mood = `<i class="bad">ждёт «${BLOCK_BY_ID[c.want]?.short}» · ${c.patience} спр.</i>`;
       else mood = `<i class="bad">чего-то ждёт · ${c.patience} спр.</i>`;
       this.paper.tag(`c${c.id}`, x, y, `<b>${c.name}</b>${c.happy ? '' : ` · ${paid}`}${mood}`, 'small');
@@ -537,6 +571,14 @@ export class GameScene extends Phaser.Scene {
         who: 'ПАУЗА',
         text: 'Деньги не горят, пока ты думаешь. В жизни так не бывает.',
         options: ['Вернуться к стартапу', 'Бросить стартап и выйти в меню'],
+      });
+    } else if (run.lastChance !== null) {
+      this.paper.call({ who: 'ЗВОНОК · БАНК', text: BANK_TEXT.replace('%s', money(run.lastChance)), options: BANK_ANSWERS });
+    } else if (run.call) {
+      this.paper.call({
+        who: `ЗВОНОК · ${run.call.name.toUpperCase()}`,
+        text: CALL_ASK[run.call.want] ?? `А «${BLOCK_BY_ID[run.call.want]?.name}» у вас есть? Нам без этого никак.`,
+        options: CALL_ANSWERS,
       });
     } else if (run.offer !== null) {
       this.paper.call({

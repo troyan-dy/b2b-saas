@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { playBot, SENSIBLE, type BotStyle } from '../src/gyms/bot';
-import { createRun, IDEAS, mrr, step, TUNING, type Idea, type Run } from '../src/systems/run/run';
+import { answerLastChance, createRun, IDEAS, mrr, step, TUNING, type Idea, type Run } from '../src/systems/run/run';
 
 const STEP = 1 / 4;
 
@@ -8,6 +8,8 @@ function play(seed: number, idea: Idea, style: BotStyle | null): Run {
   const run = createRun(seed, idea);
   for (let k = 0; k < 60 * 60 * 4 && !run.over; k++) {
     if (style) playBot(run, style);
+    // nobody at the desk: the bank's call goes unanswered, the startup closes
+    else if (run.lastChance !== null) answerLastChance(run, false);
     if (run.offer !== null) run.offer = null; // the bot never sells: we want to see the whole run
     step(run, STEP);
   }
@@ -46,11 +48,14 @@ describe('economy', () => {
     const runs = Array.from({ length: 24 }, (_, k) => play(100 + k, ideaOf(k), SENSIBLE));
     const s = summary(runs);
     console.log('sensible', JSON.stringify(s));
+    const pawned = runs.filter((r) => r.mortgaged);
+    console.log(`mortgage: taken in ${pawned.length} of ${runs.length} runs, survived after it ${pawned.filter((r) => r.over !== 'broke').length}`);
+    const promises = runs.reduce((a, r) => a + r.stats.promises, 0);
+    console.log(`promises: ${promises} made, ${runs.reduce((a, r) => a + r.stats.kept, 0)} kept, ${runs.reduce((a, r) => a + r.stats.broken, 0)} broken`);
     // the first client: not before the first release, not later than the fourth minute
     expect(s.first).toBeGreaterThan(0.6);
     expect(s.first).toBeLessThan(4);
     expect(s.alive).toBeGreaterThan(0.45);
-    expect(s.alive).toBeLessThan(0.97);
     // even an unlucky startup lives long enough to be a story
     expect(s.earliestDeath).toBeGreaterThan(4.5);
   });
@@ -65,6 +70,8 @@ describe('economy', () => {
     console.log('noLinks', JSON.stringify(noLinks));
     console.log('blind  ', JSON.stringify(blind));
     console.log('dirty  ', JSON.stringify(dirty));
+    // a careful founder still loses some startups: the game is not a walk
+    expect(full.alive).toBeLessThan(0.95);
     // where a block stands matters
     expect(full.peak).toBeGreaterThan(noLinks.peak * 1.05);
     // asking clients beats building blind

@@ -13,6 +13,8 @@
   },
   "review_boost": 1.25,
   "crunch": { "max": 6, "regen_s": 5, "debt": 1 },
+  "call": { "chance": 0.5, "honest_mult": 0.75, "sure_mult": 1.35, "sure_patience": 2, "refund_sprints": 2 },
+  "mortgage_s": 60,
   "fix_per_work": 2,
   "promo_work_per_lead": 9,
   "research_work_per_reveal": 6,

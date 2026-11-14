@@ -12,12 +12,14 @@ export interface Args {
   bot: boolean;
   /** simulated seconds per real second */
   speed: number;
+  /** switches of the gyms: ?flags=nocalls — the bot leaves the phone to the player */
+  flags: string[];
 }
 
 /** Launch arguments from the URL: ?seed=7&gym=build&state=clients&debug=1&bot=1&speed=6 */
 export function readArgs(search: string): Args {
   // the release reads nothing from the address: no gyms, no quick starts
-  if (!__TOOLS__) return { seed: Date.now() >>> 0, gym: '', state: '', debug: false, capture: false, save: false, menu: false, bot: false, speed: 1 };
+  if (!__TOOLS__) return { seed: Date.now() >>> 0, gym: '', state: '', debug: false, capture: false, save: false, menu: false, bot: false, speed: 1, flags: [] };
   const p = new URLSearchParams(search);
   const seed = Number(p.get('seed'));
   const speed = Number(p.get('speed'));
@@ -31,5 +33,6 @@ export function readArgs(search: string): Args {
     menu: p.get('menu') === '1',
     bot: p.get('bot') === '1',
     speed: Number.isFinite(speed) && speed > 0 ? speed : 1,
+    flags: (p.get('flags') ?? '').split(',').filter(Boolean),
   };
 }

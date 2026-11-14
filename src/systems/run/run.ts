@@ -70,6 +70,10 @@ export interface Client {
   happy: boolean;
   /** its place on the sheet */
   slot: number;
+  /** what the call settled: a discount for an honest «not yet», a premium for a confident «of course» */
+  deal: number;
+  /** the founder said the block is already there: it must ship before the patience runs out */
+  promised: boolean;
 }
 
 export interface Report {
@@ -96,6 +100,11 @@ export type RunEvent =
   | { type: 'down' }
   | { type: 'stage'; stage: number }
   | { type: 'offer'; price: number }
+  | { type: 'call'; name: string; kind: string }
+  | { type: 'hungup'; name: string }
+  | { type: 'kept'; id: number }
+  | { type: 'refund'; id: number; sum: number }
+  | { type: 'lastchance'; sum: number }
   | { type: 'end'; ending: Ending };
 
 export interface Run {
@@ -130,6 +139,11 @@ export interface Run {
   down: boolean;
   offer: number | null;
   offersMade: number;
+  /** a client on the line, asking about a block that is not there; it takes its place when answered */
+  call: Client | null;
+  /** the money is gone and the bank offers this much for the flat; the clock waits for the answer */
+  lastChance: number | null;
+  mortgaged: boolean;
   events: RunEvent[];
   over: Ending | null;
   lastReport: Report | null;
@@ -144,6 +158,10 @@ export interface Run {
     tokens: number;
     firstClientAt: number;
     profitAt: number;
+    /** blocks promised on calls, and how many of the promises were kept and broken */
+    promises: number;
+    kept: number;
+    broken: number;
   };
   nextId: number;
   /** agents are numbered in the order they are hired */
@@ -216,10 +234,13 @@ export function createRun(seed: number, idea: Idea, perks: readonly string[] = [
     down: false,
     offer: null,
     offersMade: 0,
+    call: null,
+    lastChance: null,
+    mortgaged: false,
     events: [],
     over: null,
     lastReport: null,
-    stats: { clients: 0, left: 0, downs: 0, peakMrr: 0, shipped: 0, corp: 0, soldFor: 0, tokens: 0, firstClientAt: 0, profitAt: 0 },
+    stats: { clients: 0, left: 0, downs: 0, peakMrr: 0, shipped: 0, corp: 0, soldFor: 0, tokens: 0, firstClientAt: 0, profitAt: 0, promises: 0, kept: 0, broken: 0 },
     nextId: 1,
     nextAgent: 2,
     live: new Set(),
@@ -284,7 +305,7 @@ export function priceMult(run: Run): number {
 /** what a client is worth per sprint: its subscription at today's prices, whether it pays right now or not */
 function clientWorth(run: Run, c: Client): number {
   const own = c.size === 'corp' ? run.eff.corp_pay : run.eff.small_pay;
-  return c.pay * priceMult(run) * own * (c.happy ? TUNING.clients.happy_bonus : 1);
+  return c.pay * c.deal * priceMult(run) * own * (c.happy ? TUNING.clients.happy_bonus : 1);
 }
 
 /** what a client pays per sprint right now */
@@ -444,10 +465,45 @@ export function answerOffer(run: Run, accept: boolean): void {
   run.offer = null;
 }
 
+/**
+ * The client on the line asked about a block that is not there. Honest: it signs with a discount and
+ * says what it needs. Confident: it pays a premium, but the block must ship before its patience ends.
+ */
+export function answerCall(run: Run, sure: boolean): void {
+  const c = run.call;
+  if (!c || run.over) return;
+  run.call = null;
+  if (run.clients.length >= stageRule(run).clients_max) return;
+  if (sure) {
+    c.deal = TUNING.call.sure_mult;
+    c.promised = true;
+    c.patience = TUNING.call.sure_patience;
+    run.stats.promises++;
+  } else {
+    c.deal = TUNING.call.honest_mult;
+    if (!run.known.includes(c.want)) {
+      run.known.push(c.want);
+      run.events.push({ type: 'reveal', kind: c.want });
+    }
+  }
+  seat(run, c);
+}
+
+/** The money is gone. Mortgaging the flat buys a minute of life, once. */
+export function answerLastChance(run: Run, accept: boolean): void {
+  if (run.lastChance === null || run.over) return;
+  if (accept) {
+    run.money += run.lastChance;
+    run.mortgaged = true;
+  } else end(run, 'broke');
+  run.lastChance = null;
+}
+
 // ---------------------------------------------------------------- time
 
 export function step(run: Run, dt: number): void {
-  if (run.over) return;
+  // the bank is on the line: the clock waits for the answer
+  if (run.over || run.lastChance !== null) return;
   run.t += dt;
   run.money += netPerS(run) * dt;
   run.stats.tokens += (tokens(run) / TUNING.sprint_s) * dt;
@@ -469,7 +525,14 @@ export function step(run: Run, dt: number): void {
   if (run.sprintT >= TUNING.sprint_s) release(run);
   if (!run.over && run.money <= 0) {
     run.money = 0;
-    end(run, 'broke');
+    const net = netPerS(run);
+    // already in the black: a refund emptied the account, the subscriptions will fill it again
+    if (net >= 0) return;
+    if (run.mortgaged) end(run, 'broke');
+    else {
+      run.lastChance = Math.ceil((-net * TUNING.mortgage_s) / 10) * 10;
+      run.events.push({ type: 'lastchance', sum: run.lastChance });
+    }
   }
 }
 
@@ -512,11 +575,10 @@ function deliver(run: Run, a: Agent): void {
   }
 }
 
-function addClient(run: Run): void {
+/** A lead becomes a client-to-be: who it is, what it pays and what it waits for. Not on the sheet yet. */
+function makeClient(run: Run): Client {
   const C = TUNING.clients;
-  const used = new Set(run.clients.map((c) => c.slot));
-  let slot = 0;
-  while (used.has(slot)) slot++;
+  const slot = -1;
   const corps = run.clients.filter((c) => c.size === 'corp').length;
   const patienceMods = run.idea.tech.patience + run.idea.form.patience + run.eff.patience;
   let client: Client;
@@ -525,8 +587,7 @@ function addClient(run: Run): void {
     const pool = IDEAS.corp.filter((c) => !taken.has(c.name));
     const who = run.rng.pick(pool.length > 0 ? pool : IDEAS.corp);
     const want = run.rng.pick(run.corpAsks);
-    client = { id: run.nextId++, texture: who.texture, name: who.name, size: 'corp', pay: C.corp_pay, want, patience: Math.max(1, C.corp_patience + patienceMods), happy: false, slot };
-    run.stats.corp++;
+    client = { id: run.nextId++, texture: who.texture, name: who.name, size: 'corp', pay: C.corp_pay, want, patience: Math.max(1, C.corp_patience + patienceMods), happy: false, slot, deal: 1, promised: false };
   } else {
     const taken = new Set(run.clients.map((c) => c.name));
     const pool = run.idea.aud.clients.filter((n) => !taken.has(n));
@@ -543,11 +604,28 @@ function addClient(run: Run): void {
       patience: Math.max(1, C.patience + patienceMods),
       happy: false,
       slot,
+      deal: 1,
+      promised: false,
     };
   }
+  return client;
+}
+
+/** The client takes its place on the sheet and starts to count. */
+function seat(run: Run, client: Client): void {
+  const used = new Set(run.clients.map((c) => c.slot));
+  let slot = 0;
+  while (used.has(slot)) slot++;
+  client.slot = slot;
   client.happy = isLive(run, client.want);
+  if (client.happy && client.promised) {
+    // built while the phone was ringing: the promise is already kept
+    client.promised = false;
+    run.stats.kept++;
+  }
   run.clients.push(client);
   run.stats.clients++;
+  if (client.size === 'corp') run.stats.corp++;
   if (run.stats.firstClientAt === 0) run.stats.firstClientAt = run.t;
   run.events.push({ type: 'client', id: client.id });
 }
@@ -577,10 +655,21 @@ function release(run: Run): void {
     run.down = false;
   }
 
+  // nobody picked up: the client on the line is gone
+  if (run.call) {
+    run.events.push({ type: 'hungup', name: run.call.name });
+    run.call = null;
+  }
+
   // clients who got what they waited for stay; the rest lose patience
   const stay: Client[] = [];
   for (const c of run.clients) {
     if (isLive(run, c.want)) {
+      if (c.promised) {
+        c.promised = false;
+        run.stats.kept++;
+        run.events.push({ type: 'kept', id: c.id });
+      }
       c.happy = true;
       stay.push(c);
       continue;
@@ -590,10 +679,17 @@ function release(run: Run): void {
       stay.push(c);
       continue;
     }
-    const reason = run.known.includes(c.want) ? c.want : '';
+    const reason = run.known.includes(c.want) || c.promised ? c.want : '';
     report.left++;
     report.reasons.push(reason);
     run.stats.left++;
+    if (c.promised) {
+      // it paid for a block that never came: the money goes back
+      const sum = Math.round(clientWorth(run, c) * TUNING.call.refund_sprints);
+      run.money -= sum;
+      run.stats.broken++;
+      run.events.push({ type: 'refund', id: c.id, sum });
+    }
     run.events.push({ type: 'left', id: c.id, name: c.name, reason });
   }
   run.clients = stay;
@@ -608,7 +704,14 @@ function release(run: Run): void {
     const max = stageRule(run).clients_max;
     while (run.leads >= 1 && run.clients.length < max) {
       run.leads -= 1;
-      addClient(run);
+      const c = makeClient(run);
+      // a client that needs what is not there may call first and ask; it comes when the founder answers
+      if (run.call === null && run.stage >= 2 && !isLive(run, c.want) && run.rng.next() < TUNING.call.chance) {
+        run.call = c;
+        run.events.push({ type: 'call', name: c.name, kind: c.want });
+        continue;
+      }
+      seat(run, c);
       report.came++;
     }
     run.leads = Math.min(run.leads, 3);

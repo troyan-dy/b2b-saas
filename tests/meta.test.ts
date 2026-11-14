@@ -1,12 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { emptyMeta, finish, learn, migrate } from '../src/systems/meta/meta';
-import { createRun, IDEAS, isLive, shelf, step, TUNING, type Idea } from '../src/systems/run/run';
+import { answerLastChance, createRun, IDEAS, isLive, shelf, step, TUNING, type Idea } from '../src/systems/run/run';
 
 const idea: Idea = { tech: IDEAS.tech[0], form: IDEAS.form[3], aud: IDEAS.aud[0] };
 
 function goBroke(seed: number): ReturnType<typeof createRun> {
   const run = createRun(seed, idea);
-  while (!run.over) step(run, 0.5);
+  while (!run.over) {
+    // the bank calls when the money is gone: this founder keeps the flat
+    if (run.lastChance !== null) answerLastChance(run, false);
+    step(run, 0.5);
+  }
   return run;
 }
 

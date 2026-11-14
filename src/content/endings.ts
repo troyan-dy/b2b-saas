@@ -16,6 +16,15 @@ export function clock(seconds: number): string {
 }
 
 export function endingPost(run: Run): string[] {
+  const lines = mainPost(run);
+  const s = run.stats;
+  // what was said on the calls and what became of the flat: a postscript to any ending
+  if (s.promises > 0) lines.push(`P.S. Клиентам я пообещал ${s.promises} ${s.promises === 1 ? 'функцию' : 'функций'}, «уже в проде». Построил ${s.kept}.`);
+  if (run.mortgaged) lines.push(run.over === 'broke' ? 'P.P.S. Квартиру тоже забрали. Пишу из коворкинга.' : 'P.P.S. Квартиру, кстати, выкупил.');
+  return lines;
+}
+
+function mainPost(run: Run): string[] {
   const name = pitch(run.idea);
   const s = run.stats;
   switch (run.over) {

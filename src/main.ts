@@ -16,7 +16,7 @@ import { loadSettings, saveSettings } from './core/settings';
 import { playSound, setSoundOn, unlockSound } from './core/sound';
 import { ending, menu, mixIdea } from './game/flow';
 import { GameScene } from './game/GameScene';
-import { playBot } from './gyms/bot';
+import { playBot, SENSIBLE } from './gyms/bot';
 import { mountGymKeys } from './gyms/keys';
 import { LookdevScene } from './gyms/lookdev/LookdevScene';
 import { loadMeta } from './systems/meta/meta';
@@ -142,8 +142,9 @@ else if (__TOOLS__ && args.gym === 'build') {
   const n = Number(args.state) || 0;
   const idea: Idea = { tech: pick(IDEAS.tech, n), form: pick(IDEAS.form, n + 3), aud: pick(IDEAS.aud, n) };
   const run = createRun(args.seed, idea);
+  const style = { ...SENSIBLE, calls: !args.flags.includes('nocalls') };
   const scene = new GameScene(run, rng, createPaper(under, over), {
-    beforeStep: args.bot ? (r) => playBot(r) : undefined,
+    beforeStep: args.bot ? (r) => playBot(r, style) : undefined,
     onEnd: () => undefined,
     onQuit: () => window.location.reload(),
   });

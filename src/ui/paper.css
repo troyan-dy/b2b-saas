@@ -456,22 +456,28 @@
 /* a call: a dark terminal card in the middle of the sheet, the answers are its lines */
 .bl-call {
   position: absolute;
-  left: 370px;
-  top: 300px;
-  width: 600px;
+  /* to the left of the product, under Claude's card: a call must not cover what is being built */
+  left: 24px;
+  top: 186px;
+  width: 372px;
   box-sizing: border-box;
-  padding: 20px 26px 18px;
+  padding: 16px 20px 14px;
   border-radius: 12px;
   border: 1px solid var(--term-rule);
   outline: 2px solid var(--coral);
   background: var(--term-panel);
   color: var(--term-text);
-  font: 400 17px/1.5 var(--mono);
+  font: 400 16px/1.5 var(--mono);
   display: none;
   pointer-events: auto;
 }
 .bl-call.on {
   display: block;
+}
+.bl-call em {
+  font-style: normal;
+  font-weight: 700;
+  color: var(--money-dark);
 }
 .bl-call small {
   display: block;
