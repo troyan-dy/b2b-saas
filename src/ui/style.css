@@ -1,0 +1,108 @@
+:root {
+  --paper: #f0eee6;
+  --card: #faf9f5;
+  --ink: #262624;
+  --ink-soft: #87867f;
+  --rule: #c9c5b8;
+  --sage: #bcd1ca;
+  --blue: #6a9bcc;
+  --sand: #d4a27f;
+  --term-bg: #1f1e1d;
+  --term-panel: #262624;
+  --term-rule: #3d3a36;
+  --term-text: #f0eee6;
+  --coral: #d97757;
+  --money: #3f7d58;
+  --money-dark: #7cc68d;
+  --mono: 'JetBrains Mono', ui-monospace, monospace;
+  --serif: 'Source Serif 4', Georgia, serif;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  /* the colour of the terminal: the stage sits on it when the window is not 16:9 */
+  background: var(--term-bg);
+  overflow: hidden;
+  font-family: var(--mono);
+}
+
+body {
+  display: grid;
+  place-items: center;
+}
+
+/* 16:9 stage fitted to the window; the canvas and the HTML layers share it */
+#stage {
+  position: relative;
+  width: min(100vw, calc(100vh * 16 / 9));
+  aspect-ratio: 16 / 9;
+  container-type: size;
+  background: var(--paper);
+  overflow: hidden;
+}
+
+#game,
+#ui,
+#top {
+  position: absolute;
+  inset: 0;
+}
+
+#game canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* HTML layers are laid out in 1920×1080 px and scaled as a whole (ui/scale.ts sets --k) */
+.ui1080 {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 1920px;
+  height: 1080px;
+  transform-origin: 0 0;
+  transform: scale(var(--k, 1));
+  color: var(--ink);
+}
+
+/* below the canvas: paper, captions that squares fly over */
+#ui {
+  z-index: 1;
+  pointer-events: none;
+}
+/* the canvas: blueprint lines, nodes, squares */
+#game {
+  z-index: 2;
+}
+/* above the canvas: money, the side panel, terminal cards, dialogs */
+#top {
+  z-index: 3;
+  pointer-events: none;
+}
+#top .ui1080 > * {
+  pointer-events: auto;
+}
+
+.hud-count {
+  position: absolute;
+  top: 44px;
+  left: 0;
+  width: 1920px;
+  text-align: center;
+  font: 600 118px/1 var(--serif);
+  color: var(--money);
+  font-variant-numeric: tabular-nums;
+}
+
+.hud-hint {
+  position: absolute;
+  top: 176px;
+  left: 0;
+  width: 1920px;
+  text-align: center;
+  font: 400 24px/1.3 var(--mono);
+  color: var(--ink-soft);
+}

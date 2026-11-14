@@ -1,7 +1,7 @@
 # studioigor — B2B SaaS
 
 PROJECT: B2B SaaS
-PHASE: 3 — Platform and engine
+PHASE: 4 — Environment
 UPDATED: 2026-11-14 19:42
 
 ## Now
