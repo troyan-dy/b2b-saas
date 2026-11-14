@@ -115,6 +115,13 @@ export class GameScene extends Phaser.Scene {
     this.paper.onCell = (id) => this.onCell(id);
     this.paper.onAnswer = (k) => this.onAnswer(k);
     this.input.keyboard?.on('keydown', (e: KeyboardEvent) => this.onKeyDown(e));
+    // the tab is hidden: the startup waits — money must not burn while nobody is looking
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden && !this.ended) {
+        this.pauseCard = true;
+        this.paused = true;
+      }
+    });
 
     for (const b of this.run.blocks) this.landed.set(b.kind, b.done);
     this.newsAt = 6;
@@ -297,6 +304,7 @@ export class GameScene extends Phaser.Scene {
       case 'built': {
         const [x, y] = this.board.onScreen(...this.board.top(e));
         this.paper.pop(x, y - 30, 'готово — ждёт релиза', '');
+        this.burst(x, y, 6);
         playSound('buy', 7);
         break;
       }
@@ -311,6 +319,13 @@ export class GameScene extends Phaser.Scene {
         const reasons = e.report.reasons.map((k) => BLOCK_BY_ID[k]?.short ?? '');
         this.say(releaseLines({ ...e.report, shipped: names, reasons }), 16);
         playSound('scale');
+        // the release is the beat of the game: what ships bursts, the sheet breathes, the money answers
+        for (const kind of e.report.shipped) {
+          const b = run.blocks.find((x) => x.kind === kind);
+          if (b) this.burst(...this.board.onScreen(...this.board.top(b)), 10);
+        }
+        this.board.pulse();
+        if (e.report.mrr > 0) this.paper.popMoney();
         if (links(run).length > 0 && !this.said.has('link')) {
           this.said.add('link');
           this.news(NEWS_EVENT.link);
@@ -385,6 +400,12 @@ export class GameScene extends Phaser.Scene {
         logEvent(`end:${e.ending}`);
         this.ended = true;
         this.paper.call(null);
+        if (e.ending === 'sold' || e.ending === 'profit') playSound('finale');
+        else {
+          playSound('waste');
+          this.cameras.main.shake(260, 0.005);
+        }
+        this.say(['<b>❯ Клод</b>', e.ending === 'broke' ? 'Деньги кончились. Было приятно' : 'На этом всё. Было приятно', 'поработать. Счёт за токены я пришлю.'], 30);
         this.hooks.onEnd(run);
         break;
     }
@@ -503,6 +524,12 @@ export class GameScene extends Phaser.Scene {
     this.paper.setMoney(money(run.money), sub, run.money <= 0);
     const leftS = Math.ceil(TUNING.sprint_s - run.sprintT);
     this.paper.setSprint(`СПРИНТ ${Math.min(run.sprint, TUNING.last_sprint)} ИЗ ${TUNING.last_sprint} · РЕЛИЗ ЧЕРЕЗ ${leftS} С`, run.sprintT / TUNING.sprint_s);
+    // the goal is always on the sheet: three frames taken at random must say what to do
+    if (run.blocks.length === 0) this.paper.setGoal('цель: поставить первый блок — <b>выбери его справа</b>');
+    else if (run.stats.clients === 0) this.paper.setGoal('цель: первый клиент — нужны <b>ядро</b> и <b>лендинг</b> в релизе');
+    else if (net < 0) this.paper.setGoal(`цель: выйти в плюс — не хватает <b>${money(-net)}</b> в секунду`);
+    else this.paper.setGoal(`<em>в плюсе</em> · удержись до ${TUNING.last_sprint}-го спринта или расти до звонка покупателя`);
+    if (!this.ended) this.teach();
 
     this.paper.setShelf(this.shelfView());
     if (this.pauseCard) {
@@ -522,6 +549,50 @@ export class GameScene extends Phaser.Scene {
     if (this.termUntil > 0 && this.clock > this.termUntil) {
       this.termUntil = 0;
       this.paper.term(null);
+    }
+  }
+
+  /**
+   * Teaching through play: Claude says one thing at the moment it matters, once. Never while his card
+   * is busy with a release.
+   */
+  private teach(): void {
+    if (this.termUntil > 0 && this.clock < this.termUntil - 4) return;
+    const run = this.run;
+    const tell = (key: string, lines: string[]): boolean => {
+      if (this.said.has(key)) return false;
+      this.said.add(key);
+      this.say(['<b>❯ Клод</b>', ...lines], 13);
+      playSound('quip');
+      return true;
+    };
+    if (run.clients.length > 0 && !run.blocks.some((b) => b.kind === 'pay')) {
+      if (tell('t:pay', ['У нас клиент, но брать с него', 'деньги нечем. Поставь «Приём оплаты».'])) return;
+    }
+    if (run.stage >= 2 && run.agents.length === 1 && run.sprintT > 6) {
+      if (tell('t:hire', ['Можно нанять второго агента.', 'Он стоит денег каждую секунду —', 'смотри на «денег на…» под счётчиком.'])) return;
+    }
+    if (run.stage >= 2 && run.clients.some((c) => !c.happy && !run.known.includes(c.want)) && !run.agents.some((a) => a.lane === 'research')) {
+      if (tell('t:ask', ['Клиент чего-то ждёт и молчит.', 'Переведи агента на разведку —', 'он выяснит, какой блок им нужен.'])) return;
+    }
+    if (run.debt >= 10) {
+      if (tell('t:debt', ['Долг растёт: это серые квадраты', 'на блоках. Починка его снимает.', 'Что проверяешь сам — долга не даёт.'])) return;
+    }
+    if (this.idle.size > 0 && sites(run).length === 0 && shelf(run).length > 0 && run.blocks.length > 0) {
+      if (tell('t:idle', ['Строить нечего, агент простаивает', 'за твои деньги. Выбери блок справа', 'или дай ему другое дело.'])) return;
+    }
+    if (netPerS(run) >= 0 && run.clients.length > 0) {
+      tell('t:profit', ['Мы в плюсе. Можно дожить так', `до ${TUNING.last_sprint}-го спринта, а можно расти:`, 'при больших подписках позвонит покупатель.']);
+    }
+  }
+
+  /** A handful of coral squares thrown out of a point: something is finished here. */
+  private burst(x: number, y: number, count: number): void {
+    for (let k = 0; k < count; k++) {
+      const a = (k / count) * Math.PI * 2;
+      const tx = x + Math.cos(a) * 70;
+      const ty = y + Math.sin(a) * 36 - 20;
+      this.squares.fly({ x: x - 6, y: y - 6, w: 12, h: 12 }, { x: tx - 4, y: ty - 4, w: 8, h: 8 }, 1, PALETTE.coral, 30, [0.32, 0.5]);
     }
   }
 

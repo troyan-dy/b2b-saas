@@ -1,7 +1,7 @@
 # studioigor — B2B SaaS
 
 PROJECT: B2B SaaS
-PHASE: 6 — Mechanics
+PHASE: 7 — Vertical slice
 UPDATED: 2026-11-14 20:44
 
 ## Now

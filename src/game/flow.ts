@@ -1,3 +1,4 @@
+import { CREDITS } from '../content/credits';
 import { clock, ENDING_TITLE, endingPost, endingStats } from '../content/endings';
 import { money } from '../ui/format';
 import type { Terminal } from '../ui/terminal/terminal';
@@ -28,12 +29,19 @@ export async function menu(term: Terminal, meta: Meta, state: MenuState, version
       { title: 'Резюме основателя', note: meta.runs.length > 0 ? `стартапов: ${meta.runs.length}` : 'пока пустое' },
       { title: `Звук: ${state.sound ? 'включён' : 'выключен'}` },
       { title: `Музыка: ${state.music ? 'включена' : 'выключена'}` },
+      { title: 'Титры' },
     ];
     const k = await term.ask(options, `версия ${version}`);
     if (k === 0) return 'start';
     if (k === 1) await resume(term, meta);
     if (k === 2) return 'sound';
     if (k === 3) return 'music';
+    if (k === 4) {
+      term.clear();
+      term.print('Титры', 'mid');
+      for (const line of CREDITS) term.print(line, 'small');
+      await term.wait('назад');
+    }
   }
 }
 

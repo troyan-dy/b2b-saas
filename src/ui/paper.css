@@ -574,3 +574,29 @@
   transform: none;
   text-align: left;
 }
+
+/* the goal: one quiet line under the sprint ruler */
+.bl-goal {
+  position: absolute;
+  left: 180px;
+  width: 980px;
+  top: 232px;
+  text-align: center;
+  font: 400 15px/1 var(--mono);
+  color: var(--dim);
+  white-space: nowrap;
+}
+.bl-goal b {
+  color: var(--ink);
+  font-weight: 700;
+}
+.bl-goal em {
+  font-style: normal;
+  font-weight: 700;
+  color: var(--money);
+}
+/* a number that has just changed swells for a moment: the count above a site */
+.bl-tag.small.hot b {
+  display: inline-block;
+  animation: bl-pop 0.14s ease-out;
+}

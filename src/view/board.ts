@@ -167,6 +167,13 @@ export class Board {
     }
   }
 
+  /** The beat of a release: every module hops once. */
+  pulse(): void {
+    this.scene.tweens.killTweensOf(this.boxes);
+    this.boxes.y = 0;
+    this.scene.tweens.add({ targets: this.boxes, y: -7, duration: 80, yoyo: true, ease: 'Quad.Out' });
+  }
+
   hasNode(id: string): boolean {
     return this.nodes.has(id);
   }
