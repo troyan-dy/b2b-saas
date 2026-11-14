@@ -1,0 +1,38 @@
+{
+  "submissions": [
+    {
+      "board": "B2B SaaS — весь контент рядом",
+      "selected": [],
+      "reactions": {
+        "../../captures/content/run-full-product.png": "like",
+        "../../captures/content/sheet-blocks.png": "like",
+        "../../captures/content/run-stage3.png": "like",
+        "../../captures/content/sheet-clients.png": "like",
+        "../../captures/content/story-ending.png": "dislike"
+      },
+      "comments": {
+        "lessons": "мне не нравится этот интерфейс, нужно много читать и потом сложно перейти к информации",
+        "story": "я не понял про что этот блок, что ты имел ввиду."
+      },
+      "comment": "",
+      "ts": "2026-11-14T22:36:22"
+    }
+  ],
+  "latest": {
+    "board": "B2B SaaS — весь контент рядом",
+    "selected": [],
+    "reactions": {
+      "../../captures/content/run-full-product.png": "like",
+      "../../captures/content/sheet-blocks.png": "like",
+      "../../captures/content/run-stage3.png": "like",
+      "../../captures/content/sheet-clients.png": "like",
+      "../../captures/content/story-ending.png": "dislike"
+    },
+    "comments": {
+      "lessons": "мне не нравится этот интерфейс, нужно много читать и потом сложно перейти к информации",
+      "story": "я не понял про что этот блок, что ты имел ввиду."
+    },
+    "comment": "",
+    "ts": "2026-11-14T22:36:22"
+  }
+}

@@ -68,6 +68,72 @@
   color: var(--coral);
 }
 
+/* the ledger: where the money comes from and goes, line by line, to the right of the counter */
+.bl-ledger {
+  position: absolute;
+  left: 912px;
+  top: 30px;
+  width: 396px;
+  font: 400 15px/1 var(--mono);
+  color: var(--dim);
+}
+.bl-ledger p {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0;
+  height: 21px;
+  white-space: nowrap;
+}
+.bl-ledger p span {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.bl-ledger p b {
+  font-weight: 700;
+  color: var(--ink);
+}
+.bl-ledger p.in b {
+  color: var(--money);
+}
+.bl-ledger p.bad span,
+.bl-ledger p.bad b {
+  color: var(--coral);
+  font-weight: 700;
+}
+/* the debt: a ruler with its limit at the right end */
+.bl-ledger p.debt {
+  margin-top: 6px;
+  padding-top: 7px;
+  border-top: 1.5px solid var(--rule);
+  height: 24px;
+}
+.bl-ledger p.debt span {
+  flex: none;
+}
+.bl-ledger p.debt u {
+  flex: 1;
+  align-self: center;
+  height: 6px;
+  border: 1.5px solid var(--ink);
+  border-radius: 2px;
+  background: var(--card);
+}
+.bl-ledger p.debt s {
+  display: block;
+  height: 100%;
+  background: var(--debt, #8a8880);
+}
+.bl-ledger p.debt.bad s {
+  background: var(--coral);
+}
+.bl-ledger small {
+  display: block;
+  font-size: 13px;
+  line-height: 1.3;
+}
+
 /* the sprint: a thin ruler under the money, the release is its right end */
 .bl-sprint {
   position: absolute;
@@ -599,6 +665,11 @@
 .bl-tag.left {
   transform: none;
   text-align: left;
+}
+/* a caption that ends at its point: its bottom right corner is the anchor */
+.bl-tag.corner {
+  transform: translate(-100%, -100%);
+  text-align: right;
 }
 /* a client speaks: a line over its building, anchored by its right end so that it never runs under the shelf */
 .bl-tag.say {

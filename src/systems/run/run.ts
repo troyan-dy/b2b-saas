@@ -28,6 +28,8 @@ export interface Idea {
 
 interface BlockRule {
   work: number;
+  /** what the shipped block costs to keep running, $ per second */
+  host: number;
   stage: number;
   friends: string[];
   role: string;
@@ -179,6 +181,8 @@ export interface Run {
   clients: Client[];
   /** the product is down this sprint: nobody pays */
   down: boolean;
+  /** what brought it down: the founder's own debt or the model supplier's outage */
+  downWhy: 'debt' | 'supplier' | null;
   offer: number | null;
   offersMade: number;
   /** a client on the line, asking about a block that is not there; it takes its place when answered */
@@ -217,6 +221,8 @@ export interface Run {
   nextAgent: number;
   /** what is shipped, the links between it and what it gives: recounted at every release, read every step */
   live: Set<string>;
+  /** hosting of everything shipped, $ per second */
+  host: number;
   linkCount: number;
   eff: Effects;
 }
@@ -281,6 +287,7 @@ export function createRun(seed: number, idea: Idea, perks: readonly string[] = [
     known: [],
     clients: [],
     down: false,
+    downWhy: null,
     offer: null,
     offersMade: 0,
     call: null,
@@ -296,6 +303,7 @@ export function createRun(seed: number, idea: Idea, perks: readonly string[] = [
     nextId: 1,
     nextAgent: 2,
     live: new Set(),
+    host: 0,
     linkCount: 0,
     eff: { patience: 0, word_of_mouth: 1, corp_pay: 1, small_pay: 1, promo: 1, tokens: 1 },
   };
@@ -319,6 +327,8 @@ export function isLive(run: Run, kind: string): boolean {
 /** Recounts what the shipped blocks give. Liveness changes only at a release, so this is the only place it is counted. */
 function refresh(run: Run): void {
   run.live = new Set(run.blocks.filter((b) => b.live).map((b) => b.kind));
+  run.host = 0;
+  for (const kind of run.live) run.host += RULES[kind].host;
   run.linkCount = links(run).length;
   run.stats.links = Math.max(run.stats.links, run.linkCount);
   const eff: Effects = { patience: 0, word_of_mouth: 1, corp_pay: 1, small_pay: 1, promo: 1, tokens: 1 };
@@ -402,8 +412,20 @@ export function agentCost(run: Run): number {
 }
 
 export function burnPerS(run: Run): number {
-  // every shipped block has to be hosted and kept alive: a feature is a commitment
-  return TUNING.living_per_s + agentCost(run) + run.live.size * TUNING.upkeep_per_block_s + tokens(run) / TUNING.sprint_s;
+  const f = flows(run);
+  return f.living + f.agents + f.hosting + f.tokens;
+}
+
+/** Where the money goes and comes from, $ per second: the sheet shows every line of it. */
+export function flows(run: Run): { living: number; agents: number; hosting: number; tokens: number; income: number } {
+  return {
+    living: TUNING.living_per_s,
+    agents: agentCost(run),
+    // every shipped block has to be hosted and kept alive: a feature is a commitment
+    hosting: run.host,
+    tokens: tokens(run) / TUNING.sprint_s,
+    income: mrr(run) / TUNING.sprint_s,
+  };
 }
 
 export function incomePerS(run: Run): number {
@@ -500,15 +522,71 @@ export function fire(run: Run, agentId: number): void {
   run.agents = run.agents.filter((a) => a.id !== agentId);
 }
 
-/** The founder finishes the work by hand: one square into the site right now, and some debt with it. */
-export function crunch(run: Run): boolean {
-  const site = run.blocks.find((b) => !b.built);
-  if (run.over || !site || run.energy < 1) return false;
+/**
+ * The founder does a square of work by hand, on any lane: codes into the site (and leaves some debt),
+ * fixes, writes a post or calls a client. One point of strength each.
+ */
+export function crunch(run: Run, lane: Lane = 'build'): boolean {
+  if (run.over || run.energy < 1 || !handy(run, lane)) return false;
   run.energy -= 1;
-  run.debt += TUNING.crunch.debt;
-  run.events.push({ type: 'work', agent: 0, lane: 'build', i: site.i, j: site.j });
-  addWork(run, site);
+  switch (lane) {
+    case 'build': {
+      const site = run.blocks.find((b) => !b.built)!;
+      run.debt += TUNING.crunch.debt;
+      run.events.push({ type: 'work', agent: 0, lane, i: site.i, j: site.j });
+      addWork(run, site);
+      break;
+    }
+    case 'fix':
+      run.debt = Math.max(0, run.debt - TUNING.fix_per_work);
+      run.events.push({ type: 'work', agent: 0, lane });
+      break;
+    case 'promo':
+      run.leads += leadsPerWork(run);
+      run.events.push({ type: 'work', agent: 0, lane });
+      break;
+    case 'research':
+      run.events.push({ type: 'work', agent: 0, lane });
+      interview(run);
+      break;
+  }
   return true;
+}
+
+/** there is something for a pair of hands to do on this lane right now */
+export function handy(run: Run, lane: Lane): boolean {
+  switch (lane) {
+    case 'build':
+      return run.blocks.some((b) => !b.built);
+    case 'fix':
+      return run.debt > 0;
+    case 'promo':
+      return sellable(run);
+    case 'research':
+      return unknownAsks(run).length > 0 && run.clients.length > 0;
+  }
+}
+
+/** what the market wants and the founder does not know yet */
+export function unknownAsks(run: Run): string[] {
+  return [...run.asks, ...(run.stage >= 2 ? run.corpAsks : [])].filter((k) => !run.known.includes(k));
+}
+
+/** how much of a lead one square of promotion is */
+export function leadsPerWork(run: Run): number {
+  return (run.idea.tech.hype * run.idea.form.hype * run.idea.aud.hype * run.eff.promo * run.mod.promo) / TUNING.promo_work_per_lead;
+}
+
+/** One square of research: enough of them and the market names one more block it wants. */
+function interview(run: Run): void {
+  const unknown = unknownAsks(run);
+  if (unknown.length === 0) return;
+  run.insight++;
+  if (run.insight >= researchNeed(run)) {
+    run.insight = 0;
+    run.known.push(unknown[0]);
+    run.events.push({ type: 'reveal', kind: unknown[0] });
+  }
 }
 
 function addWork(run: Run, site: Block): void {
@@ -628,22 +706,14 @@ function deliver(run: Run, a: Agent): void {
       run.debt = Math.max(0, run.debt - TUNING.fix_per_work);
       return;
     case 'promo':
-      run.leads += (run.idea.tech.hype * run.idea.form.hype * run.idea.aud.hype * run.eff.promo * run.mod.promo) / TUNING.promo_work_per_lead;
+      run.leads += leadsPerWork(run);
       run.debt += dirty * 0.5;
       run.events.push({ type: 'work', agent: a.id, lane: a.lane });
       return;
-    case 'research': {
-      const unknown = [...run.asks, ...(run.stage >= 2 ? run.corpAsks : [])].filter((k) => !run.known.includes(k));
-      run.events.push({ type: 'work', agent: a.id, lane: a.lane, idle: unknown.length === 0 });
-      if (unknown.length === 0) return;
-      run.insight++;
-      if (run.insight >= researchNeed(run)) {
-        run.insight = 0;
-        run.known.push(unknown[0]);
-        run.events.push({ type: 'reveal', kind: unknown[0] });
-      }
+    case 'research':
+      run.events.push({ type: 'work', agent: a.id, lane: a.lane, idle: unknownAsks(run).length === 0 });
+      interview(run);
       return;
-    }
   }
 }
 
@@ -721,11 +791,13 @@ function release(run: Run): void {
   // too much debt: the product is down for the whole next sprint
   if (run.debt >= TUNING.debt.down_at) {
     run.down = true;
+    run.downWhy = 'debt';
     run.debt -= TUNING.debt.down_relief;
     run.stats.downs++;
     run.events.push({ type: 'down' });
   } else {
     run.down = false;
+    run.downWhy = null;
   }
 
   news(run);
@@ -871,6 +943,7 @@ function news(run: Run): void {
         break;
       case 'down':
         run.down = true;
+        run.downWhy = 'supplier';
         break;
       case 'impatience': {
         const kind = run.rng.pick(waiting);

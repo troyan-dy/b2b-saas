@@ -1,6 +1,7 @@
 import effects from '../data/balance/effects.json';
 import headlines from '../data/balance/headlines.json';
 import type { ClientType, Lane, Tier } from '../systems/run/run';
+import { rate } from '../ui/format';
 
 const EFFECT_NAME: Record<string, string> = {
   word_of_mouth: 'сарафан',
@@ -34,6 +35,30 @@ export const LANE_ACC: Record<Lane, string> = {
   fix: 'починку',
   promo: 'продвижение',
   research: 'разведку',
+};
+
+/** What the founder does with his own hands on each lane: a founder codes least of all. */
+export const HAND_NAME: Record<Lane, string> = {
+  build: 'кодить',
+  fix: 'чинить',
+  promo: 'пост',
+  research: 'звонок',
+};
+
+/** said over the desk when there is nothing for the hands to do there */
+export const HAND_IDLE: Record<Lane, string> = {
+  build: 'строить нечего: выбери блок',
+  fix: 'долга нет: чинить нечего',
+  promo: 'показывать нечего: нужны ядро и лендинг',
+  research: 'спрашивать некого или всё уже известно',
+};
+
+/** said where the square lands */
+export const HAND_DONE: Record<Lane, string> = {
+  build: '',
+  fix: 'починил сам',
+  promo: 'пост написан',
+  research: 'позвонил клиенту',
 };
 
 export const TIER_NAME: Record<Tier, string> = {
@@ -148,6 +173,7 @@ export function releaseLines(r: {
   left: number;
   closed: number;
   reasons: string[];
+  /** subscriptions and tokens, $ per second */
   mrr: number;
   tokens: number;
   debt: number;
@@ -164,9 +190,10 @@ export function releaseLines(r: {
     lines.push(came + left);
   }
   if (r.closed > 0) lines.push(`<span>−${r.closed} клиент закрылся сам: он тоже был стартапом</span>`);
-  if (r.unpaid) lines.push(`<strong>клиенты не платят: нет «Приёма оплаты»</strong>`, `токены за них: −$${Math.round(r.tokens)} за спринт`);
-  else lines.push(`подписки <em>$${Math.round(r.mrr)}</em> · токены −$${Math.round(r.tokens)}`);
-  if (r.down) lines.push('<strong>продукт лежит весь спринт: никто не платит</strong>');
+  // the same unit as everywhere on the sheet: money per second
+  if (r.unpaid) lines.push(`<strong>клиенты не платят: нет «Приёма оплаты»</strong>`, `токены за них: ${rate(-r.tokens)} в секунду`);
+  else if (!r.down) lines.push(`теперь: подписки <em>+${rate(r.mrr)}/с</em> · токены ${rate(-r.tokens)}/с`);
+  if (r.down) lines.push('<strong>продукт лежит до следующего релиза:</strong>', '<strong>клиенты не платят</strong>');
   else if (r.debt >= 20) lines.push(`<strong>долг ${Math.round(r.debt)} — следующий релиз может всё уронить</strong>`);
   else if (r.debt >= 8) lines.push(`<span>долг ${Math.round(r.debt)} — держится на честном слове</span>`);
   return lines;

@@ -1,5 +1,5 @@
-import { money, plural } from '../ui/format';
-import { pitch, type Ending, type Run } from '../systems/run/run';
+import { money, plural, rate } from '../ui/format';
+import { pitch, TUNING, type Ending, type Run } from '../systems/run/run';
 
 /** The founder's post at the end of a startup. Every ending is a genre of its own. */
 
@@ -44,7 +44,7 @@ function mainPost(run: Run): string[] {
     case 'profit':
       return [
         say(0, `Как я вышел на прибыль без инвесторов. Тред.`, `Мы прибыльны. Да, так тоже можно. Тред.`),
-        `1/ ${name}: ${s.clients} ${plural(s.clients, CLIENT_WORD)} за всё время, пик подписок <em>${money(s.peakMrr)}</em> за спринт.`,
+        `1/ ${name}: ${s.clients} ${plural(s.clients, CLIENT_WORD)} за всё время, пик подписок <em>${rate(s.peakMrr / TUNING.sprint_s)}</em> в секунду.`,
         `2/ Секрет прост: ${s.shipped} ${plural(s.shipped, ['блок', 'блока', 'блоков'])}, один человек и ни одного выходного.`,
         s.downs > 0 ? `3/ Да, продукт лежал ${s.downs} ${plural(s.downs, TIMES)}. Это называлось «плановые работы».` : `3/ Продукт ни разу не лежал. Я сам не понимаю как.`,
         say(3, `4/ Курс «Повтори мой путь» — по ссылке в профиле.`, `4/ Инвесторы, которые не отвечали, теперь пишут сами. Отвечаю не сразу — из принципа.`),
@@ -54,7 +54,7 @@ function mainPost(run: Run): string[] {
         say(0, `Честный апдейт. Тред.`, `Немного прозрачности. Тред.`),
         `1/ ${name} прожил ${clock(run.t)} и всё ещё в минусе.`,
         say(1, `2/ Формально мы живы. Я называю это «стадией поиска модели».`, `2/ Мы не убыточны, мы «инвестируем в рост». Из моих сбережений.`),
-        `3/ Подписки: <em>${money(s.peakMrr)}</em> на пике. Токены: <strong>${money(s.tokens)}</strong> за всё время. Считайте сами.`,
+        `3/ Подписки: <em>${rate(s.peakMrr / TUNING.sprint_s)}</em> в секунду на пике. Токены: <strong>${money(s.tokens)}</strong> за всё время. Считайте сами.`,
         say(3, `4/ Сбережения кончатся раньше, чем этот тред наберёт просмотры.`, `4/ Если вы инвестор — мои сообщения открыты. Если клиент — тем более.`),
       ];
     default:
@@ -74,5 +74,5 @@ function mainPost(run: Run): string[] {
 
 export function endingStats(run: Run): string {
   const s = run.stats;
-  return `прожил ${clock(run.t)} · клиентов ${s.clients}, ушло ${s.left} · пик подписок ${money(s.peakMrr)} · блоков ${s.shipped} · падений ${s.downs}`;
+  return `прожил ${clock(run.t)} · клиентов ${s.clients}, ушло ${s.left} · пик подписок ${rate(s.peakMrr / TUNING.sprint_s)}/с · блоков ${s.shipped} · падений ${s.downs}`;
 }

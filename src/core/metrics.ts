@@ -7,7 +7,8 @@ export interface Metrics {
 declare global {
   interface Window {
     __metrics: Metrics;
-    __GAME__: { ready: boolean };
+    /** `run` — the startup on the sheet, in the gyms only: a capture script may push it into a state worth a frame */
+    __GAME__: { ready: boolean; run?: unknown };
   }
 }
 

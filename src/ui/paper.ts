@@ -43,6 +43,8 @@ export interface Paper {
   setSprint(label: string, part: number): void;
   /** one line under the ruler: what the player is after right now (HTML) */
   setGoal(html: string): void;
+  /** the ledger next to the money: every line of income and spending, and the debt (HTML rows) */
+  setLedger(html: string): void;
   setNews(text: string, hint?: string): void;
   setShelf(sections: readonly ShelfSection[]): void;
   /** a row of the shelf answers a click */
@@ -78,7 +80,7 @@ export function createPaper(under: HTMLElement, over: HTMLElement): Paper {
   const sheet = document.createElement('div');
   sheet.className = 'bl';
   sheet.innerHTML =
-    '<div class="bl-hud"><div class="bl-money"><b></b><span></span></div>' + '<div class="bl-sprint"><i></i><u><s></s></u></div><div class="bl-goal"></div></div>';
+    '<div class="bl-hud"><div class="bl-money"><b></b><span></span></div>' + '<div class="bl-sprint"><i></i><u><s></s></u></div><div class="bl-goal"></div><div class="bl-ledger"></div></div>';
   under.append(sheet);
   const top = document.createElement('div');
   top.className = 'bl-over';
@@ -96,6 +98,7 @@ export function createPaper(under: HTMLElement, over: HTMLElement): Paper {
   const sprintLabel = sheet.querySelector('.bl-sprint i') as HTMLElement;
   const sprintBar = sheet.querySelector('.bl-sprint s') as HTMLElement;
   const goal = sheet.querySelector('.bl-goal') as HTMLElement;
+  const ledger = sheet.querySelector('.bl-ledger') as HTMLElement;
   const shop = top.querySelector('.bl-shop') as HTMLElement;
   const newsText = top.querySelector('.bl-news span') as HTMLElement;
   const newsHint = top.querySelector('.bl-news em') as HTMLElement;
@@ -110,7 +113,7 @@ export function createPaper(under: HTMLElement, over: HTMLElement): Paper {
   let shelfSig = '';
   let cellSig = '';
   let callSig = '';
-  const last = { money: '', sub: '', news: '', hint: '', sprint: '', part: -1, zoom: -1, goal: '' };
+  const last = { money: '', sub: '', news: '', hint: '', sprint: '', part: -1, zoom: -1, goal: '', ledger: '' };
 
   const paper: Paper = {
     onShelf: () => undefined,
@@ -149,6 +152,11 @@ export function createPaper(under: HTMLElement, over: HTMLElement): Paper {
       if (html === last.goal) return;
       last.goal = html;
       goal.innerHTML = html;
+    },
+    setLedger(html) {
+      if (html === last.ledger) return;
+      last.ledger = html;
+      ledger.innerHTML = html;
     },
     setNews(text, hint = '') {
       if (text !== last.news) {

@@ -1,7 +1,7 @@
 import { CREDITS } from '../content/credits';
 import { clock, ENDING_TITLE, endingPost, endingStats } from '../content/endings';
 import { AGAIN_SAYS } from '../content/texts';
-import { money } from '../ui/format';
+import { money, rate } from '../ui/format';
 import type { Terminal } from '../ui/terminal/terminal';
 import { finish, LESSONS, saveMeta, type Meta } from '../systems/meta/meta';
 import { dealIdea, pitch, TUNING, type Idea, type Run } from '../systems/run/run';
@@ -86,7 +86,7 @@ export async function mixIdea(term: Terminal, seed: number, meta: Meta): Promise
   term.clear();
   term.print(`${tech.adj} ИИ-${form.name} для…`, 'mid');
   await term.type(['Слово третье. Кому это продаём?'], '');
-  const aud = deal.aud[await term.ask(deal.aud.map((c) => ({ title: `для ${c.name} — ${c.note}`, note: `подписка от $${c.pay} за спринт${c.does ? ` · ${c.does}` : ''}` })))];
+  const aud = deal.aud[await term.ask(deal.aud.map((c) => ({ title: `для ${c.name} — ${c.note}`, note: `клиент платит от ${rate(c.pay / TUNING.sprint_s)} в секунду${c.does ? ` · ${c.does}` : ''}` })))];
 
   const idea: Idea = { tech, form, aud };
   term.clear();

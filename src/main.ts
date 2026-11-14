@@ -127,6 +127,20 @@ async function play(): Promise<void> {
       }, 1400);
     },
     onQuit: () => reload(false),
+    audio: {
+      get sound() {
+        return settings.sound;
+      },
+      get music() {
+        return settings.music;
+      },
+      toggle(what) {
+        settings[what] = !settings[what];
+        setSoundOn(settings.sound);
+        setMusicOn(settings.music);
+        saveSettings(settings);
+      },
+    },
   });
   scene.speed = args.speed;
   if (__TOOLS__ && args.debug) mountGymKeys(scene, run, true);
@@ -145,7 +159,7 @@ else if (__TOOLS__ && args.gym === 'build') {
   const n = Number(args.state) || 0;
   const idea: Idea = { tech: pick(IDEAS.tech, n), form: pick(IDEAS.form, n + 3), aud: pick(IDEAS.aud, n) };
   const run = createRun(args.seed, idea);
-  const style = { ...SENSIBLE, calls: !args.flags.includes('nocalls') };
+  const style = { ...SENSIBLE, calls: !args.flags.includes('nocalls'), fix: !args.flags.includes('nofix') };
   const paper = createPaper(under, over);
   const term = createTerminal(over, (name) => playSound(name));
   const scene = new GameScene(run, rng, paper, {
@@ -158,5 +172,6 @@ else if (__TOOLS__ && args.gym === 'build') {
   });
   scene.speed = args.speed;
   mountGymKeys(scene, run, args.debug);
+  window.__GAME__.run = run;
   start(scene);
 } else void play();

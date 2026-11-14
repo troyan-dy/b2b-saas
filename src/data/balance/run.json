@@ -3,7 +3,6 @@
   "last_sprint": 30,
   "start_money": 3600,
   "living_per_s": 3,
-  "upkeep_per_block_s": 0.5,
   "sites_max": 2,
   "link_bonus": 0.08,
   "tiers": {

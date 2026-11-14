@@ -9,6 +9,9 @@ import {
   CLIENT_TYPE_NOTE,
   effectLine,
   FIRST_CLIENT_SAYS,
+  HAND_DONE,
+  HAND_IDLE,
+  HAND_NAME,
   LANE_ACC,
   LANE_NAME,
   LEFT_CLOSED,
@@ -23,7 +26,7 @@ import { logEvent, metrics } from '../core/metrics';
 import type { Rng } from '../core/rng';
 import { playSound, unlockSound } from '../core/sound';
 import { PALETTE } from '../data/palette';
-import { money, plural } from '../ui/format';
+import { money, plural, rate } from '../ui/format';
 import type { Paper, ShelfItem, ShelfKeys, ShelfSection } from '../ui/paper';
 import {
   answerCall,
@@ -34,8 +37,10 @@ import {
   clientPay,
   crunch,
   fire,
+  flows,
   freeCells,
   friendsAt,
+  handy,
   hire,
   honestMult,
   IDEAS,
@@ -58,6 +63,7 @@ import {
   step,
   TIERS,
   TUNING,
+  unknownAsks,
   workNeed,
   type ClientType,
   type Lane,
@@ -87,6 +93,8 @@ export interface GameHooks {
   onEnd: (run: Run) => void;
   /** the player drops the startup from the pause card */
   onQuit: () => void;
+  /** the sound and the music can be switched from the pause card */
+  audio?: { readonly sound: boolean; readonly music: boolean; toggle(what: 'sound' | 'music'): void };
 }
 
 /**
@@ -229,27 +237,35 @@ export class GameScene extends Phaser.Scene {
     if (place(this.run, this.picked, i, j)) this.picked = null;
   }
 
-  /** The founder's own square: thrown from the desk into the site. */
-  private byHand(): void {
+  /** The founder's own square of work on a lane: thrown from the desk to where that work goes. */
+  private byHand(lane: Lane = 'build'): void {
     unlockSound();
-    const site = this.run.blocks.find((b) => !b.built);
-    if (!site || !crunch(this.run)) {
+    const run = this.run;
+    const site = run.blocks.find((b) => !b.built);
+    const can = handy(run, lane);
+    if (!can || !crunch(run, lane)) {
       playSound('waste');
-      if (site) {
-        const [x, y] = this.board.onScreen(DESK[0], DESK[1] - 200);
-        this.paper.pop(x, y, 'сил нет: подожди', 'bad');
-      }
+      const [x, y] = this.board.onScreen(DESK[0], DESK[1] - 200);
+      // on the first clicks of the game an empty site is not news: the goal line already says what to do
+      if (can || lane !== 'build' || run.blocks.length > 0) this.paper.pop(x, y, can ? 'сил нет: подожди' : HAND_IDLE[lane], 'bad');
       return;
     }
     this.hands++;
     playSound('yes', this.hands % 6);
     const [fx, fy] = this.board.onScreen(DESK[0] - 40, DESK[1] - 130);
-    const [tx, ty] = this.board.onScreen(...this.board.top(site));
-    this.squares.fly({ x: fx - 10, y: fy - 10, w: 20, h: 20 }, { x: tx - 20, y: ty - 10, w: 40, h: 20 }, 1, PALETTE.coral, 160, [0.35, 0.45]);
+    const to: Pt = lane === 'build' && site ? this.board.top(site) : lane === 'fix' ? this.board.cell(0, 0) : MARKET;
+    const [tx, ty] = this.board.onScreen(...to);
+    // code is Claude's colour; a post, a call and a fix are the human's own ink
+    this.squares.fly({ x: fx - 10, y: fy - 10, w: 20, h: 20 }, { x: tx - 20, y: ty - 10, w: 40, h: 20 }, 1, lane === 'build' ? PALETTE.coral : PALETTE.ink, 160, [0.35, 0.45]);
+    if (HAND_DONE[lane]) this.paper.pop(tx, ty - 34, HAND_DONE[lane], 'good');
   }
 
   private onKey(owner: string, key: string): void {
     unlockSound();
+    if (owner === 'hand') {
+      this.byHand(key as Lane);
+      return;
+    }
     if (owner === 'me') {
       if (setReview(this.run, key as Lane)) playSound('ui');
       else playSound('waste');
@@ -269,12 +285,18 @@ export class GameScene extends Phaser.Scene {
   private onAnswer(k: number): void {
     playSound('ui');
     if (this.pauseCard) {
-      if (k === 1) {
+      const audio = this.hooks.audio;
+      if (k === this.pauseOptions().length - 1) {
         this.hooks.onQuit();
         return;
       }
-      this.pauseCard = false;
-      this.paused = false;
+      // the switches leave the pause on: the player hears the change and goes back when ready
+      if (audio && k === 1) audio.toggle('music');
+      else if (audio && k === 2) audio.toggle('sound');
+      else {
+        this.pauseCard = false;
+        this.paused = false;
+      }
       return;
     }
     // one card at a time, the most urgent first: the bank, a client on the line, the buyer
@@ -297,7 +319,8 @@ export class GameScene extends Phaser.Scene {
       return;
     }
     if (this.pauseCard) {
-      if (e.code === 'Digit1' || e.code === 'Digit2') this.onAnswer(e.code === 'Digit1' ? 0 : 1);
+      const k = /^Digit([1-9])$/.exec(e.code);
+      if (k && Number(k[1]) <= this.pauseOptions().length) this.onAnswer(Number(k[1]) - 1);
       return;
     }
     if (e.code === 'Enter' || e.code === 'NumpadEnter') {
@@ -370,7 +393,8 @@ export class GameScene extends Phaser.Scene {
         logEvent(`release:${e.report.sprint}`);
         const names = e.report.shipped.map((k) => `«${BLOCK_BY_ID[k]?.short ?? k}»`);
         const reasons = e.report.reasons.map((k) => BLOCK_BY_ID[k]?.short ?? '');
-        this.say(releaseLines({ ...e.report, shipped: names, reasons, unpaid: isLive(run, 'pay') ? 0 : run.clients.length }), 16);
+        const perS = { mrr: e.report.mrr / TUNING.sprint_s, tokens: e.report.tokens / TUNING.sprint_s };
+        this.say(releaseLines({ ...e.report, ...perS, shipped: names, reasons, unpaid: isLive(run, 'pay') ? 0 : run.clients.length }), 16);
         playSound('scale');
         // the release is the beat of the game: what ships bursts, the sheet breathes, the money answers
         for (const kind of e.report.shipped) {
@@ -605,13 +629,24 @@ export class GameScene extends Phaser.Scene {
     // the market: leads and interviews gather where the trunk to the clients starts
     const promo = run.agents.some((a) => a.lane === 'promo');
     const research = run.agents.some((a) => a.lane === 'research');
-    if (promo || research || run.clients.length > 0) {
-      const [x, y] = board.onScreen(MARKET[0], MARKET[1] + 10);
-      const unknown = [...run.asks, ...(run.stage >= 2 ? run.corpAsks : [])].filter((k) => !run.known.includes(k)).length;
-      const parts = [`лиды <b>${run.leads.toFixed(1).replace('.', ',')}</b>`];
-      parts.push(unknown > 0 ? `разведка <b>${run.insight}/${researchNeed(run)}</b>` : 'все запросы известны');
-      this.paper.tag('market', x, y, `рынок · ${parts.join(' · ')}`, 'small');
+    if (promo || research || run.clients.length > 0 || run.leads > 0) {
+      // the caption stands in the free corner of the sheet: left of the trunk, above the lines of the agents
+      const [x, y] = board.onScreen(MARKET[0], MARKET[1]);
+      const places = TUNING.stages[run.stage - 1].clients_max;
+      // promotion is a funnel with one number: how much of the next client is already there
+      const whole = Math.floor(run.leads);
+      const part = Math.round((run.leads - whole) * 100);
+      const coming = whole > 0 ? `<b>${whole}</b> ${plural(whole, ['клиент придёт', 'клиента придут', 'клиентов придут'])} на релизе` : `до нового клиента <b>${part}%</b>`;
+      const full = run.clients.length >= places ? ' · мест нет' : '';
+      const ask = unknownAsks(run).length > 0 ? `разведка: до ответа <b>${run.insight} из ${researchNeed(run)}</b>` : 'разведка: все запросы известны';
+      this.paper.tag('market', x - 12, y - 16, `<b>рынок</b> · клиентов ${run.clients.length} из ${places}<i>продвижение: ${coming}${full}</i><i>${ask}</i>`, 'small corner');
     }
+    // the product is down: it is written across the product itself, with the reason
+    if (run.down) {
+      const [x, y] = board.onScreen(...board.cell(0, 0));
+      const why = run.downWhy === 'supplier' ? 'сбой у поставщика модели' : `техдолг дошёл до ${TUNING.debt.down_at}`;
+      this.paper.tag('down', x, y - 150 * z, `<b>ПРОДУКТ ЛЕЖИТ</b><i>${why} · клиенты не платят до релиза</i>`, 'hot');
+    } else this.paper.dropTag('down');
 
     // clients
     for (const c of run.clients) {
@@ -619,13 +654,18 @@ export class GameScene extends Phaser.Scene {
       const [x, y] = board.onScreen(sx, sy + 6);
       const pay = clientPay(run, c);
       // two short lines: the name, then the money and the mood — twelve of them must fit side by side
-      const paid = pay > 0 ? `<em>${money(pay)}</em>` : run.down ? 'лежим' : 'бесплатно';
+      const paid = pay > 0 ? `<em>${rate(pay / TUNING.sprint_s)}/с</em>` : 'бесплатно';
       // twelve buildings stand close on the wide sheet: their captions are set tighter
       const cls = z < 0.7 ? 'small tight' : 'small';
       let mood: string;
       // nothing to charge with: this is said on every client, in coral — «free and happy» reads as «all is well»
       if (!isLive(run, 'pay')) {
         this.paper.tag(`c${c.id}`, x, y, `<b>${c.name}</b><i class="bad">не платит: нет «оплаты»</i>`, cls);
+        continue;
+      }
+      // the product is down: said on every client, so that «paid last sprint, not this one» has a reason on the sheet
+      if (run.down) {
+        this.paper.tag(`c${c.id}`, x, y, `<b>${c.name}</b><i class="bad">не платит: продукт лежит</i>`, cls);
         continue;
       }
       if (c.happy) mood = `<i>${paid} · доволен</i>`;
@@ -664,6 +704,7 @@ export class GameScene extends Phaser.Scene {
     this.paper.setSprint(`СПРИНТ ${Math.min(run.sprint, TUNING.last_sprint)} ИЗ ${TUNING.last_sprint} · РЕЛИЗ ЧЕРЕЗ ${leftS} С`, run.sprintT / TUNING.sprint_s);
     // the goal is always on the sheet: three frames taken at random must say what to do
     this.paper.setGoal(this.nextStep(net));
+    this.paper.setLedger(this.ledger());
     if (!this.ended) this.teach();
 
     this.paper.setShelf(this.shelfView());
@@ -671,7 +712,7 @@ export class GameScene extends Phaser.Scene {
       this.paper.call({
         who: 'ПАУЗА',
         text: 'Деньги не горят, пока ты думаешь. В жизни так не бывает.',
-        options: ['Вернуться к стартапу', 'Бросить стартап и выйти в меню'],
+        options: this.pauseOptions(),
       });
     } else if (run.lastChance !== null) {
       const life = mortgageSeconds(run) > 60 ? 'полторы минуты' : 'минута';
@@ -696,6 +737,35 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
+  /** what the pause card offers: back to the startup, the two switches of the sound, out to the menu */
+  private pauseOptions(): string[] {
+    const audio = this.hooks.audio;
+    const switches = audio ? [`Музыка: ${audio.music ? 'включена' : 'выключена'}`, `Звук: ${audio.sound ? 'включён' : 'выключен'}`] : [];
+    return ['Вернуться к стартапу', ...switches, 'Бросить стартап и выйти в меню'];
+  }
+
+  /** The ledger next to the money: every line of income and spending per second, and the debt with its limit. */
+  private ledger(): string {
+    const run = this.run;
+    const f = flows(run);
+    const limit = TUNING.debt.down_at;
+    const part = Math.min(1, run.debt / limit);
+    let income: string;
+    if (run.down) income = `<p class="bad"><span>подписки: продукт лежит</span><b>$0</b></p>`;
+    else if (run.clients.length > 0 && !isLive(run, 'pay')) income = `<p class="bad"><span>подписки: нет «оплаты»</span><b>$0</b></p>`;
+    else income = `<p class="in"><span>подписки · ${run.clients.length} ${plural(run.clients.length, ['клиент', 'клиента', 'клиентов'])}</span><b>+${rate(f.income)}</b></p>`;
+    const note = part >= 0.66 ? 'почти предел: ставь агента на починку' : run.debt < 1 ? 'долг копят агенты без твоей проверки' : `при ${limit} продукт упадёт; снимает починка`;
+    return (
+      income +
+      `<p><span>ты: еда и жильё</span><b>${rate(-f.living)}</b></p>` +
+      `<p><span>агенты · ${run.agents.length}</span><b>${rate(-f.agents)}</b></p>` +
+      `<p><span>хостинг · ${run.live.size} ${plural(run.live.size, ['блок', 'блока', 'блоков'])}</span><b>${rate(-f.hosting)}</b></p>` +
+      `<p><span>токены клиентов</span><b>${rate(-f.tokens)}</b></p>` +
+      `<p class="debt${part >= 0.66 ? ' bad' : ''}"><span>техдолг</span><u><s style="width:${Math.round(part * 100)}%"></s></u><b>${Math.floor(run.debt)} из ${limit}</b></p>` +
+      `<small>${note}</small>`
+    );
+  }
+
   /**
    * The line under the sprint ruler: the one thing to do next, in plain words. The first startup is
    * walked through by it step by step: block, landing, payment, client, profit.
@@ -711,6 +781,11 @@ export class GameScene extends Phaser.Scene {
     if (!isLive(run, 'pay')) {
       if (!pay.built) return `${run.clients.length > 0 ? '<strong>клиенты не платят</strong> — ' : 'что делать: '}дострой <b>«Приём оплаты»</b>: клик по стройке или Enter — помочь руками`;
       return '«Приём оплаты» готов: клиенты начнут платить с ближайшего релиза';
+    }
+    if (run.down) {
+      return run.downWhy === 'supplier'
+        ? '<strong>продукт лежит</strong> до релиза: сбой у поставщика модели — клиенты не платят, от тебя это не зависит'
+        : '<strong>продукт лежит</strong> до релиза: слишком много техдолга — клиенты не платят; поставь агента на <b>починку</b>';
     }
     if (run.stats.clients === 0) return 'жди релиза: первый клиент придёт сам, когда выйдут <b>ядро</b> и <b>лендинг</b>';
     if (net < 0) return `цель: выйти в плюс — не хватает <b>${money(-net)}</b> в секунду; клиентов приводит <b>продвижение</b>, удерживает <b>разведка</b>`;
@@ -751,7 +826,13 @@ export class GameScene extends Phaser.Scene {
       if (tell('t:ask', ['Клиент чего-то ждёт и молчит.', 'Переведи агента на разведку —', 'он выяснит, какой блок им нужен.'])) return;
     }
     if (run.debt >= 10) {
-      if (tell('t:debt', ['Долг растёт: это серые квадраты', 'на блоках. Починка его снимает.', 'Что проверяешь сам — долга не даёт.'])) return;
+      if (tell('t:debt', ['Техдолг растёт: счётчик справа от', 'денег, серые квадраты на блоках.', `Дойдёт до ${TUNING.debt.down_at} — продукт упадёт, и спринт`, 'никто не платит. Починка его снимает.'])) return;
+    }
+    if (run.agents.some((a) => a.lane === 'promo') && run.stats.clients > 0) {
+      if (tell('t:promo', ['Продвижение копит нового клиента:', 'смотри «до нового клиента» у рынка.', 'Набралось 100% — он придёт на релизе,', 'если есть место.'])) return;
+    }
+    if (run.stage >= 2 && run.energy >= TUNING.crunch.max && run.sprintT > 10) {
+      if (tell('t:hands', ['Силы — не только на код. Справа внизу,', 'в строке «руками»: напиши пост', 'или позвони клиенту сам.'])) return;
     }
     if (this.idle.size > 0 && sites(run).length === 0 && shelf(run).length > 0 && run.blocks.length > 0) {
       if (tell('t:idle', ['Строить нечего, агент простаивает', 'за твои деньги. Выбери блок справа', 'или дай ему другое дело.'])) return;
@@ -779,7 +860,9 @@ export class GameScene extends Phaser.Scene {
     const note = (kind: string): string => {
       const gives = effectLine(kind);
       const friends = arch ? `дружит: ${RULES[kind].friends.map((f) => BLOCK_BY_ID[f]?.short ?? f).join(', ')}` : '';
-      const facts = [gives, friends].filter((x) => x !== '').join(' · ');
+      // every shipped block is paid for every second: the shelf says how much before it is built
+      const host = `хостинг ${rate(RULES[kind].host)}/с`;
+      const facts = [gives, host, friends].filter((x) => x !== '').join(' · ');
       return BLOCK_BY_ID[kind].note + (facts ? `<span>${facts}</span>` : '');
     };
     const items: ShelfItem[] = shelf(run).map((kind) => ({
@@ -824,9 +907,14 @@ export class GameScene extends Phaser.Scene {
       },
       {
         id: 'me',
-        title: 'ТЫ · ЧТО ПРОВЕРЯЕШЬ САМ',
-        hint: run.reviewLocked ? 'до релиза' : 'там долг не копится',
-        rows: [{ owner: 'me', keys: LANES.map((l) => ({ id: l as string, title: LANE_NAME[l] })), on: run.review, lock: run.reviewLocked }],
+        title: 'ТЫ · ОДИН ЧЕЛОВЕК',
+        hint: `силы ${'■'.repeat(Math.floor(run.energy))}${'□'.repeat(TUNING.crunch.max - Math.floor(run.energy))}`,
+        rows: [
+          // what the founder checks: no debt there, and the work goes faster; chosen once a sprint
+          { owner: 'me', label: run.reviewLocked ? 'проверяю <b>до релиза</b>' : 'проверяю', keys: LANES.map((l) => ({ id: l as string, title: LANE_NAME[l] })), on: run.review, lock: run.reviewLocked },
+          // what he does with his own hands: one point of strength a square, on any lane
+          { owner: 'hand', label: 'руками', keys: LANES.map((l) => ({ id: l as string, title: HAND_NAME[l], off: run.energy < 1 || !handy(run, l) })) },
+        ],
       },
     ];
   }
@@ -932,7 +1020,7 @@ export class GameScene extends Phaser.Scene {
   /** the right end of the news line: what the news has done and for how long, then the pause key */
   private newsHint(): string {
     const parts = this.run.mods.map((m) => `${m.tag} · ещё ${m.left} спр.`);
-    return [...parts, 'Esc — пауза'].join('   ');
+    return [...parts, 'Esc — пауза, звук'].join('   ');
   }
 
   /** an event of the run takes the news line and holds it for a while */

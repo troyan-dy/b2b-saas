@@ -7,6 +7,13 @@ export function money(n: number): string {
   return `${v < 0 ? '−' : ''}$${int.format(Math.abs(v))}`;
 }
 
+/** Money per second: «$7,4» below twenty, «$155» above — small sums keep their tenths. */
+export function rate(n: number): string {
+  const a = Math.abs(n);
+  const body = a < 20 ? String(Math.round(a * 10) / 10).replace('.', ',') : int.format(Math.round(a));
+  return `${n < 0 ? '−' : ''}$${body}`;
+}
+
 /** 12400 → «12 400» */
 export function whole(n: number): string {
   return int.format(Math.round(n));
