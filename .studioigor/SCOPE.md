@@ -12,9 +12,11 @@ Line syntax:
 Game Dev Tycoon: 4 офиса от гаража, десятки тем × 6 жанров с постоянной таблицей совместимости, одна карьера на 30–35 игровых лет (6–10 часов). Yes-Driven Development: 6 экранов-масштабов, около 2 часов до финала.
 
 ## Contract
-- [ ] слова питча (8 форм, 8 аудиторий, 8 проблем): 24 pcs — count: manual: after phase 4
+- [ ] карты идеи (6 ИИ-приёмов, 8 форм, 8 аудиторий): 22 pcs — count: manual: after phase 4
+- [ ] блоки продукта: 20 pcs — count: manual: after phase 4
 - [ ] события-новости: 40 pcs — count: manual: after phase 4
-- [ ] инвесторы-персонажи: 4 pcs — count: manual: after phase 4
+- [ ] типы клиентов: 5 pcs — count: manual: after phase 4
 - [ ] тарифы агентов: 3 pcs — count: manual: after phase 4
-- [ ] этапы компании (кухня, комната, этаж): 3 pcs — count: manual: after phase 4
+- [ ] этапы (кухня, первые клиенты, город клиентов): 3 pcs — count: manual: after phase 4
 - [ ] концовки: 3 pcs — count: manual: after phase 4
+- [ ] уроки опыта основателя: 12 pcs — count: manual: after phase 4

@@ -1,0 +1,23 @@
+# Autopilot run — B2B SaaS
+
+MODE: цикл внутри открытой сессии (Windows: autopilot.py не запускается — нет fcntl; принятое улучшение P-20261114-01)
+GOAL: slice — играбельный срез, фазы 1–7
+STARTED: 2026-11-14 19:41 +03:00
+DEADLINE: 2026-11-15 05:41 +03:00
+PLATFORM: браузер на ПК
+
+Brief (verbatim): Кароче дейсвуй на автопилоте, должен быть юмор и ирония над б2б саас стартаперами
+
+## Rules for every wake-up
+- сначала `studio.py status`, затем STATE.md и этот файл; диску верить больше, чем памяти
+- один осмысленный шаг текущей фазы за раз, после шага — `decide` / `note` / `commit`
+- решения по вкусу: `decide --by proxy` и строка в REVIEW.md; пользовательские ворота: `tick --proxy`
+- AskUserQuestion не вызывать; `board.py serve --until-feedback` не запускать
+- запрещено: git push, публикация, покупки, логины, sudo, правка файлов скилла (кроме `learn.py propose`)
+- вместо игры пользователя — прокси-плейтест: бот или сценарий ввода, кадры, числа, чек-листы; запись `PT-NN (proxy)` в PLAYTESTS.md
+- тупик: два разных подхода, затем `tick --block` с причиной и работа над незаблокированным
+- цель закрыта или срок вышел: финиш по references/autopilot.md §8 — кадры в captures/final, REPORT.md, коммит, файл STOP, удалить задание CronCreate
+
+## Tick log
+| # | time | phase | step | commit |
+|---|---|---|---|---|
