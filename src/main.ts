@@ -10,7 +10,7 @@ import '@fontsource/source-serif-4/latin-600.css';
 import './ui/style.css';
 import { readArgs } from './core/args';
 import { installMetrics } from './core/metrics';
-import { setMusicOn, startMusic } from './core/music';
+import { nextTrack, setMusicOn, setTrack, startMusic, trackTitle } from './core/music';
 import { createRng } from './core/rng';
 import { loadSettings, saveSettings } from './core/settings';
 import { playSound, setSoundOn, unlockSound } from './core/sound';
@@ -93,7 +93,28 @@ function reload(again: boolean): void {
 /** The whole game: the terminal with the menu and the idea, the run on the sheet, the ending in the terminal. */
 async function play(): Promise<void> {
   const settings = loadSettings();
+  // one place switches the sound: the menu and the pause card both come here
+  const audio = {
+    get sound(): boolean {
+      return settings.sound;
+    },
+    get music(): boolean {
+      return settings.music;
+    },
+    get track(): string {
+      return trackTitle(settings.track);
+    },
+    toggle(what: 'sound' | 'music' | 'track'): void {
+      if (what === 'track') settings.track = nextTrack(settings.track);
+      else settings[what] = !settings[what];
+      setSoundOn(settings.sound);
+      setTrack(settings.track);
+      setMusicOn(settings.music);
+      saveSettings(settings);
+    },
+  };
   setSoundOn(settings.sound);
+  setTrack(settings.track);
   setMusicOn(settings.music);
   const meta = loadMeta();
   const paper = createPaper(under, over);
@@ -107,13 +128,9 @@ async function play(): Promise<void> {
   term.open('терминал основателя');
   if (!takeAgain() || args.menu) {
     for (;;) {
-      const choice = await menu(term, meta, settings, __VERSION__);
+      const choice = await menu(term, meta, audio, __VERSION__);
       if (choice === 'start') break;
-      if (choice === 'sound') settings.sound = !settings.sound;
-      if (choice === 'music') settings.music = !settings.music;
-      setSoundOn(settings.sound);
-      setMusicOn(settings.music);
-      saveSettings(settings);
+      audio.toggle(choice);
     }
   }
   const idea = await mixIdea(term, args.seed, meta);
@@ -127,20 +144,7 @@ async function play(): Promise<void> {
       }, 1400);
     },
     onQuit: () => reload(false),
-    audio: {
-      get sound() {
-        return settings.sound;
-      },
-      get music() {
-        return settings.music;
-      },
-      toggle(what) {
-        settings[what] = !settings[what];
-        setSoundOn(settings.sound);
-        setMusicOn(settings.music);
-        saveSettings(settings);
-      },
-    },
+    audio,
   });
   scene.speed = args.speed;
   if (__TOOLS__ && args.debug) mountGymKeys(scene, run, true);

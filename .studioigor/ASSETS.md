@@ -22,7 +22,7 @@
 | A014 UI_Terminal | UI-герой | полноэкранный терминал: смесь идеи, меню, некролог | HTML/CSS | код | plan |
 | A015 FNT | шрифты | JetBrains Mono 400/700, Source Serif 4 400/600, кириллица | woff2 | Fontsource (OFL) | done |
 | A016 SFX | звук | блок поставлен, квадрат дошёл, релиз, клиент пришёл и ушёл, падение, банкротство | параметры в коде | ZzFX | plan |
-| A017 MUS | музыка | спокойный зацикленный лоу-фай «In the Lobby» | ≤ 3 МБ | CC0, OpenGameArt (из YDD) | plan |
+| A017 MUS | музыка | четыре зацикленных трека на выбор игрока: босса-нова (по умолчанию), лоу-фай, тема магазина, «In the Lobby» | ≤ 3 МБ каждый | CC0, OpenGameArt | final |
 
 ## Strategy by category
 | category | source (pack / Blender / procedural / generation / user) | why | status |
@@ -46,7 +46,7 @@
 - каждый новый ассет сначала ставится в сцену вида (`?gym=lookdev`) и снимается
 
 ## Requests to the user
-- музыка: подтвердить «In the Lobby» или выбрать другой трек
+- музыка: пользователь попросил другую (PT-10) — в игре четыре трека CC0, переключаются в меню и в паузе; какой оставить по умолчанию, скажет после игры
 - новые картинки (если захочется отдельных значков для блоков или персонажей клиентов) — генерация на аккаунте пользователя
 
 ## License registry
@@ -57,4 +57,8 @@
 | JetBrains Mono | https://www.npmjs.com/package/@fontsource/jetbrains-mono | OFL-1.1 | JetBrains | node_modules/@fontsource/jetbrains-mono | в титрах |
 | Source Serif 4 | https://www.npmjs.com/package/@fontsource/source-serif-4 | OFL-1.1 | Adobe | node_modules/@fontsource/source-serif-4 | в титрах |
 | ZzFX | https://github.com/KilledByAPixel/ZzFX | MIT | Frank Force | node_modules/zzfx | в титрах |
+| музыка «Bossa Nova» | https://opengameart.org/content/bossa-nova | CC0 | Joth | public/assets/audio/bossa_nova.ogg | в титрах (не требуется) |
+| музыка «Chill lofi inspired [loop edit]» | https://opengameart.org/content/chill-lofi-inspired-loop-edit | CC0 | omfgdude, петля — qubodup | public/assets/audio/chill_lofi.ogg | в титрах (не требуется) |
+| музыка «Shop Theme» | https://opengameart.org/content/shop-theme | CC0 | Cleyton Kauffman | public/assets/audio/shop_theme.ogg | в титрах (не требуется) |
+| музыка «In the Lobby» | https://opengameart.org (взята из Yes-Driven Development) | CC0 | Umplix | public/assets/audio/in_the_lobby.ogg | в титрах (не требуется) |
 | lil-gui (только dev-панель настроек) | https://github.com/georgealways/lil-gui | MIT | George Michael Brower | node_modules/lil-gui | не входит в сборку игры |

@@ -105,7 +105,7 @@ export interface GameHooks {
   /** the player drops the startup from the pause card */
   onQuit: () => void;
   /** the sound and the music can be switched from the pause card */
-  audio?: { readonly sound: boolean; readonly music: boolean; toggle(what: 'sound' | 'music'): void };
+  audio?: { readonly sound: boolean; readonly music: boolean; readonly track: string; toggle(what: 'sound' | 'music' | 'track'): void };
 }
 
 /**
@@ -312,7 +312,8 @@ export class GameScene extends Phaser.Scene {
       }
       // the switches leave the pause on: the player hears the change and goes back when ready
       if (audio && k === 1) audio.toggle('music');
-      else if (audio && k === 2) audio.toggle('sound');
+      else if (audio && k === 2) audio.toggle('track');
+      else if (audio && k === 3) audio.toggle('sound');
       else {
         this.pauseCard = false;
         this.paused = false;
@@ -807,7 +808,9 @@ export class GameScene extends Phaser.Scene {
   /** what the pause card offers: back to the startup, the two switches of the sound, out to the menu */
   private pauseOptions(): string[] {
     const audio = this.hooks.audio;
-    const switches = audio ? [`Музыка: ${audio.music ? 'включена' : 'выключена'}`, `Звук: ${audio.sound ? 'включён' : 'выключен'}`] : [];
+    const switches = audio
+      ? [`Музыка: ${audio.music ? 'включена' : 'выключена'}`, `Трек: ${audio.track} <span>— следующий</span>`, `Звук: ${audio.sound ? 'включён' : 'выключен'}`]
+      : [];
     return ['Вернуться к стартапу', ...switches, 'Бросить стартап и выйти в меню'];
   }
 

@@ -9,11 +9,13 @@ import { dealIdea, pitch, TUNING, type Idea, type Run } from '../systems/run/run
 /** What the player does outside a run: the menu, the idea, the ending, the résumé. All of it in the terminal. */
 
 export interface MenuState {
-  sound: boolean;
-  music: boolean;
+  readonly sound: boolean;
+  readonly music: boolean;
+  /** the name of the background loop */
+  readonly track: string;
 }
 
-export type MenuChoice = 'start' | 'sound' | 'music';
+export type MenuChoice = 'start' | 'sound' | 'music' | 'track';
 
 export async function menu(term: Terminal, meta: Meta, state: MenuState, version: string): Promise<MenuChoice> {
   for (;;) {
@@ -30,6 +32,7 @@ export async function menu(term: Terminal, meta: Meta, state: MenuState, version
       { title: 'Резюме основателя', note: meta.runs.length > 0 ? `стартапов: ${meta.runs.length}` : 'пока пустое' },
       { title: `Звук: ${state.sound ? 'включён' : 'выключен'}` },
       { title: `Музыка: ${state.music ? 'включена' : 'выключена'}` },
+      { title: `Трек: ${state.track}`, note: 'Enter — следующий' },
       { title: 'Титры' },
     ];
     const k = await term.ask(options, `версия ${version}`);
@@ -37,7 +40,8 @@ export async function menu(term: Terminal, meta: Meta, state: MenuState, version
     if (k === 1) await resume(term, meta);
     if (k === 2) return 'sound';
     if (k === 3) return 'music';
-    if (k === 4) {
+    if (k === 4) return 'track';
+    if (k === 5) {
       term.clear();
       term.print('Титры', 'mid');
       for (const line of CREDITS) term.print(line, 'small');
