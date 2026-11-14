@@ -11,7 +11,11 @@ import './ui/style.css';
 import { readArgs } from './core/args';
 import { installMetrics } from './core/metrics';
 import { createRng } from './core/rng';
+import { GameScene } from './game/GameScene';
+import { playBot } from './gyms/bot';
+import { mountGymKeys } from './gyms/keys';
 import { LookdevScene } from './gyms/lookdev/LookdevScene';
+import { createRun, IDEAS } from './systems/run/run';
 import { createHud } from './ui/hud';
 import { createPaper } from './ui/paper';
 import { mountUiScale } from './ui/scale';
@@ -37,12 +41,20 @@ stage.append(top);
 mountUiScale(stage, ui);
 mountUiScale(stage, top);
 
-// ?gym=hello — environment check · ?gym=lookdev — the key frame; the game itself arrives with the first mechanics
+// ?gym=hello — environment check · ?gym=lookdev — the key frame · ?gym=build — a run with a fixed idea, for tuning and captures
 function pickScene(): Phaser.Scene {
   if (__TOOLS__ && args.gym === 'hello') return new HelloScene(rng, createHud(over));
-  return new LookdevScene(rng, createPaper(under, over));
+  if (__TOOLS__ && args.gym === 'lookdev') return new LookdevScene(rng, createPaper(under, over));
+  const idea = { tech: IDEAS.tech[0], form: IDEAS.form[3], aud: IDEAS.aud[0] };
+  const run = createRun(args.seed, idea);
+  const scene = new GameScene(run, rng, createPaper(under, over), {
+    beforeStep: args.bot ? (r) => playBot(r) : undefined,
+    onEnd: () => undefined,
+  });
+  scene.speed = args.speed;
+  if (__TOOLS__) mountGymKeys(scene, run, args.debug);
+  return scene;
 }
-
 // text needs the web fonts before the first frame
 await Promise.all([
   document.fonts.load('700 32px "JetBrains Mono"', 'Клод $0'),

@@ -231,16 +231,16 @@ export class LookdevScene extends Phaser.Scene {
           { id: 'fast', title: 'Быстрый агент', mark: '×1', note: 'много кода, много долга', price: '$6/с', cash: true, state: 'can' },
           { id: 'think', title: 'Думающий агент', mark: '×1', note: 'медленно, дорого, зато без долга', price: '$20/с', cash: true, state: 'poor' },
         ],
-        lanes: [
-          { owner: 'a1', label: '<b>агент №1</b> · думающий', lanes: LANES, on: 'fix' },
-          { owner: 'a2', label: '<b>агент №2</b> · быстрый', lanes: LANES, on: 'build' },
+        rows: [
+          { owner: 'a1', label: '<b>№1</b> думающий', keys: LANES, on: 'fix' },
+          { owner: 'a2', label: '<b>№2</b> быстрый', keys: LANES, on: 'build' },
         ],
       },
       {
         id: 'me',
         title: 'ТЫ · ЧТО ПРОВЕРЯЕШЬ САМ',
         hint: 'там долг не копится',
-        lanes: [{ owner: 'me', lanes: LANES, on: 'build' }],
+        rows: [{ owner: 'me', keys: LANES, on: 'build' }],
       },
     ];
   }

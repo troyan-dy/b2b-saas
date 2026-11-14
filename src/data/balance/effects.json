@@ -1,0 +1,8 @@
+{
+  "bot": { "patience": 1 },
+  "dark": { "word_of_mouth": 2 },
+  "dash": { "corp_pay": 1.2 },
+  "mobile": { "small_pay": 1.2 },
+  "api": { "promo": 1.5 },
+  "cheap": { "tokens": 0.5 }
+}

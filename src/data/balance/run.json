@@ -1,0 +1,40 @@
+{
+  "sprint_s": 40,
+  "last_sprint": 30,
+  "start_money": 3200,
+  "living_per_s": 4,
+  "sites_max": 2,
+  "link_bonus": 0.1,
+  "tiers": {
+    "fast": { "cost_per_s": 5, "work_per_s": 0.2, "debt_per_work": 0.5 },
+    "normal": { "cost_per_s": 8, "work_per_s": 0.16, "debt_per_work": 0.2 },
+    "think": { "cost_per_s": 13, "work_per_s": 0.12, "debt_per_work": 0 }
+  },
+  "review_boost": 1.25,
+  "fix_per_work": 2,
+  "promo_work_per_lead": 9,
+  "research_work_per_reveal": 6,
+  "debt": { "slow_per_point": 0.012, "slow_max": 0.6, "down_at": 30, "down_relief": 12 },
+  "clients": {
+    "token_share": 0.4,
+    "free_token_per_s": 0.5,
+    "patience": 3,
+    "word_of_mouth": 0.12,
+    "mid_chance": 0.25,
+    "mid_pay_mult": 2.2,
+    "corp_pay": 600,
+    "corp_patience": 4,
+    "corp_chance": 0.25,
+    "happy_bonus": 1.25
+  },
+  "stages": [
+    { "agents_max": 2, "clients_max": 3, "radius": 1, "tiers": ["fast"] },
+    { "agents_max": 4, "clients_max": 7, "radius": 1, "tiers": ["fast", "normal", "think"] },
+    { "agents_max": 6, "clients_max": 12, "radius": 2, "tiers": ["fast", "normal", "think"] }
+  ],
+  "stage3_mrr": 1200,
+  "offers": [
+    { "mrr": 3000, "mult": 24 },
+    { "mrr": 6000, "mult": 30 }
+  ]
+}

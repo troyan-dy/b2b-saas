@@ -1,7 +1,7 @@
 # studioigor — B2B SaaS
 
 PROJECT: B2B SaaS
-PHASE: 5 — Assets and look-dev
+PHASE: 6 — Mechanics
 UPDATED: 2026-11-14 20:01
 
 ## Now

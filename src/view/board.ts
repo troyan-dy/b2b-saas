@@ -68,7 +68,7 @@ export class Board {
   private readonly ox: number;
   private readonly oy: number;
 
-  constructor(scene: Phaser.Scene, ox: number, oy: number) {
+  constructor(scene: Phaser.Scene, ox = 0, oy = 0) {
     this.scene = scene;
     this.ox = ox;
     this.oy = oy;
@@ -110,23 +110,18 @@ export class Board {
     return this.root.scaleX;
   }
 
-  /** The pull-back of a new stage: the sheet shrinks around the point (fx, fy) of the screen. */
-  zoomTo(scale: number, fx: number, fy: number, ms: number, onUpdate: () => void): void {
-    const from = this.root.scaleX;
-    // the sheet point that sits under (fx, fy) now stays there
-    const sx = (fx - this.root.x) / from;
-    const sy = (fy - this.root.y) / from;
-    this.scene.tweens.add({
-      targets: this.root,
-      scale,
-      x: fx - sx * scale,
-      y: fy - sy * scale,
-      duration: ms,
-      ease: 'Cubic.InOut',
-      onUpdate,
-    });
+  /** Shows the sheet at `scale` with its point (cx, cy) under the screen point (sx, sy); `ms` > 0 — as a pull-back. */
+  view(scale: number, cx: number, cy: number, sx: number, sy: number, ms: number, onUpdate: () => void): void {
+    this.scene.tweens.killTweensOf(this.root);
+    const x = sx - cx * scale;
+    const y = sy - cy * scale;
+    if (ms <= 0) {
+      this.root.setScale(scale).setPosition(x, y);
+      onUpdate();
+      return;
+    }
+    this.scene.tweens.add({ targets: this.root, scale, x, y, duration: ms, ease: 'Cubic.InOut', onUpdate, onComplete: onUpdate });
   }
-
   /** Brings the modules in line with the product. */
   sync(blocks: readonly BlockOnSheet[], slots: readonly SlotOnSheet[]): void {
     const signature = JSON.stringify([blocks, slots]);
@@ -188,6 +183,10 @@ export class Board {
     return img;
   }
 
+  node(id: string): Phaser.GameObjects.Image | undefined {
+    return this.nodes.get(id);
+  }
+
   /** A node leaves the sheet: it fades and the picture is gone. */
   dropNode(id: string): void {
     const img = this.nodes.get(id);
@@ -210,6 +209,10 @@ export class Board {
 
   dropRoute(key: string): void {
     if (this.routes.delete(key)) this.redrawLines();
+  }
+
+  hasRoute(key: string): boolean {
+    return this.routes.has(key);
   }
 
   /** Sends a square along a connector; `done` fires when it arrives. */

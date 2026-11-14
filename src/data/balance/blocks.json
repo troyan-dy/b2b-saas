@@ -1,0 +1,17 @@
+{
+  "core": { "work": 6, "stage": 1, "friends": ["bot", "cheap"], "role": "base" },
+  "landing": { "work": 9, "stage": 1, "friends": ["pay", "dark"], "role": "base" },
+  "pay": { "work": 9, "stage": 1, "friends": ["landing", "dash"], "role": "base" },
+  "bot": { "work": 12, "stage": 1, "friends": ["core", "api"], "role": "ask" },
+  "dash": { "work": 12, "stage": 1, "friends": ["pay", "crm"], "role": "ask" },
+  "dark": { "work": 8, "stage": 1, "friends": ["landing", "mobile"], "role": "ask" },
+  "mobile": { "work": 15, "stage": 1, "friends": ["dark", "api"], "role": "ask" },
+  "api": { "work": 13, "stage": 1, "friends": ["bot", "mobile"], "role": "ask" },
+  "excel": { "work": 10, "stage": 1, "friends": ["dash", "crm"], "role": "ask" },
+  "push": { "work": 11, "stage": 1, "friends": ["mobile", "bot"], "role": "ask" },
+  "roles": { "work": 12, "stage": 1, "friends": ["sso", "pay"], "role": "ask" },
+  "cheap": { "work": 13, "stage": 2, "friends": ["core"], "role": "tool" },
+  "crm": { "work": 16, "stage": 2, "friends": ["dash", "sso"], "role": "corp" },
+  "sso": { "work": 18, "stage": 2, "friends": ["crm", "shield"], "role": "corp" },
+  "shield": { "work": 20, "stage": 2, "friends": ["sso"], "role": "corp" }
+}

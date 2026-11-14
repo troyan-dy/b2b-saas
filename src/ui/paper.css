@@ -146,7 +146,7 @@
   padding: 0;
   border: none;
   background: none;
-  font-size: 15px;
+  font-size: max(11px, calc(15px * var(--z, 1)));
   font-weight: 700;
   letter-spacing: 0.03em;
   line-height: 1;
@@ -164,9 +164,9 @@
 /* a free cell of the product: an invisible rhombus that takes the click */
 .bl-cell {
   position: absolute;
-  width: 192px;
-  height: 96px;
-  margin: -48px 0 0 -96px;
+  width: calc(192px * var(--z, 1));
+  height: calc(96px * var(--z, 1));
+  margin: calc(-48px * var(--z, 1)) 0 0 calc(-96px * var(--z, 1));
   clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%);
   pointer-events: auto;
   cursor: pointer;
@@ -429,4 +429,143 @@
 }
 .bl-news i {
   letter-spacing: 0.12em;
+}
+
+/* whose keys these are: the link on the right lets the agent go */
+.bl-who {
+  display: flex;
+}
+.bl-who a {
+  margin-left: auto;
+  color: var(--dim);
+  cursor: pointer;
+}
+.bl-who a:hover {
+  color: var(--coral);
+}
+/* the founder has chosen for this sprint: the other keys wait for the release */
+.bl-lanes.lock span:not(.on) {
+  opacity: 0.45;
+  cursor: default;
+}
+.bl-lanes.lock span:not(.on):hover {
+  border-color: var(--rule);
+  color: var(--dim);
+}
+
+/* a call: a dark terminal card in the middle of the sheet, the answers are its lines */
+.bl-call {
+  position: absolute;
+  left: 370px;
+  top: 300px;
+  width: 600px;
+  box-sizing: border-box;
+  padding: 20px 26px 18px;
+  border-radius: 12px;
+  border: 1px solid var(--term-rule);
+  outline: 2px solid var(--coral);
+  background: var(--term-panel);
+  color: var(--term-text);
+  font: 400 17px/1.5 var(--mono);
+  display: none;
+  pointer-events: auto;
+}
+.bl-call.on {
+  display: block;
+}
+.bl-call small {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 14px;
+  letter-spacing: 0.1em;
+  color: var(--dim);
+}
+.bl-call p {
+  margin: 0 0 14px;
+}
+.bl-call div {
+  padding: 5px 12px 6px;
+  margin: 0 -12px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.bl-call div:hover {
+  background: var(--coral);
+  color: var(--term-bg);
+}
+.bl-call div span {
+  color: var(--dim);
+}
+.bl-call div:hover span {
+  color: var(--term-bg);
+}
+
+/* a word that rises from a node and fades: «+ клиент», «связка» */
+.bl-pop {
+  position: absolute;
+  transform: translateX(-50%);
+  font: 700 17px var(--mono);
+  white-space: nowrap;
+  pointer-events: none;
+  animation: bl-rise 1.5s ease-out forwards;
+}
+.bl-pop.good {
+  color: var(--money);
+}
+.bl-pop.bad {
+  color: var(--coral);
+}
+@keyframes bl-rise {
+  0% {
+    opacity: 0;
+    margin-top: 8px;
+  }
+  12% {
+    opacity: 1;
+    margin-top: 0;
+  }
+  70% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    margin-top: -34px;
+  }
+}
+/* a long list of cards scrolls inside its own box */
+.bl-scroll {
+  overflow-y: auto;
+  margin-right: -14px;
+  padding-right: 8px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--rule) transparent;
+}
+.bl-lanes p {
+  margin: 0;
+  align-self: center;
+  font: 400 14px var(--mono);
+  color: var(--dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.bl-lanes p b {
+  color: var(--ink);
+  font-weight: 700;
+}
+/* an agent's row is tight: its keys are set a little smaller */
+.bl-lanes[style*='92px'] span {
+  font-size: 13px;
+  padding: 6px 0 7px;
+}
+.bl-lanes span.off {
+  opacity: 0.4;
+  cursor: default;
+}
+.bl-lanes span.drop {
+  color: var(--dim);
+}
+.bl-lanes span.drop:hover {
+  border-color: var(--coral);
+  color: var(--coral);
 }

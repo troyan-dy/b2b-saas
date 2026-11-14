@@ -12,13 +12,16 @@ export interface ShelfItem {
   state: 'can' | 'poor' | 'off' | 'on';
 }
 
-export interface ShelfLanes {
-  /** which agent or «you» these keys belong to */
+/** A row of small keys: the lanes of an agent, the founder's check, the hiring buttons. */
+export interface ShelfKeys {
+  /** which agent or «me» or «hire» these keys belong to */
   owner: string;
-  /** a caption above the keys: «агент №1 · быстрый» */
+  /** a caption to the left of the keys: «№1 быстрый» */
   label?: string;
-  lanes: readonly { id: string; title: string }[];
-  on: string;
+  /** the choice is made: the other keys are dimmed */
+  lock?: boolean;
+  keys: readonly { id: string; title: string; off?: boolean }[];
+  on?: string;
 }
 
 export interface ShelfSection {
@@ -26,9 +29,10 @@ export interface ShelfSection {
   title: string;
   hint?: string;
   items?: readonly ShelfItem[];
-  lanes?: readonly ShelfLanes[];
+  /** the cards scroll inside a box of this height, px */
+  scroll?: number;
+  rows?: readonly ShelfKeys[];
 }
-
 export interface Paper {
   /** `sub` is HTML: «<b class="hot">−$31</b> в секунду · денег на 2:13» */
   setMoney(text: string, sub: string, broke?: boolean): void;
@@ -39,36 +43,50 @@ export interface Paper {
   setShelf(sections: readonly ShelfSection[]): void;
   /** a row of the shelf answers a click */
   flash(section: string, item: string, how: 'bought' | 'denied'): void;
-  /** a caption of a node, sheet → screen coordinates are the caller's business */
+  /** a caption of a node; coordinates are screen pixels of the 1920×1080 layer */
   tag(id: string, x: number, y: number, html: string, cls?: string): void;
   dropTag(id: string): void;
+  /** drops every caption whose id starts with `prefix` and is not in `keep` */
+  pruneTags(prefix: string, keep: ReadonlySet<string>): void;
   /** clickable free cells of the product */
   setCells(cells: readonly { id: string; x: number; y: number }[]): void;
+  /** how much the sheet is zoomed: captions on the modules and the cells follow it */
+  setZoom(z: number): void;
   /** Claude's card: lines of HTML, or null to hide it */
   term(lines: readonly string[] | null): void;
+  /** a word that rises from a point and fades */
+  pop(x: number, y: number, text: string, how: 'good' | 'bad' | ''): void;
+  /** a call in the middle of the sheet; null hangs up */
+  call(c: { who: string; text: string; options: readonly string[] } | null): void;
+  /** everything but the paper itself: hidden while the terminal covers the sheet */
+  show(on: boolean): void;
   onShelf: (section: string, item: string) => void;
   onLane: (owner: string, lane: string) => void;
   onCell: (id: string) => void;
+  onAnswer: (index: number) => void;
 }
 
 /**
  * The paper sheet in HTML: crisp text under and over the canvas. Shows what it is told, decides nothing;
- * clicks leave through the three callbacks.
+ * clicks leave through the callbacks.
  */
 export function createPaper(under: HTMLElement, over: HTMLElement): Paper {
   const sheet = document.createElement('div');
   sheet.className = 'bl';
   sheet.innerHTML =
-    '<div class="bl-money"><b></b><span></span></div>' +
+    '<div class="bl-hud"><div class="bl-money"><b></b><span></span></div>' +
     '<div class="bl-sprint"><i></i><u><s></s></u></div>' +
     '<div class="bl-shop"></div>' +
-    '<div class="bl-news"><i>НОВОСТИ</i><span></span><em></em></div>';
+    '<div class="bl-news"><i>НОВОСТИ</i><span></span><em></em></div></div>';
   under.append(sheet);
   const top = document.createElement('div');
   top.className = 'bl-over';
-  top.innerHTML = '<div class="bl-cells"></div><div class="bl-tags"></div><div class="bl-term"><i></i><div></div></div>';
+  top.innerHTML =
+    '<div class="bl-cells"></div><div class="bl-tags"></div><div class="bl-pops"></div>' +
+    '<div class="bl-term"><i></i><div></div></div><div class="bl-call"></div>';
   over.append(top);
 
+  const hud = sheet.querySelector('.bl-hud') as HTMLElement;
   const money = sheet.querySelector('.bl-money') as HTMLElement;
   const moneyBig = money.querySelector('b') as HTMLElement;
   const moneySub = money.querySelector('span') as HTMLElement;
@@ -79,18 +97,22 @@ export function createPaper(under: HTMLElement, over: HTMLElement): Paper {
   const newsHint = sheet.querySelector('.bl-news em') as HTMLElement;
   const cellLayer = top.querySelector('.bl-cells') as HTMLElement;
   const tagLayer = top.querySelector('.bl-tags') as HTMLElement;
+  const popLayer = top.querySelector('.bl-pops') as HTMLElement;
   const termCard = top.querySelector('.bl-term') as HTMLElement;
   const termBody = termCard.querySelector('div') as HTMLElement;
+  const callCard = top.querySelector('.bl-call') as HTMLElement;
 
   const tags = new Map<string, { el: HTMLElement; html: string; cls: string; x: number; y: number }>();
   let shelfSig = '';
   let cellSig = '';
-  const last = { money: '', sub: '', news: '', hint: '', sprint: '', part: -1 };
+  let callSig = '';
+  const last = { money: '', sub: '', news: '', hint: '', sprint: '', part: -1, zoom: -1 };
 
   const paper: Paper = {
     onShelf: () => undefined,
     onLane: () => undefined,
     onCell: () => undefined,
+    onAnswer: () => undefined,
 
     setMoney(text, sub, broke = false) {
       if (text !== last.money) {
@@ -136,6 +158,7 @@ export function createPaper(under: HTMLElement, over: HTMLElement): Paper {
       let html = '';
       for (const s of sections) {
         html += `<h2>${s.title}${s.hint ? `<em>${s.hint}</em>` : ''}</h2>`;
+        if (s.scroll) html += `<div class="bl-scroll" style="max-height:${s.scroll}px">`;
         for (const it of s.items ?? []) {
           html +=
             `<div class="bl-item ${it.state === 'poor' ? '' : it.state === 'on' ? 'can on' : it.state}" data-s="${s.id}" data-i="${it.id}">` +
@@ -143,16 +166,24 @@ export function createPaper(under: HTMLElement, over: HTMLElement): Paper {
             `<span class="price${it.cash ? ' cash' : ''}">${it.price}</span>` +
             `<small>${it.note}</small></div>`;
         }
-        for (const l of s.lanes ?? []) {
-          if (l.label) html += `<p class="bl-who">${l.label}</p>`;
-          html += '<div class="bl-lanes">';
-          for (const lane of l.lanes) {
-            html += `<span class="${lane.id === l.on ? 'on' : ''}" data-o="${l.owner}" data-l="${lane.id}">${lane.title}</span>`;
+        if (s.scroll) html += '</div>';
+        for (const r of s.rows ?? []) {
+          const cols = `${r.label ? '104px ' : ''}repeat(${r.keys.length}, minmax(0, 1fr))`;
+          html += `<div class="bl-lanes${r.lock ? ' lock' : ''}" style="grid-template-columns:${cols}">`;
+          if (r.label) html += `<p>${r.label}</p>`;
+          for (const k of r.keys) {
+            const cls = `${k.id === r.on ? 'on' : ''}${k.off ? ' off' : ''}${k.id === 'drop' ? ' drop' : ''}`;
+            html += `<span class="${cls}" data-o="${r.owner}" data-l="${k.id}">${k.title}</span>`;
           }
           html += '</div>';
         }
       }
+      // the list of blocks keeps its scroll position while the shelf is redrawn
+      const box = shop.querySelector('.bl-scroll');
+      const at = box ? box.scrollTop : 0;
       shop.innerHTML = html;
+      const next = shop.querySelector('.bl-scroll');
+      if (next) next.scrollTop = at;
     },
     flash(section, item, how) {
       const el = shop.querySelector(`.bl-item[data-s="${section}"][data-i="${item}"]`);
@@ -177,11 +208,13 @@ export function createPaper(under: HTMLElement, over: HTMLElement): Paper {
         t.html = html;
         t.el.innerHTML = html;
       }
-      if (t.x !== x || t.y !== y) {
-        t.x = x;
-        t.y = y;
-        t.el.style.left = `${Math.round(x)}px`;
-        t.el.style.top = `${Math.round(y)}px`;
+      const rx = Math.round(x);
+      const ry = Math.round(y);
+      if (t.x !== rx || t.y !== ry) {
+        t.x = rx;
+        t.y = ry;
+        t.el.style.left = `${rx}px`;
+        t.el.style.top = `${ry}px`;
       }
     },
     dropTag(id) {
@@ -189,6 +222,11 @@ export function createPaper(under: HTMLElement, over: HTMLElement): Paper {
       if (!t) return;
       t.el.remove();
       tags.delete(id);
+    },
+    pruneTags(prefix, keep) {
+      for (const id of [...tags.keys()]) {
+        if (id.startsWith(prefix) && !keep.has(id)) paper.dropTag(id);
+      }
     },
     setCells(cells) {
       const sig = JSON.stringify(cells);
@@ -198,6 +236,12 @@ export function createPaper(under: HTMLElement, over: HTMLElement): Paper {
         .map((c) => `<div class="bl-cell" data-c="${c.id}" style="left:${Math.round(c.x)}px;top:${Math.round(c.y)}px"></div>`)
         .join('');
     },
+    setZoom(z) {
+      const v = Math.round(z * 1000) / 1000;
+      if (v === last.zoom) return;
+      last.zoom = v;
+      top.style.setProperty('--z', String(v));
+    },
     term(lines) {
       if (!lines) {
         termCard.classList.remove('on');
@@ -205,6 +249,31 @@ export function createPaper(under: HTMLElement, over: HTMLElement): Paper {
       }
       termBody.innerHTML = lines.join('\n');
       termCard.classList.add('on');
+    },
+    pop(x, y, text, how) {
+      const el = document.createElement('div');
+      el.className = `bl-pop ${how}`;
+      el.textContent = text;
+      el.style.left = `${Math.round(x)}px`;
+      el.style.top = `${Math.round(y)}px`;
+      popLayer.append(el);
+      el.addEventListener('animationend', () => el.remove());
+    },
+    call(c) {
+      const sig = JSON.stringify(c);
+      if (sig === callSig) return;
+      callSig = sig;
+      if (!c) {
+        callCard.classList.remove('on');
+        return;
+      }
+      callCard.innerHTML =
+        `<small>${c.who}</small><p>${c.text}</p>` + c.options.map((o, k) => `<div data-a="${k}">❯ ${k + 1}. ${o}</div>`).join('');
+      callCard.classList.add('on');
+    },
+    show(on) {
+      hud.style.visibility = on ? 'visible' : 'hidden';
+      top.style.visibility = on ? 'visible' : 'hidden';
     },
   };
 
@@ -221,6 +290,10 @@ export function createPaper(under: HTMLElement, over: HTMLElement): Paper {
   cellLayer.addEventListener('click', (e) => {
     const cell = (e.target as HTMLElement).closest('.bl-cell') as HTMLElement | null;
     if (cell) paper.onCell(cell.dataset.c ?? '');
+  });
+  callCard.addEventListener('click', (e) => {
+    const a = (e.target as HTMLElement).closest('[data-a]') as HTMLElement | null;
+    if (a) paper.onAnswer(Number(a.dataset.a));
   });
 
   return paper;

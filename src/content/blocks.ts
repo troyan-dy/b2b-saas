@@ -174,6 +174,47 @@ export const BLOCKS: readonly BlockKind[] = [
       { pts: rect(0.26, 0.62, 0.48, 0.12), closed: true },
     ],
   },
+  {
+    id: 'excel',
+    short: 'Excel',
+    name: 'Экспорт в Excel',
+    note: 'единственная функция, которой пользуются все',
+    group: 'sell',
+    height: 40,
+    glyph: [
+      { pts: rect(0.2, 0.24, 0.6, 0.52), closed: true },
+      { pts: [[0.4, 0.24], [0.4, 0.76]] },
+      { pts: [[0.6, 0.24], [0.6, 0.76]] },
+      { pts: [[0.2, 0.42], [0.8, 0.42]] },
+      { pts: [[0.2, 0.59], [0.8, 0.59]] },
+    ],
+  },
+  {
+    id: 'push',
+    short: 'пуши',
+    name: 'Пуш-уведомления',
+    note: '«Вы давно не заходили» — в три часа ночи',
+    group: 'sell',
+    height: 40,
+    glyph: [
+      { pts: [[0.5, 0.2], [0.66, 0.34], [0.7, 0.62], [0.78, 0.7], [0.22, 0.7], [0.3, 0.62], [0.34, 0.34]], closed: true },
+      { pts: rect(0.45, 0.72, 0.1, 0.08), fill: 'coral', bare: true },
+    ],
+  },
+  {
+    id: 'roles',
+    short: 'роли',
+    name: 'Роли и права',
+    note: 'чтобы стажёр не удалил всё. Он всё равно удалит',
+    group: 'corp',
+    height: 46,
+    glyph: [
+      { pts: ring(0.36, 0.38, 0.1, 12), closed: true },
+      { pts: ring(0.36, 0.74, 0.18, 10, Math.PI, Math.PI * 2) },
+      { pts: ring(0.66, 0.38, 0.1, 12), closed: true },
+      { pts: ring(0.66, 0.74, 0.18, 10, Math.PI, Math.PI * 2) },
+    ],
+  },
 ];
 
 export const BLOCK_BY_ID: Readonly<Record<string, BlockKind>> = Object.fromEntries(BLOCKS.map((b) => [b.id, b]));
