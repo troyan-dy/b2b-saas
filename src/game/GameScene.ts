@@ -127,7 +127,7 @@ export class GameScene extends Phaser.Scene {
 
     for (const b of this.run.blocks) this.landed.set(b.kind, b.done);
     this.newsAt = 6;
-    this.paper.setNews(`${pitch(this.run.idea)}. Пока что это три слова и один человек`, 'Esc — пауза');
+    this.paper.setNews(`${pitch(this.run.idea)}. Пока что это три слова и один человек`, this.newsHint());
     this.say([
       '<b>❯ Клод</b>',
       'Привет. Я твоя команда — вся.',
@@ -424,6 +424,14 @@ export class GameScene extends Phaser.Scene {
         logEvent('refund');
         break;
       }
+      case 'news':
+        // competitors live in the news line: the headline says what it did to the numbers
+        this.news(e.text.replace('%s', BLOCK_BY_ID[e.arg]?.name ?? e.arg));
+        this.newsHold = 18;
+        this.newsAt = 18;
+        playSound(e.good ? 'quip' : 'waste');
+        logEvent(`news:${e.id}`);
+        break;
       case 'lastchance':
         playSound('waste');
         this.cameras.main.shake(220, 0.005);
@@ -507,7 +515,9 @@ export class GameScene extends Phaser.Scene {
     const [mx, my] = board.onScreen(DESK[0] - 118, DESK[1] + 8);
     const full = Math.floor(run.energy);
     const pips = '■'.repeat(full) + '□'.repeat(TUNING.crunch.max - full);
-    this.paper.tag('me', Math.max(10, mx), my, `<b>ты</b> · проверяешь ${LANE_ACC[run.review]}<i>силы ${pips}</i>`, 'left');
+    // on a wide sheet the first laptop stands close to the desk: the caption is cut to the bone
+    const mine = z < 0.8 ? `<b>ты</b>: ${LANE_NAME[run.review]}` : `<b>ты</b> · проверяешь ${LANE_ACC[run.review]}`;
+    this.paper.tag('me', Math.max(10, mx), my, `${mine}<i>силы ${pips}</i>`, 'left');
     this.syncAgents();
     const keepA = new Set<string>();
     run.agents.forEach((a, k) => {
@@ -768,12 +778,18 @@ export class GameScene extends Phaser.Scene {
     this.newsAt -= dt;
     if (this.newsAt > 0 || this.newsHold > 0) return;
     this.newsAt = 17;
-    this.paper.setNews(NEWS[this.newsIndex++ % NEWS.length], 'Esc — пауза');
+    this.paper.setNews(NEWS[this.newsIndex++ % NEWS.length], this.newsHint());
+  }
+
+  /** the right end of the news line: what the news has done and for how long, then the pause key */
+  private newsHint(): string {
+    const parts = this.run.mods.map((m) => `${m.tag} · ещё ${m.left} спр.`);
+    return [...parts, 'Esc — пауза'].join('   ');
   }
 
   /** an event of the run takes the news line and holds it for a while */
   private news(text: string): void {
-    this.paper.setNews(text, 'Esc — пауза');
+    this.paper.setNews(text, this.newsHint());
     this.newsHold = 12;
     this.newsAt = 12;
   }

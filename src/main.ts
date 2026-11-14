@@ -19,7 +19,7 @@ import { GameScene } from './game/GameScene';
 import { playBot, SENSIBLE } from './gyms/bot';
 import { mountGymKeys } from './gyms/keys';
 import { LookdevScene } from './gyms/lookdev/LookdevScene';
-import { loadMeta } from './systems/meta/meta';
+import { emptyMeta, loadMeta } from './systems/meta/meta';
 import { createRun, IDEAS, type Idea, type Run } from './systems/run/run';
 import { createHud } from './ui/hud';
 import { createPaper } from './ui/paper';
@@ -143,9 +143,14 @@ else if (__TOOLS__ && args.gym === 'build') {
   const idea: Idea = { tech: pick(IDEAS.tech, n), form: pick(IDEAS.form, n + 3), aud: pick(IDEAS.aud, n) };
   const run = createRun(args.seed, idea);
   const style = { ...SENSIBLE, calls: !args.flags.includes('nocalls') };
-  const scene = new GameScene(run, rng, createPaper(under, over), {
+  const paper = createPaper(under, over);
+  const term = createTerminal(over, (name) => playSound(name));
+  const scene = new GameScene(run, rng, paper, {
     beforeStep: args.bot ? (r) => playBot(r, style) : undefined,
-    onEnd: () => undefined,
+    // the gym shows the ending too, but writes nothing into the founder's record
+    onEnd: (r: Run) => {
+      window.setTimeout(() => void ending(term, r, emptyMeta(), false).then(() => window.location.reload()), 1400);
+    },
     onQuit: () => window.location.reload(),
   });
   scene.speed = args.speed;

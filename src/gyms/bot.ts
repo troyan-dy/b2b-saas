@@ -105,6 +105,8 @@ function nextBlock(run: Run, style: BotStyle): string | null {
   }
   if (can.includes('cheap') && run.clients.length >= 4) return 'cheap';
   for (const k of run.known) if (can.includes(k)) return k;
-  // nothing known yet: a careful founder waits for the interviews rather than guesses
+  // everything known is built and the startup pays for itself: grow the product, cheapest first
+  if (netPerS(run) >= 0 && run.clients.length > 0) return [...can].sort((a, b) => RULES[a].work - RULES[b].work)[0];
+  // nothing known yet and money is tight: a careful founder waits for the interviews rather than guesses
   return null;
 }

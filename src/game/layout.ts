@@ -5,8 +5,8 @@ import type { Pt } from '../view/iso';
  * pictures are anchored at their bottom centre. The camera (STAGE_VIEW) decides how much of it is seen.
  */
 
-/** the founder's desk: bottom-left of the product */
-export const DESK: Pt = [-540, 250];
+/** the founder's desk: bottom-left of the product, clear of its widest sheet */
+export const DESK: Pt = [-580, 330];
 
 /** laptops of the agents, in the order they are hired: a row under the product */
 export const AGENT_SLOTS: readonly Pt[] = [
@@ -49,9 +49,9 @@ export const VIEW_AT: Pt = [670, 640];
 
 /** what the camera shows at each stage: the sheet point under VIEW_AT and the zoom */
 export const STAGE_VIEW: readonly { x: number; y: number; zoom: number }[] = [
-  { x: -80, y: 150, zoom: 1 },
-  { x: 95, y: 105, zoom: 0.84 },
-  { x: 335, y: 85, zoom: 0.665 },
+  { x: -90, y: 160, zoom: 1 },
+  { x: 80, y: 110, zoom: 0.84 },
+  { x: 310, y: 90, zoom: 0.665 },
 ];
 
 /** where the money counter is on the screen: squares of subscriptions fly into it */

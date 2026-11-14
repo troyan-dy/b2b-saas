@@ -8,7 +8,7 @@
   pointer-events: auto;
   display: none;
   /* the pull-back: the terminal shrinks into the screen of the founder's laptop */
-  transform-origin: 152px 600px;
+  transform-origin: 121px 667px;
 }
 .tm.on {
   display: block;

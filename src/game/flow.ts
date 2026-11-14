@@ -104,9 +104,9 @@ export async function mixIdea(term: Terminal, seed: number, meta: Meta): Promise
 }
 
 /** The end of a startup: the founder's post, the numbers, what was learned. Returns when the player wants the next one. */
-export async function ending(term: Terminal, run: Run, meta: Meta): Promise<void> {
+export async function ending(term: Terminal, run: Run, meta: Meta, persist = true): Promise<void> {
   const got = finish(run, meta);
-  saveMeta(meta);
+  if (persist) saveMeta(meta);
   term.open(`конец · ${ENDING_TITLE[run.over ?? 'broke'].toLowerCase()}`);
   for (;;) {
     term.clear();

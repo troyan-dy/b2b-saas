@@ -1,6 +1,7 @@
 import { createRng, type Rng } from '../../core/rng';
 import blocksData from '../../data/balance/blocks.json';
 import effectsData from '../../data/balance/effects.json';
+import eventsData from '../../data/balance/events.json';
 import ideasData from '../../data/balance/ideas.json';
 import tuningData from '../../data/balance/run.json';
 
@@ -105,7 +106,19 @@ export type RunEvent =
   | { type: 'kept'; id: number }
   | { type: 'refund'; id: number; sum: number }
   | { type: 'lastchance'; sum: number }
+  /** `arg` — the block the headline is about, to be named in place of %s */
+  | { type: 'news'; id: string; text: string; arg: string; good: boolean }
   | { type: 'end'; ending: Ending };
+
+/** Something the industry did to the startup for a few sprints: dearer tokens, a smaller cheque, a better week for promotion. */
+export interface Mod {
+  kind: 'tokens' | 'price' | 'promo';
+  mult: number;
+  /** sprints left */
+  left: number;
+  /** how the sheet names it: «токены ×1,4» */
+  tag: string;
+}
 
 export interface Run {
   seed: number;
@@ -144,6 +157,11 @@ export interface Run {
   /** the money is gone and the bank offers this much for the flat; the clock waits for the answer */
   lastChance: number | null;
   mortgaged: boolean;
+  /** what the news did and how long it lasts; `mod` is the same thing multiplied out, read every step */
+  mods: Mod[];
+  mod: { tokens: number; price: number; promo: number };
+  /** sprints before the news may strike again */
+  newsWait: number;
   events: RunEvent[];
   over: Ending | null;
   lastReport: Report | null;
@@ -237,6 +255,9 @@ export function createRun(seed: number, idea: Idea, perks: readonly string[] = [
     call: null,
     lastChance: null,
     mortgaged: false,
+    mods: [],
+    mod: { tokens: 1, price: 1, promo: 1 },
+    newsWait: 0,
     events: [],
     over: null,
     lastReport: null,
@@ -299,7 +320,7 @@ export function links(run: Run): [string, string][] {
 }
 
 export function priceMult(run: Run): number {
-  return run.idea.tech.price * run.idea.form.price * (1 + TUNING.link_bonus * run.linkCount);
+  return run.idea.tech.price * run.idea.form.price * (1 + TUNING.link_bonus * run.linkCount) * run.mod.price;
 }
 
 /** what a client is worth per sprint: its subscription at today's prices, whether it pays right now or not */
@@ -317,7 +338,7 @@ export function clientPay(run: Run, c: Client): number {
 /** what a client costs in tokens per sprint: free users burn them too */
 export function clientTokens(run: Run, c: Client): number {
   // the more a client uses the product, the more it burns: tokens follow the size of the subscription
-  return clientWorth(run, c) * TUNING.clients.token_share * run.idea.tech.tokens * run.eff.tokens;
+  return clientWorth(run, c) * TUNING.clients.token_share * run.idea.tech.tokens * run.eff.tokens * run.mod.tokens;
 }
 
 export function mrr(run: Run): number {
@@ -466,8 +487,8 @@ export function answerOffer(run: Run, accept: boolean): void {
 }
 
 /**
- * The client on the line asked about a block that is not there. Honest: it signs with a discount and
- * says what it needs. Confident: it pays a premium, but the block must ship before its patience ends.
+ * The client on the line asked about a block that is not there. Honest: it signs with a discount.
+ * Confident: it pays a premium, but the block must ship before its patience ends.
  */
 export function answerCall(run: Run, sure: boolean): void {
   const c = run.call;
@@ -479,13 +500,7 @@ export function answerCall(run: Run, sure: boolean): void {
     c.promised = true;
     c.patience = TUNING.call.sure_patience;
     run.stats.promises++;
-  } else {
-    c.deal = TUNING.call.honest_mult;
-    if (!run.known.includes(c.want)) {
-      run.known.push(c.want);
-      run.events.push({ type: 'reveal', kind: c.want });
-    }
-  }
+  } else c.deal = TUNING.call.honest_mult;
   seat(run, c);
 }
 
@@ -556,7 +571,7 @@ function deliver(run: Run, a: Agent): void {
       run.debt = Math.max(0, run.debt - TUNING.fix_per_work);
       return;
     case 'promo':
-      run.leads += (run.idea.tech.hype * run.idea.form.hype * run.eff.promo) / TUNING.promo_work_per_lead;
+      run.leads += (run.idea.tech.hype * run.idea.form.hype * run.eff.promo * run.mod.promo) / TUNING.promo_work_per_lead;
       run.debt += dirty * 0.5;
       run.events.push({ type: 'work', agent: a.id, lane: a.lane });
       return;
@@ -591,7 +606,12 @@ function makeClient(run: Run): Client {
   } else {
     const taken = new Set(run.clients.map((c) => c.name));
     const pool = run.idea.aud.clients.filter((n) => !taken.has(n));
-    const name = run.rng.pick(pool.length > 0 ? pool : run.idea.aud.clients);
+    // the names ran out: the same business opens another branch
+    let name = run.rng.pick(pool.length > 0 ? pool : run.idea.aud.clients);
+    if (pool.length === 0) {
+      const tails = [' II', ' III', ' IV'];
+      name += tails.find((x) => !taken.has(name + x)) ?? tails[0];
+    }
     const mid = run.rng.next() < C.mid_chance;
     const want = run.rng.pick(run.asks);
     client = {
@@ -655,6 +675,8 @@ function release(run: Run): void {
     run.down = false;
   }
 
+  news(run);
+
   // nobody picked up: the client on the line is gone
   if (run.call) {
     run.events.push({ type: 'hungup', name: run.call.name });
@@ -709,6 +731,11 @@ function release(run: Run): void {
       if (run.call === null && run.stage >= 2 && !isLive(run, c.want) && run.rng.next() < TUNING.call.chance) {
         run.call = c;
         run.events.push({ type: 'call', name: c.name, kind: c.want });
+        // the question itself says what this market wants
+        if (!run.known.includes(c.want)) {
+          run.known.push(c.want);
+          run.events.push({ type: 'reveal', kind: c.want });
+        }
         continue;
       }
       seat(run, c);
@@ -747,6 +774,58 @@ function release(run: Run): void {
   run.sprintT = 0;
   run.reviewLocked = false;
   if (run.sprint > TUNING.last_sprint) end(run, netPerS(run) >= 0 ? 'profit' : 'late');
+}
+
+/**
+ * The industry answers too. What was in force runs out, and now and then a headline changes the rules
+ * for a few sprints: the news line is where competitors live.
+ */
+function news(run: Run): void {
+  for (const m of run.mods) m.left--;
+  run.mods = run.mods.filter((m) => m.left > 0);
+
+  const N = TUNING.news;
+  run.newsWait--;
+  if (run.sprint >= N.from_sprint && run.newsWait <= 0 && run.rng.next() < (run.stage >= 3 ? N.chance_stage3 : N.chance)) {
+    const waiting = [...new Set(run.clients.filter((c) => !c.happy).map((c) => c.want))];
+    const pool = eventsData.filter((e) => e.stage <= run.stage && (e.kind !== 'impatience' || waiting.length > 0) && (e.kind !== 'down' || !run.down));
+    let roll = run.rng.next() * pool.reduce((s, e) => s + e.weight, 0);
+    const e = pool.find((x) => (roll -= x.weight) < 0) ?? pool[0];
+    let arg = '';
+    switch (e.kind) {
+      case 'tokens':
+      case 'price':
+      case 'promo':
+        run.mods = run.mods.filter((m) => m.kind !== e.kind);
+        run.mods.push({ kind: e.kind as Mod['kind'], mult: e.mult, left: e.sprints, tag: e.tag });
+        break;
+      case 'debt':
+        run.debt += e.add;
+        break;
+      case 'leads':
+        run.leads += e.add;
+        break;
+      case 'money':
+        run.money += e.add;
+        break;
+      case 'down':
+        run.down = true;
+        break;
+      case 'impatience': {
+        const kind = run.rng.pick(waiting);
+        // tired of waiting, but not gone yet: the founder still has a sprint to answer
+        for (const c of run.clients) if (!c.happy && c.want === kind) c.patience = Math.max(1, c.patience - e.add);
+        arg = kind;
+        break;
+      }
+    }
+    run.newsWait = N.cooldown;
+    run.events.push({ type: 'news', id: e.id, text: e.text, arg, good: e.kind === 'leads' || e.kind === 'money' || (e.kind === 'promo' && e.mult > 1) });
+  }
+
+  const mod = { tokens: 1, price: 1, promo: 1 };
+  for (const m of run.mods) mod[m.kind] *= m.mult;
+  run.mod = mod;
 }
 
 function end(run: Run, ending: Ending): void {
