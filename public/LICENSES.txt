@@ -1,5 +1,11 @@
 B2B SaaS 0.1.0 — third-party licences
 
+Music — CC0 (public domain), OpenGameArt.org:
+  "Chiploop" by iamoneabe — https://opengameart.org/content/chiploop
+  "forgotten path" by johndekale — https://opengameart.org/content/forgotten-path
+  "Bossa Nova" by Joth — https://opengameart.org/content/bossa-nova
+  "Chill lofi inspired [loop edit]" by omfgdude, loop by qubodup — https://opengameart.org/content/chill-lofi-inspired-loop-edit
+Pictures of the founder, the laptops and the buildings were generated for Yes-Driven Development by the same author.
 
 ========================================================================
 Phaser 4.2.1 — https://github.com/phaserjs/phaser

@@ -74,15 +74,15 @@ files: SCOPE.md
 ## Phase 9 — Polish
 files:
 - [x] juice on the core actions, sound and motion on each — check: manual
-- [ ] first 60 seconds: a newcomer starts playing without explanations — check: user
+- [ ] first 60 seconds: a newcomer starts playing without explanations — check: user SKIP: пользователь не проверял на новичке и решил публиковать: «причешем потом»
 - [x] performance budgets hold at the worst moment — check: manual
-- [ ] user decided: the polish is good enough — check: user
+- [x] user decided: the polish is good enough — check: user
 
 ## Phase 10 — Release
 files:
 - [ ] platform requirements research — check: ls .studioigor/research/release-*.md
-- [ ] no stubs, debug, cheat keys, console.log — check: manual
-- [ ] soak session with no leaks or degradation; saves compatible — check: manual
-- [ ] end credits/CREDITS built from the license registry — check: manual
-- [ ] release builds made for each platform — check: manual
+- [x] no stubs, debug, cheat keys, console.log — check: manual
+- [x] soak session with no leaks or degradation; saves compatible — check: manual
+- [x] end credits/CREDITS built from the license registry — check: manual
+- [x] release builds made for each platform — check: manual
 - [ ] user decided whether and where to publish — check: user

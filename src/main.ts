@@ -137,7 +137,8 @@ async function play(): Promise<void> {
   const { idea, boost } = await mixIdea(term, args.seed, meta);
   const run = createRun(args.seed, idea, meta.lessons, traitLevels(meta, boost));
   const scene = new GameScene(run, rng, paper, {
-    beforeStep: args.bot ? (r) => playBot(r) : undefined,
+    // the bot is a tool of the gyms and captures: the release has no code path to it
+    beforeStep: __TOOLS__ && args.bot ? (r) => playBot(r) : undefined,
     onEnd: (r: Run) => {
       // the last frame of the startup stays on the sheet for a moment, then the terminal takes over
       window.setTimeout(() => {

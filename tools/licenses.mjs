@@ -9,7 +9,14 @@ const PARTS = [
 ];
 
 /** Assets that are not npm packages: one line each, kept in step with .studioigor/ASSETS.md. */
-const EXTRA = [];
+const EXTRA = [
+  'Music — CC0 (public domain), OpenGameArt.org:',
+  '  "Chiploop" by iamoneabe — https://opengameart.org/content/chiploop',
+  '  "forgotten path" by johndekale — https://opengameart.org/content/forgotten-path',
+  '  "Bossa Nova" by Joth — https://opengameart.org/content/bossa-nova',
+  '  "Chill lofi inspired [loop edit]" by omfgdude, loop by qubodup — https://opengameart.org/content/chill-lofi-inspired-loop-edit',
+  'Pictures of the founder, the laptops and the buildings were generated for Yes-Driven Development by the same author.',
+];
 
 const game = JSON.parse(fs.readFileSync('package.json', 'utf8'));
 let out = `B2B SaaS ${game.version} — third-party licences\n\n`;
