@@ -40,16 +40,16 @@ files: ENV.md
 - [x] research of the best engine setup done — check: test -s .studioigor/research/environment.md
 - [ ] full setup installed: engine, CLI, plugin/skills, MCP, tests, linter, export — check: python3 {skill}/scripts/envcheck.py --engine {engine} SKIP: Windows: envcheck требует brew и ищет кэш Playwright по пути macOS; фактически всё установлено — studio.py verify прошёл
 - [ ] editor MCP connected: `claude mcp list` ✔ and a real tool call succeeded — check: manual SKIP: у веб-стека нет редактора; Phaser Editor и Game Agent требуют входа в аккаунт; кадры снимает tools/capture.mjs
-- [ ] hello project: TEST and CAPTURE pass (studio.py verify) — check: grep -q "^VERIFIED: yes" .studioigor/ENV.md
+- [x] hello project: TEST and CAPTURE pass (studio.py verify) — check: grep -q "^VERIFIED: yes" .studioigor/ENV.md
 - [x] user saw the project running on their machine — check: user PROXY 2026-11-14
 
 ## Phase 5 — Assets and look-dev
 files: ASSETS.md
-- [ ] asset and pipeline research done — check: test -s .studioigor/research/assets.md
-- [ ] strategy by category agreed — check: user
-- [ ] look-dev scene built per the art bible and captured — check: ls .studioigor/captures/lookdev/*.png
-- [ ] user approved the look-dev: "this is how the game will look" — check: user
-- [ ] everything third-party is in the license registry — check: manual
+- [x] asset and pipeline research done — check: test -s .studioigor/research/assets.md
+- [x] strategy by category agreed — check: user PROXY 2026-11-14
+- [x] look-dev scene built per the art bible and captured — check: ls .studioigor/captures/lookdev/*.png
+- [x] user approved the look-dev: "this is how the game will look" — check: user PROXY 2026-11-14
+- [x] everything third-party is in the license registry — check: manual
 
 ## Phase 6 — Mechanics
 files:

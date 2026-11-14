@@ -24,7 +24,7 @@ interface Square {
 
 export const CORAL = 0xd97757;
 
-/** Claude's squares: a pooled burst that flies along an arc into a target and changes colour on the way in. */
+/** Squares in flight: a pooled burst that flies along an arc into a target; work is coral, money is green. */
 export class Squares {
   private readonly pool: Square[] = [];
   private readonly rng: Rng;
@@ -38,7 +38,7 @@ export class Squares {
   }
 
   /** `arc` — how far the path bows out, px; `dur` — flight time range, s. */
-  fly(from: Rect, to: Rect, count: number, landColor: number, arc: number, dur: readonly [number, number]): void {
+  fly(from: Rect, to: Rect, count: number, landColor: number, arc: number, dur: readonly [number, number], startColor: number = CORAL): void {
     for (let i = 0; i < count; i++) {
       const s = this.pool.find((p) => !p.live);
       if (!s) return;
@@ -53,7 +53,7 @@ export class Squares {
       s.dur = this.rng.range(dur[0], dur[1]);
       s.landColor = landColor;
       const size = this.rng.int(10, 16);
-      s.rect.setPosition(s.x0, s.y0).setSize(size, size).setFillStyle(CORAL).setScale(1).setVisible(true);
+      s.rect.setPosition(s.x0, s.y0).setSize(size, size).setFillStyle(startColor).setScale(1).setVisible(true);
     }
   }
 

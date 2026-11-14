@@ -1,0 +1,432 @@
+/* The paper sheet: everything the game says in text. Laid out in 1920×1080 px inside .ui1080. */
+.bl,
+.bl-over {
+  --dim: #87867f;
+  position: absolute;
+  inset: 0;
+  color: var(--ink);
+  font: 400 22px/1.45 var(--serif);
+  /* digits of one width: a number that changes every frame must not move what stands next to it */
+  font-variant-numeric: tabular-nums;
+}
+.bl {
+  background-color: var(--paper);
+  /* the faint dot grid of drafting paper */
+  background-image: radial-gradient(#d6d2c4 1.3px, transparent 1.4px);
+  background-size: 32px 32px;
+}
+
+/* money: the biggest text on the screen; squares fly over it */
+.bl-money {
+  position: absolute;
+  left: 180px;
+  width: 980px;
+  top: 26px;
+  text-align: center;
+  line-height: 1;
+}
+.bl-money b {
+  display: inline-block;
+  font-size: 112px;
+  font-weight: 600;
+  color: var(--money);
+  letter-spacing: -0.02em;
+}
+.bl-money.broke b {
+  color: var(--ink);
+}
+.bl-money b.pop {
+  animation: bl-pop 0.14s ease-out;
+}
+@keyframes bl-pop {
+  0% {
+    transform: scale(1.06, 0.95);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+.bl-money span {
+  display: block;
+  width: fit-content;
+  margin: 10px auto 0;
+  padding-top: 9px;
+  border-top: 1.5px solid var(--ink);
+  font-size: 22px;
+  white-space: nowrap;
+}
+.bl-money span b {
+  font: inherit;
+  font-weight: 600;
+  color: var(--ink);
+  letter-spacing: 0;
+}
+.bl-money span b.good {
+  color: var(--money);
+}
+.bl-money span b.hot {
+  color: var(--coral);
+}
+
+/* the sprint: a thin ruler under the money, the release is its right end */
+.bl-sprint {
+  position: absolute;
+  left: 400px;
+  top: 208px;
+  width: 540px;
+  font: 400 15px/1 var(--mono);
+  letter-spacing: 0.1em;
+  color: var(--dim);
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  white-space: nowrap;
+}
+.bl-sprint i {
+  font-style: normal;
+}
+.bl-sprint u {
+  flex: 1;
+  height: 6px;
+  border: 1.5px solid var(--ink);
+  border-radius: 2px;
+  background: var(--card);
+}
+.bl-sprint s {
+  display: block;
+  height: 100%;
+  width: 0;
+  background: var(--ink);
+}
+
+/* every node on the diagram is signed */
+.bl-tag {
+  position: absolute;
+  padding: 2px 5px 3px;
+  /* a label on a drawing: whatever runs under it is covered */
+  background: var(--paper);
+  border-bottom: 1.5px solid var(--ink);
+  font: 400 17px var(--mono);
+  white-space: nowrap;
+  transform: translateX(-50%);
+  text-align: center;
+  line-height: 1.3;
+}
+.bl-tag b {
+  font-weight: 700;
+}
+.bl-tag em {
+  font-style: normal;
+  color: var(--money);
+  font-weight: 700;
+}
+.bl-tag.hot {
+  color: var(--coral);
+  border-bottom-color: var(--coral);
+}
+.bl-tag.small {
+  border-bottom: none;
+  color: var(--dim);
+  font-size: 15px;
+}
+.bl-tag.small b {
+  color: var(--ink);
+}
+.bl-tag i {
+  display: block;
+  font-style: normal;
+  font-size: 14px;
+}
+.bl-tag i.bad {
+  color: var(--coral);
+  font-weight: 700;
+}
+/* the short name of a module, written on its left side and slanted with it */
+.bl-tag.face {
+  padding: 0;
+  border: none;
+  background: none;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  line-height: 1;
+  transform: translate(-50%, -50%) skewY(26.565deg);
+}
+.bl-tag.face.hot {
+  color: var(--coral);
+}
+/* a caption that is a button: the cell of the sheet under it too */
+.bl-tag.act {
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+/* a free cell of the product: an invisible rhombus that takes the click */
+.bl-cell {
+  position: absolute;
+  width: 192px;
+  height: 96px;
+  margin: -48px 0 0 -96px;
+  clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%);
+  pointer-events: auto;
+  cursor: pointer;
+}
+.bl-cell:hover {
+  background: rgba(217, 119, 87, 0.16);
+}
+
+/* Claude's card: a small dark terminal on the sheet */
+.bl-term {
+  position: absolute;
+  left: 24px;
+  top: 30px;
+  width: 430px;
+  box-sizing: border-box;
+  padding: 13px 18px 14px 50px;
+  border-radius: 12px;
+  border: 1px solid var(--term-rule);
+  background: var(--term-panel);
+  color: var(--term-text);
+  font: 400 15px/1.5 var(--mono);
+  white-space: pre-wrap;
+  opacity: 0;
+  transform: translateY(6px);
+  transition:
+    opacity 0.3s linear,
+    transform 0.3s ease-out;
+}
+.bl-term.on {
+  opacity: 1;
+  transform: none;
+}
+.bl-term b {
+  font-weight: 700;
+}
+.bl-term em {
+  font-style: normal;
+  color: var(--money-dark);
+  font-weight: 700;
+}
+.bl-term span {
+  color: var(--dim);
+}
+.bl-term strong {
+  color: var(--coral);
+  font-weight: 700;
+}
+/* his face: a coral square with two eyes */
+.bl-term > i {
+  position: absolute;
+  left: 17px;
+  top: 16px;
+  width: 20px;
+  height: 17px;
+  background: var(--coral);
+}
+.bl-term > i::before,
+.bl-term > i::after {
+  content: '';
+  position: absolute;
+  top: 5px;
+  width: 3px;
+  height: 5px;
+  background: var(--term-panel);
+}
+.bl-term > i::before {
+  left: 5px;
+}
+.bl-term > i::after {
+  right: 5px;
+}
+
+/* the shelf: what to build, who builds, what you check */
+.bl-shop {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 58px;
+  width: 580px;
+  box-sizing: border-box;
+  padding: 22px 30px;
+  border-left: 1.5px solid var(--ink);
+  background: var(--paper);
+  pointer-events: auto;
+  overflow: hidden;
+}
+.bl-shop h2 {
+  display: flex;
+  align-items: center;
+  height: 24px;
+  margin: 10px 0 6px;
+  font: 400 15px var(--mono);
+  letter-spacing: 0.12em;
+  color: var(--dim);
+}
+.bl-shop h2:first-child {
+  margin-top: 0;
+}
+.bl-shop h2 em {
+  margin-left: auto;
+  font-style: normal;
+  letter-spacing: 0;
+  color: var(--coral);
+}
+.bl-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0 16px;
+  margin-bottom: 7px;
+  padding: 7px 18px 9px;
+  background: var(--card);
+  border: 1.5px solid var(--rule);
+  border-radius: 12px;
+  line-height: 1.3;
+}
+.bl-item b {
+  font-size: 24px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.bl-item b i {
+  margin-left: 12px;
+  font: 400 18px var(--mono);
+  color: var(--coral);
+}
+.bl-item small {
+  grid-column: 1 / -1;
+  font-size: 17px;
+  color: var(--dim);
+}
+/* work is counted in Claude's squares */
+.bl-item .price u {
+  display: inline-block;
+  width: 13px;
+  height: 13px;
+  margin-right: 9px;
+  background: var(--coral);
+}
+.bl-item .price {
+  white-space: nowrap;
+  font: 700 19px/1.6 var(--mono);
+  color: var(--dim);
+  text-align: right;
+}
+.bl-item.can {
+  border-color: var(--ink);
+  cursor: pointer;
+}
+.bl-item.can .price {
+  color: var(--ink);
+}
+.bl-item.can .price.cash {
+  color: var(--money);
+}
+.bl-item.can:hover {
+  background: #fff;
+}
+/* chosen: this is what the next free cell will get */
+.bl-item.on {
+  border-color: var(--coral);
+  outline: 1.5px solid var(--coral);
+}
+.bl-item.off {
+  opacity: 0.5;
+}
+.bl-item.bought {
+  animation: bl-bought 0.26s ease-out;
+}
+.bl-item.denied {
+  animation: bl-denied 0.24s ease-in-out;
+}
+@keyframes bl-bought {
+  0% {
+    transform: scale(1.035);
+    filter: brightness(1.25);
+  }
+  100% {
+    transform: scale(1);
+    filter: none;
+  }
+}
+@keyframes bl-denied {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  25% {
+    transform: translateX(-7px);
+  }
+  75% {
+    transform: translateX(7px);
+  }
+}
+/* whose keys these are */
+.bl-who {
+  margin: 8px 0 4px;
+  font: 400 15px var(--mono);
+  color: var(--dim);
+}
+.bl-who b {
+  color: var(--ink);
+  font-weight: 700;
+}
+/* the four lanes of work: one line of small keys */
+.bl-lanes {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  margin-bottom: 7px;
+}
+.bl-lanes span {
+  padding: 5px 0 6px;
+  border: 1.5px solid var(--rule);
+  border-radius: 8px;
+  background: var(--card);
+  font: 400 15px var(--mono);
+  text-align: center;
+  color: var(--dim);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.bl-lanes span:hover {
+  border-color: var(--ink);
+  color: var(--ink);
+}
+.bl-lanes span.on {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: var(--paper);
+  font-weight: 700;
+}
+
+.bl-news {
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 58px;
+  box-sizing: border-box;
+  padding: 0 32px;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  border-top: 1.5px solid var(--ink);
+  background: var(--paper);
+  font-size: 21px;
+  white-space: nowrap;
+}
+.bl-news span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.bl-news i,
+.bl-news em {
+  font: 400 16px var(--mono);
+  font-style: normal;
+  color: var(--dim);
+}
+.bl-news i {
+  letter-spacing: 0.12em;
+}

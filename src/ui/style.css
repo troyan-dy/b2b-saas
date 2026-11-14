@@ -73,17 +73,15 @@ body {
   z-index: 1;
   pointer-events: none;
 }
-/* the canvas: blueprint lines, nodes, squares */
+/* the canvas: blueprint lines, nodes, squares; clicks pass through it to the HTML */
 #game {
   z-index: 2;
+  pointer-events: none;
 }
-/* above the canvas: money, the side panel, terminal cards, dialogs */
+/* above the canvas: captions, terminal cards, dialogs; only what asks for clicks takes them */
 #top {
   z-index: 3;
   pointer-events: none;
-}
-#top .ui1080 > * {
-  pointer-events: auto;
 }
 
 .hud-count {

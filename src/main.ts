@@ -11,7 +11,9 @@ import './ui/style.css';
 import { readArgs } from './core/args';
 import { installMetrics } from './core/metrics';
 import { createRng } from './core/rng';
+import { LookdevScene } from './gyms/lookdev/LookdevScene';
 import { createHud } from './ui/hud';
+import { createPaper } from './ui/paper';
 import { mountUiScale } from './ui/scale';
 import { HelloScene } from './view/HelloScene';
 
@@ -35,9 +37,10 @@ stage.append(top);
 mountUiScale(stage, ui);
 mountUiScale(stage, top);
 
-// ?gym=hello — environment check; the game itself arrives with the first mechanics
+// ?gym=hello — environment check · ?gym=lookdev — the key frame; the game itself arrives with the first mechanics
 function pickScene(): Phaser.Scene {
-  return new HelloScene(rng, createHud(over));
+  if (__TOOLS__ && args.gym === 'hello') return new HelloScene(rng, createHud(over));
+  return new LookdevScene(rng, createPaper(under, over));
 }
 
 // text needs the web fonts before the first frame
