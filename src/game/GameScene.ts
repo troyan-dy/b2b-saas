@@ -486,15 +486,17 @@ export class GameScene extends Phaser.Scene {
     const free = this.picked ? freeCells(run) : [];
     const slots: SlotOnSheet[] = free.map((c) => ({ i: c.i, j: c.j, hot: this.picked !== null && friendsAt(run, this.picked, c.i, c.j) > 0 }));
     board.sync(blocks, slots);
-    const cells = free.map((c) => {
+    // a player who has not clicked yet does not know that things are clicked: what waits for a click breathes
+    const novice = this.hands < 3;
+    const cells: { id: string; x: number; y: number; pulse?: boolean }[] = free.map((c) => {
       const [x, y] = board.onScreen(...board.cell(c.i, c.j));
-      return { id: `${c.i},${c.j}`, x, y };
+      return { id: `${c.i},${c.j}`, x, y, pulse: run.blocks.length < 2 };
     });
     const site = run.blocks.find((b) => !b.built);
     if (!this.picked && site) {
       // the site itself takes clicks: the founder finishes the work by hand
       const [x, y] = board.onScreen(...board.top(site));
-      cells.push({ id: 'site', x, y });
+      cells.push({ id: 'site', x, y, pulse: novice && run.energy >= 1 });
     }
     this.paper.setCells(cells);
 
@@ -509,7 +511,17 @@ export class GameScene extends Phaser.Scene {
         // how much of the site is done: a number above it
         const [tx, ty] = board.onScreen(...board.top(b));
         keep.add(`b:n${b.kind}`);
-        this.paper.tag(`b:n${b.kind}`, tx, ty - 64 * z, `<b>${b.done}/${b.need}</b>`, 'small hot');
+        // the first site of the run says in words that it can be clicked
+        const call = novice && b === blocks.find((x) => !x.built) ? '<i>кликай по блоку: помогай руками</i>' : '';
+        this.paper.tag(`b:n${b.kind}`, tx, ty - (call ? 82 : 64) * z, `<b>${b.done}/${b.need}</b>${call}`, 'small hot');
+      }
+    }
+    // the very first placement: the free cell says «click here»
+    if (this.picked && run.blocks.length < 2) {
+      for (const c of free.slice(0, 1)) {
+        const [x, y] = board.onScreen(...board.cell(c.i, c.j));
+        keep.add('b:click');
+        this.paper.tag('b:click', x, y - 12, 'кликни клетку', 'small hot');
       }
     }
     for (const s of slots) {
@@ -625,7 +637,8 @@ export class GameScene extends Phaser.Scene {
     const run = this.run;
     const has = (kind: string): boolean => run.blocks.some((b) => b.kind === kind);
     const pay = run.blocks.find((b) => b.kind === 'pay');
-    if (run.blocks.length === 0) return 'что делать: выбери справа <b>«Обёртку над Клодом»</b>, потом клетку на чертеже';
+    if (run.blocks.length === 0) return this.picked ? 'что делать: теперь <b>кликни клетку</b> на чертеже — блок встанет туда' : 'что делать: <b>кликни</b> справа <b>«Обёртку над Клодом»</b>, потом клетку на чертеже';
+    if (run.blocks.length === 1 && !run.blocks[0].built && this.hands < 3) return 'что делать: <b>кликай по блоку</b> на чертеже (или жми Enter) — помогай Клоду строить';
     if (!has('landing')) return 'что делать: поставь <b>«Лендинг»</b> — без него клиенты не найдут продукт';
     if (!pay) return run.clients.length > 0 ? '<strong>клиенты не платят</strong> — поставь <b>«Приём оплаты»</b>: выбери его справа' : 'что делать: поставь <b>«Приём оплаты»</b> — без него клиенты будут пользоваться бесплатно';
     if (!isLive(run, 'pay')) {
@@ -702,6 +715,8 @@ export class GameScene extends Phaser.Scene {
       note: BLOCK_BY_ID[kind].note,
       price: `<u></u>${workNeed(run, kind)}`,
       state: this.picked === kind ? 'on' : full ? 'off' : 'can',
+      // nothing is built and nothing is picked: the first card of the shelf asks to be clicked
+      pulse: run.blocks.length === 0 && this.picked === null,
     }));
     // what clients are known to ask for goes to the top of the shelf
     items.sort((a, b) => Number(b.mark !== '') - Number(a.mark !== ''));

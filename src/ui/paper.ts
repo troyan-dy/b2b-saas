@@ -10,6 +10,8 @@ export interface ShelfItem {
   /** the price is money (green), not work */
   cash?: boolean;
   state: 'can' | 'poor' | 'off' | 'on';
+  /** the card breathes: «click me» for a player who does not know yet that things are clicked */
+  pulse?: boolean;
 }
 
 /** A row of small keys: the lanes of an agent, the founder's check, the hiring buttons. */
@@ -51,7 +53,7 @@ export interface Paper {
   /** drops every caption whose id starts with `prefix` and is not in `keep` */
   pruneTags(prefix: string, keep: ReadonlySet<string>): void;
   /** clickable free cells of the product */
-  setCells(cells: readonly { id: string; x: number; y: number }[]): void;
+  setCells(cells: readonly { id: string; x: number; y: number; pulse?: boolean }[]): void;
   /** how much the sheet is zoomed: captions on the modules and the cells follow it */
   setZoom(z: number): void;
   /** Claude's card: lines of HTML, or null to hide it */
@@ -168,7 +170,7 @@ export function createPaper(under: HTMLElement, over: HTMLElement): Paper {
         if (s.scroll) html += `<div class="bl-scroll" style="max-height:${s.scroll}px">`;
         for (const it of s.items ?? []) {
           html +=
-            `<div class="bl-item ${it.state === 'poor' ? '' : it.state === 'on' ? 'can on' : it.state}" data-s="${s.id}" data-i="${it.id}">` +
+            `<div class="bl-item ${it.state === 'poor' ? '' : it.state === 'on' ? 'can on' : it.state}${it.pulse ? ' pulse' : ''}" data-s="${s.id}" data-i="${it.id}">` +
             `<b>${it.title}${it.mark ? `<i>${it.mark}</i>` : ''}</b>` +
             `<span class="price${it.cash ? ' cash' : ''}">${it.price}</span>` +
             `<small>${it.note}</small></div>`;
@@ -241,7 +243,7 @@ export function createPaper(under: HTMLElement, over: HTMLElement): Paper {
       if (sig === cellSig) return;
       cellSig = sig;
       cellLayer.innerHTML = cells
-        .map((c) => `<div class="bl-cell" data-c="${c.id}" style="left:${Math.round(c.x)}px;top:${Math.round(c.y)}px"></div>`)
+        .map((c) => `<div class="bl-cell${c.pulse ? ' pulse' : ''}" data-c="${c.id}" style="left:${Math.round(c.x)}px;top:${Math.round(c.y)}px"></div>`)
         .join('');
     },
     setZoom(z) {

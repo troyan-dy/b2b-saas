@@ -62,7 +62,7 @@ files:
 - [x] game-ness checklist passed for the vertical slice (references/production.md) — check: manual
 - [x] post-slice boost ideas (synergies, new mechanics) shown and decided by the user — check: user PROXY 2026-11-14
 - [x] vertical slice with real assets, sound and story delivery — check: manual
-- [x] user played through the vertical slice, it's fun; verdict recorded — check: user PROXY 2026-11-14
+- [x] user played through the vertical slice, it's fun; verdict recorded — check: user
 
 ## Phase 8 — Content
 files: SCOPE.md
