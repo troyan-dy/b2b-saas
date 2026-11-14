@@ -87,6 +87,8 @@ export interface Block {
   level: number;
   /** a rework is being built on top of the shipped block; `done` and `need` count its work */
   up: boolean;
+  /** the last square of work was put in by the founder's own hands */
+  hand: boolean;
 }
 
 export interface Client {
@@ -133,7 +135,13 @@ export type RunEvent =
   | { type: 'release'; report: Report }
   | { type: 'client'; id: number }
   /** `closed` — nothing was wrong with the product: the client itself is no more */
-  | { type: 'left'; id: number; name: string; reason: string; closed?: boolean }
+  | { type: 'left'; id: number; name: string; reason: string; closed?: boolean; demo?: boolean }
+  /** the demo day: something shipped and people came to look — or nothing did, and `name` walked out */
+  | { type: 'demo'; ok: boolean; name: string }
+  /** a promised block finished by hand in the last sprint of its term */
+  | { type: 'hero'; id: number }
+  /** the founder asked the buyer for the whole valuation */
+  | { type: 'haggle'; ok: boolean; price: number }
   | { type: 'reveal'; kind: string }
   /** a happy client asks to improve a block: it waits for version `level` */
   | { type: 'rework'; id: number; kind: string; level: number }
@@ -192,7 +200,6 @@ export interface Run {
   /** what brought it down: the founder's own debt or the model supplier's outage */
   downWhy: 'debt' | 'supplier' | null;
   offer: number | null;
-  offersMade: number;
   /** a client on the line, asking about a block that is not there; it takes its place when answered */
   call: Client | null;
   /** the money is gone and the bank offers this much for the flat; the clock waits for the answer */
@@ -225,6 +232,9 @@ export interface Run {
     links: number;
     /** reworks shipped on clients' requests */
     reworks: number;
+    heroes: number;
+    /** what the company was valued at by the last release it was up for */
+    value: number;
   };
   nextId: number;
   /** agents are numbered in the order they are hired */
@@ -299,7 +309,6 @@ export function createRun(seed: number, idea: Idea, perks: readonly string[] = [
     down: false,
     downWhy: null,
     offer: null,
-    offersMade: 0,
     call: null,
     lastChance: null,
     mortgaged: false,
@@ -309,7 +318,7 @@ export function createRun(seed: number, idea: Idea, perks: readonly string[] = [
     events: [],
     over: null,
     lastReport: null,
-    stats: { clients: 0, left: 0, downs: 0, peakMrr: 0, shipped: 0, corp: 0, soldFor: 0, tokens: 0, firstClientAt: 0, profitAt: 0, promises: 0, kept: 0, broken: 0, links: 0, reworks: 0 },
+    stats: { clients: 0, left: 0, downs: 0, peakMrr: 0, shipped: 0, corp: 0, soldFor: 0, tokens: 0, firstClientAt: 0, profitAt: 0, promises: 0, kept: 0, broken: 0, links: 0, reworks: 0, heroes: 0, value: 0 },
     nextId: 1,
     nextAgent: 2,
     live: new Set(),
@@ -319,7 +328,7 @@ export function createRun(seed: number, idea: Idea, perks: readonly string[] = [
   };
   // what the founder learned in earlier startups
   if (perks.includes('template')) {
-    run.blocks.push({ kind: 'core', i: 0, j: 0, done: workNeed(run, 'core'), need: workNeed(run, 'core'), built: true, live: true, level: 1, up: false });
+    run.blocks.push({ kind: 'core', i: 0, j: 0, done: workNeed(run, 'core'), need: workNeed(run, 'core'), built: true, live: true, level: 1, up: false, hand: false });
   }
   if (perks.includes('posts')) run.leads = 1;
   if (perks.includes('buyers')) run.known.push(run.corpAsks[0]);
@@ -530,7 +539,7 @@ export function place(run: Run, kind: string, i: number, j: number): boolean {
   if (run.over || !shelf(run).includes(kind)) return false;
   if (sites(run).length >= TUNING.sites_max) return false;
   if (!freeCells(run).some((c) => c.i === i && c.j === j)) return false;
-  run.blocks.push({ kind, i, j, done: 0, need: workNeed(run, kind), built: false, live: false, level: 1, up: false });
+  run.blocks.push({ kind, i, j, done: 0, need: workNeed(run, kind), built: false, live: false, level: 1, up: false, hand: false });
   run.events.push({ type: 'placed', kind, i, j });
   return true;
 }
@@ -587,7 +596,7 @@ export function crunch(run: Run, lane: Lane = 'build'): boolean {
       const site = run.blocks.find(isSite)!;
       run.debt += TUNING.crunch.debt;
       run.events.push({ type: 'work', agent: 0, lane, i: site.i, j: site.j });
-      addWork(run, site);
+      addWork(run, site, true);
       break;
     }
     case 'fix':
@@ -627,7 +636,8 @@ export function unknownAsks(run: Run): string[] {
 
 /** how much of a lead one square of promotion is */
 export function leadsPerWork(run: Run): number {
-  return (run.idea.tech.hype * run.idea.form.hype * run.idea.aud.hype * run.eff.promo * run.mod.promo) / TUNING.promo_work_per_lead;
+  const trust = 1 + TUNING.logos.promo * logos(run);
+  return (run.idea.tech.hype * run.idea.form.hype * run.idea.aud.hype * run.eff.promo * run.mod.promo * trust) / TUNING.promo_work_per_lead;
 }
 
 /** One square of research: enough of them and the market names one more block it wants. */
@@ -642,21 +652,64 @@ function interview(run: Run): void {
   }
 }
 
-function addWork(run: Run, site: Block): void {
+function addWork(run: Run, site: Block, hand = false): void {
   site.done++;
+  site.hand = hand;
   if (site.done >= site.need) {
     site.built = true;
     run.events.push({ type: 'built', kind: site.kind, i: site.i, j: site.j });
   }
 }
 
-export function answerOffer(run: Run, accept: boolean): void {
-  if (run.offer === null) return;
-  if (accept) {
-    run.stats.soldFor = run.offer;
-    end(run, 'sold');
-  }
+export type OfferAnswer = 'sell' | 'haggle' | 'no';
+
+/**
+ * The buyer is on the line with a bid below the valuation. Sell at the bid, refuse — or ask for the
+ * whole valuation: the cleaner the code, the likelier the buyer agrees; if not, he hangs up.
+ */
+export function answerOffer(run: Run, answer: OfferAnswer): void {
+  if (run.offer === null || run.over) return;
+  const bid = run.offer;
   run.offer = null;
+  if (answer === 'no') return;
+  if (answer === 'haggle') {
+    const ok = run.rng.next() < haggleChance(run);
+    const price = ok ? valuation(run) : bid;
+    run.events.push({ type: 'haggle', ok, price });
+    if (!ok) return;
+    run.stats.soldFor = price;
+  } else run.stats.soldFor = bid;
+  end(run, 'sold');
+}
+
+/** what a dollar of subscriptions is worth to a buyer: links and reworks raise it, debt lowers it */
+export function valueMult(run: Run): number {
+  const V = TUNING.valuation;
+  let levels = 0;
+  for (const b of run.blocks) if (b.live) levels += b.level - 1;
+  return Math.min(V.max, Math.max(V.min, V.base + V.per_link * run.linkCount + V.per_level * levels - V.per_debt * run.debt));
+}
+
+/** The company's price tag: the goal of the third stage. */
+export function valuation(run: Run): number {
+  return Math.round((mrr(run) * valueMult(run)) / 100) * 100;
+}
+
+/** the chance the buyer pays the whole valuation when asked */
+export function haggleChance(run: Run): number {
+  const V = TUNING.valuation;
+  return Math.max(V.haggle_min, V.haggle_clean - (run.debt / TUNING.debt.down_at) * V.haggle_debt);
+}
+
+/** the release of this sprint is watched by everyone */
+export function isDemo(run: Run, sprint: number = run.sprint): boolean {
+  return run.stage >= TUNING.demo.from_stage && sprint % TUNING.demo.every === 0;
+}
+
+/** logos of happy big clients on the landing page: each one makes promotion work better */
+export function logos(run: Run): number {
+  if (!isLive(run, 'landing')) return 0;
+  return Math.min(TUNING.logos.max, run.clients.filter((c) => c.happy && CLIENT_RULE[c.type].asks === 'corp').length);
 }
 
 /**
@@ -887,6 +940,13 @@ function release(run: Run): void {
         c.promised = false;
         run.stats.kept++;
         run.events.push({ type: 'kept', id: c.id });
+        // finished by the founder's own hands in the last sprint of the term: the client takes it for dedication
+        if (c.patience === 1 && run.blocks.find((b) => b.kind === c.want)?.hand) {
+          c.deal = TUNING.hero.deal;
+          run.leads += TUNING.hero.leads;
+          run.stats.heroes++;
+          run.events.push({ type: 'hero', id: c.id });
+        }
       }
       c.happy = true;
       stay.push(c);
@@ -911,6 +971,22 @@ function release(run: Run): void {
     run.events.push({ type: 'left', id: c.id, name: c.name, reason });
   }
   run.clients = stay;
+
+  // the demo day: everyone watches this release. Something shipped — people come to look; nothing — one walks out
+  if (isDemo(run) && run.clients.length > 0) {
+    if (report.shipped.length > 0) {
+      run.leads += TUNING.demo.leads;
+      run.events.push({ type: 'demo', ok: true, name: report.shipped[0] });
+    } else {
+      const c = run.clients.find((x) => !x.happy) ?? run.rng.pick(run.clients);
+      run.clients = run.clients.filter((x) => x !== c);
+      report.left++;
+      report.reasons.push('');
+      run.stats.left++;
+      run.events.push({ type: 'demo', ok: false, name: c.name });
+      run.events.push({ type: 'left', id: c.id, name: c.name, reason: '', demo: true });
+    }
+  }
 
   // a happy client finds something to improve: it says which block, and waits for the new version
   const R = TUNING.rework;
@@ -969,11 +1045,12 @@ function release(run: Run): void {
     run.events.push({ type: 'stage', stage: 3 });
   }
 
+  // the buyer calls on schedule, with a bid below what the company is worth
   run.offer = null;
-  const next = TUNING.offers[run.offersMade];
-  if (next && income >= next.mrr) {
-    run.offer = Math.round((income * next.mult) / 100) * 100;
-    run.offersMade++;
+  const V = TUNING.valuation;
+  if (income > 0) run.stats.value = valuation(run);
+  if (run.stage >= 3 && run.sprint % V.every === 0 && income > 0 && run.sprint < TUNING.last_sprint) {
+    run.offer = Math.round((valuation(run) * V.first_bid) / 100) * 100;
     run.events.push({ type: 'offer', price: run.offer });
   }
 

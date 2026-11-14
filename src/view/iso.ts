@@ -159,6 +159,21 @@ export function drawDebt(g: Phaser.GameObjects.Graphics, cx: number, cy: number,
   }
 }
 
+/** Logos of big clients on a module: small bright squares in a row under the top edge of its right side. */
+export function drawLogos(g: Phaser.GameObjects.Graphics, cx: number, cy: number, height: number, count: number): void {
+  const colors = [PALETTE.blue, PALETTE.coral, PALETTE.sage, PALETTE.sand];
+  g.lineStyle(1.5, PALETTE.ink, 1);
+  for (let k = 0; k < count; k++) {
+    // the right side runs from the south corner up to the east one
+    const f = 0.14 + k * 0.2;
+    const x = cx + (f * BOX_W) / 2;
+    const y = cy + BOX_H / 2 - (f * BOX_H) / 2 - height + 5;
+    g.fillStyle(colors[k % colors.length], 1);
+    path(g, [[x, y], [x + 13, y - 6.5], [x + 13, y + 6.5], [x, y + 13]], true);
+    g.fillPath();
+    g.strokePath();
+  }
+}
 /** middle of the left side of a module: its short name is written there, slanted with the edge */
 export function leftFace(cx: number, cy: number, height: number): Pt {
   return [cx - BOX_W / 4, cy + BOX_H / 4 - height / 2];

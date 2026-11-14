@@ -15,6 +15,7 @@ import {
   LANE_ACC,
   LANE_NAME,
   LEFT_CLOSED,
+  LEFT_DEMO,
   LEFT_KNOWN,
   LEFT_UNKNOWN,
   NEWS,
@@ -41,15 +42,18 @@ import {
   flows,
   freeCells,
   friendsAt,
+  haggleChance,
   handy,
   hire,
   honestMult,
   IDEAS,
   incomePerS,
+  isDemo,
   isLive,
   isSite,
   LANES,
   links,
+  logos,
   mortgageSeconds,
   netPerS,
   pitch,
@@ -69,6 +73,8 @@ import {
   TUNING,
   unknownAsks,
   upgrade,
+  valuation,
+  valueMult,
   workNeed,
   type ClientType,
   type Lane,
@@ -316,7 +322,7 @@ export class GameScene extends Phaser.Scene {
     // one card at a time, the most urgent first: the bank, a client on the line, the buyer
     if (this.run.lastChance !== null) answerLastChance(this.run, k === 0);
     else if (this.run.call) answerCall(this.run, k === 1);
-    else answerOffer(this.run, k === 0);
+    else answerOffer(this.run, k === 0 ? 'sell' : k === 1 ? 'haggle' : 'no');
     this.paper.call(null);
   }
 
@@ -344,7 +350,9 @@ export class GameScene extends Phaser.Scene {
     const digit = /^Digit([1-9])$/.exec(e.code);
     if (!digit) return;
     if (this.run.offer !== null || this.run.call || this.run.lastChance !== null) {
-      if (digit[1] === '1' || digit[1] === '2') this.onAnswer(Number(digit[1]) - 1);
+      // the buyer's card has a third answer: to haggle
+      const answers = this.run.lastChance === null && !this.run.call ? 3 : 2;
+      if (Number(digit[1]) <= answers) this.onAnswer(Number(digit[1]) - 1);
       return;
     }
     const kind = shelf(this.run)[Number(digit[1]) - 1];
@@ -460,7 +468,7 @@ export class GameScene extends Phaser.Scene {
       }
       case 'left': {
         const [x, y] = this.board.onScreen(...this.nodePos(`c${e.id}`));
-        const pool = e.closed ? LEFT_CLOSED : e.reason ? LEFT_KNOWN : LEFT_UNKNOWN;
+        const pool = e.demo ? LEFT_DEMO : e.closed ? LEFT_CLOSED : e.reason ? LEFT_KNOWN : LEFT_UNKNOWN;
         this.paper.pop(x, y - 150 * this.board.zoom, pool[e.id % pool.length].replace('%s', BLOCK_BY_ID[e.reason]?.short ?? ''), 'bad');
         this.board.dropNode(`c${e.id}`);
         this.board.dropNode(`c${e.id}b`);
@@ -541,6 +549,28 @@ export class GameScene extends Phaser.Scene {
         playSound(e.good ? 'quip' : 'waste');
         logEvent(`news:${e.id}`);
         break;
+      case 'demo':
+        this.news((e.ok ? NEWS_EVENT.demoOk : NEWS_EVENT.demoFail).replace('%s', e.ok ? (BLOCK_BY_ID[e.name]?.short ?? e.name) : e.name));
+        this.newsHold = 16;
+        this.newsAt = 16;
+        playSound(e.ok ? 'finale' : 'waste');
+        logEvent(`demo:${e.ok ? 'ok' : 'fail'}`);
+        break;
+      case 'hero': {
+        const [x, y] = this.board.onScreen(...this.nodePos(`c${e.id}`));
+        this.paper.pop(x, y - 190 * this.board.zoom, 'героический релиз: платит ×1,5', 'good');
+        this.news(NEWS_EVENT.hero);
+        playSound('finale');
+        logEvent('hero');
+        break;
+      }
+      case 'haggle':
+        if (!e.ok) {
+          this.news(NEWS_EVENT.haggleFail);
+          playSound('waste');
+        }
+        logEvent(`haggle:${e.ok ? 'ok' : 'fail'}`);
+        break;
       case 'lastchance':
         playSound('waste');
         this.cameras.main.shake(220, 0.005);
@@ -550,6 +580,8 @@ export class GameScene extends Phaser.Scene {
         logEvent(`end:${e.ending}`);
         this.ended = true;
         this.paper.call(null);
+        // nobody speaks over the ending
+        this.quotes.clear();
         if (e.ending === 'sold' || e.ending === 'profit') playSound('finale');
         else {
           playSound('waste');
@@ -573,7 +605,7 @@ export class GameScene extends Phaser.Scene {
     const blocks: BlockOnSheet[] = run.blocks.map((b) => {
       const landed = Math.min(this.landed.get(b.kind) ?? 0, b.need);
       // a block under rework stays what it is — a shipped module — with the new work lying on top of it
-      return { kind: b.kind, i: b.i, j: b.j, built: b.live || (b.built && landed >= b.need), up: b.live && b.up, done: landed, need: b.need, debt: 0 };
+      return { kind: b.kind, i: b.i, j: b.j, built: b.live || (b.built && landed >= b.need), up: b.live && b.up, done: landed, need: b.need, debt: 0, logos: b.kind === 'landing' ? logos(run) : 0 };
     });
     // debt sticks to the modules, oldest first: the picture of «it all rests on the first thing we wrote»
     let debt = Math.floor(run.debt);
@@ -667,7 +699,9 @@ export class GameScene extends Phaser.Scene {
       const coming = whole > 0 ? `<b>${whole}</b> ${plural(whole, ['клиент придёт', 'клиента придут', 'клиентов придут'])} на релизе` : `до нового клиента <b>${part}%</b>`;
       const full = run.clients.length >= places ? ' · мест нет' : '';
       const ask = unknownAsks(run).length > 0 ? `разведка: до ответа <b>${run.insight} из ${researchNeed(run)}</b>` : 'разведка: все запросы известны';
-      this.paper.tag('market', x - 12, y - 16, `<b>рынок</b> · клиентов ${run.clients.length} из ${places}<i>продвижение: ${coming}${full}</i><i>${ask}</i>`, 'small corner');
+      // big clients that are happy put their logos on the landing page: promotion works better with every one
+      const trust = logos(run) > 0 ? `<i>логотипы на лендинге: ${logos(run)} · продвижение ×${String(1 + TUNING.logos.promo * logos(run)).replace('.', ',')}</i>` : '';
+      this.paper.tag('market', x - 12, y - 16, `<b>рынок</b> · клиентов ${run.clients.length} из ${places}<i>продвижение: ${coming}${full}</i>${trust}<i>${ask}</i>`, 'small corner');
     }
     // the product is down: it is written across the product itself, with the reason
     if (run.down) {
@@ -696,10 +730,13 @@ export class GameScene extends Phaser.Scene {
         this.paper.tag(`c${c.id}`, x, y, `<b>${c.name}</b><i class="bad">не платит: продукт лежит</i>`, cls);
         continue;
       }
+      const short = BLOCK_BY_ID[c.want]?.short;
+      // on the wide sheet a caption has the width of one building: what is awaited and for how long, no verbs
+      const tight = z < 0.7;
       if (c.happy) mood = `<i>${paid} · доволен</i>`;
-      else if (c.wantLevel > 1) mood = `<i class="bad">просит доработать «${BLOCK_BY_ID[c.want]?.short}» · ${c.patience} спр.</i>`;
-      else if (c.promised) mood = `<i class="bad">обещан «${BLOCK_BY_ID[c.want]?.short}» · ${c.patience} спр.</i>`;
-      else if (run.known.includes(c.want)) mood = `<i class="bad">ждёт «${BLOCK_BY_ID[c.want]?.short}» · ${c.patience} спр.</i>`;
+      else if (c.wantLevel > 1) mood = `<i class="bad">${tight ? '' : 'просит доработать '}«${short}»${tight ? ` v${c.wantLevel}` : ''} · ${c.patience} спр.</i>`;
+      else if (c.promised) mood = `<i class="bad">обещан «${short}» · ${c.patience} спр.</i>`;
+      else if (run.known.includes(c.want)) mood = `<i class="bad">${tight ? '' : 'ждёт '}«${short}» · ${c.patience} спр.</i>`;
       else mood = `<i class="bad">ждёт молча · ${c.patience} спр.</i>`;
       // a waiting client says what it waits for; the one that pays nothing until then says that too
       this.paper.tag(`c${c.id}`, x, y, `<b>${c.name}</b>${signing(c) ? ' · <u>$0</u>' : ''}${mood}`, cls);
@@ -725,7 +762,7 @@ export class GameScene extends Phaser.Scene {
     }
     this.paper.setMoney(money(run.money), sub, run.money <= 0);
     const leftS = Math.ceil(TUNING.sprint_s - run.sprintT);
-    this.paper.setSprint(`СПРИНТ ${Math.min(run.sprint, TUNING.last_sprint)} ИЗ ${TUNING.last_sprint} · РЕЛИЗ ЧЕРЕЗ ${leftS} С`, run.sprintT / TUNING.sprint_s);
+    this.paper.setSprint(`СПРИНТ ${Math.min(run.sprint, TUNING.last_sprint)} ИЗ ${TUNING.last_sprint} · ${isDemo(run) && run.clients.length > 0 ? 'ДЕМО-ДЕНЬ' : 'РЕЛИЗ'} ЧЕРЕЗ ${leftS} С`, run.sprintT / TUNING.sprint_s);
     // the goal is always on the sheet: three frames taken at random must say what to do
     this.paper.setGoal(this.nextStep(net));
     this.paper.setLedger(this.ledger());
@@ -748,10 +785,16 @@ export class GameScene extends Phaser.Scene {
         options: callAnswers(honestMult(run), TUNING.call.sure_mult, promiseSprints(run)),
       });
     } else if (run.offer !== null) {
+      const full = valuation(run);
       this.paper.call({
         who: 'ЗВОНОК · ПОКУПАТЕЛЬ',
-        text: `Нам очень нравится ваш продукт. Предлагаем <em>${money(run.offer)}</em> за компанию. Продукт мы, правда, закроем.`,
-        options: ['Продать и написать пост об успехе', 'Отказаться: «мы только начинаем»'],
+        text: `Ваш продукт стоит <em>${money(full)}</em>, но мы видели код. Даём <em>${money(run.offer)}</em>. Продукт, правда, закроем.`,
+        // short answers: the card must not lie over half of the product
+        options: [
+          `Продать за ${money(run.offer)}`,
+          `Торговаться: всё или ничего <span>— шанс ${Math.round(haggleChance(run) * 100)}%, выше при малом техдолге</span>`,
+          'Отказаться',
+        ],
       });
     } else this.paper.call(null);
 
@@ -812,8 +855,17 @@ export class GameScene extends Phaser.Scene {
         : '<strong>продукт лежит</strong> до релиза: слишком много техдолга — клиенты не платят; поставь агента на <b>починку</b>';
     }
     if (run.stats.clients === 0) return 'жди релиза: первый клиент придёт сам, когда выйдут <b>ядро</b> и <b>лендинг</b>';
+    // the demo day: the release of this sprint is watched — it must ship something
+    if (isDemo(run) && run.clients.length > 0) {
+      const ready = run.blocks.some((b) => (b.built && !b.live) || (b.up && b.done >= b.need));
+      return ready
+        ? '<em>демо-день</em>: есть что показать — на релизе придут новые клиенты'
+        : '<strong>демо-день</strong>: дострой к релизу блок или доработку — придут 3 клиента; покажешь пустоту — один уйдёт';
+    }
     if (net < 0) return `цель: выйти в плюс — не хватает <b>${money(-net)}</b> в секунду; клиентов приводит <b>продвижение</b>, удерживает <b>разведка</b>`;
-    return `<em>в плюсе</em> · удержись до ${TUNING.last_sprint}-го спринта или расти до звонка покупателя`;
+    if (run.stage < 3) return `<em>в плюсе</em> · расти до подписок <b>${rate(TUNING.stage3_mrr / TUNING.sprint_s)}/с</b>: тогда у компании появится оценка и покупатель`;
+    // the third stage is played for the price tag of the company
+    return `оценка компании <em>${money(valuation(run))}</em> · подписки ×${Math.round(valueMult(run))}: множитель растят <b>связки</b> и <b>доработки</b>, роняет <b>техдолг</b>`;
   }
 
   /**
@@ -862,7 +914,10 @@ export class GameScene extends Phaser.Scene {
       if (tell('t:idle', ['Строить нечего, агент простаивает', 'за твои деньги. Выбери блок справа', 'или дай ему другое дело.'])) return;
     }
     if (netPerS(run) >= 0 && run.clients.length > 0) {
-      tell('t:profit', ['Мы в плюсе. Можно дожить так', `до ${TUNING.last_sprint}-го спринта, а можно расти:`, 'при больших подписках позвонит покупатель.']);
+      if (tell('t:profit', ['Мы в плюсе. Дальше — расти:', 'на третьем этапе у компании появится', 'оценка, и покупатель начнёт звонить.', 'Чем она выше к концу — тем лучше.'])) return;
+    }
+    if (run.clients.length > 0 && isDemo(run, run.sprint + 1)) {
+      tell('t:demo', ['Следующий релиз после этого —', 'демо-день: его смотрят все.', 'Выйдет блок или доработка — придут', 'три клиента. Не выйдет — один уйдёт.']);
     }
   }
 

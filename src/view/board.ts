@@ -1,7 +1,7 @@
 import type Phaser from 'phaser';
 import { BLOCK_BY_ID, type BlockGroup } from '../content/blocks';
 import { PALETTE } from '../data/palette';
-import { cellCenter, drawBox, drawDebt, drawGlyph, drawProgress, drawSite, drawSlot, leftFace, type Pt } from './iso';
+import { cellCenter, drawBox, drawDebt, drawGlyph, drawLogos, drawProgress, drawSite, drawSlot, leftFace, type Pt } from './iso';
 
 /** A block of the product as the sheet shows it. */
 export interface BlockOnSheet {
@@ -17,6 +17,8 @@ export interface BlockOnSheet {
   /** a rework is being built on top of the shipped module: done of 
 eed squares lie on it */
   up?: boolean;
+  /** logos of big clients on its side */
+  logos?: number;
 }
 
 export interface SlotOnSheet {
@@ -164,6 +166,7 @@ export class Board {
         drawGlyph(b, x, y, kind.height, kind.glyph);
         if (block.debt > 0) drawDebt(b, x, y, kind.height, block.debt);
         if (block.up) drawProgress(b, x, y, kind.height, block.done, block.need);
+        if (block.logos) drawLogos(b, x, y, kind.height, block.logos);
       } else {
         drawSite(b, x, y, kind.height);
         drawProgress(b, x, y, kind.height, block.done, block.need);

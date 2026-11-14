@@ -14,6 +14,8 @@ export interface Past {
   peakMrr: number;
   clients: number;
   soldFor: number;
+  /** what the company was valued at when it ended; records made before valuations have none */
+  value?: number;
 }
 
 export interface Meta {
@@ -115,6 +117,7 @@ export function finish(run: Run, meta: Meta): Lesson[] {
     peakMrr: run.stats.peakMrr,
     clients: run.stats.clients,
     soldFor: run.stats.soldFor,
+    value: run.stats.value,
   });
   for (const l of got) meta.lessons.push(l.id);
   return got;

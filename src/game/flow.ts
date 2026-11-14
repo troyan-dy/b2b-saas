@@ -1,5 +1,5 @@
 import { CREDITS } from '../content/credits';
-import { clock, ENDING_TITLE, endingPost, endingStats } from '../content/endings';
+import { clock, ENDING_TITLE, endingPost, endingScore, endingStats } from '../content/endings';
 import { AGAIN_SAYS } from '../content/texts';
 import { money, rate } from '../ui/format';
 import type { Terminal } from '../ui/terminal/terminal';
@@ -57,7 +57,7 @@ export async function resume(term: Terminal, meta: Meta): Promise<void> {
     term.print('');
     for (const r of meta.runs.slice(-7)) {
       const how = r.ending === 'sold' ? `продан за <em>${money(r.soldFor)}</em>` : r.ending === 'profit' ? '<em>вышел на прибыль</em>' : r.ending === 'late' ? 'время вышло' : '<strong>банкротство</strong>';
-      term.print(`${r.pitch} — ${how}, ${clock(r.lived)}`, 'small');
+      term.print(`${r.pitch} — ${how}, ${clock(r.lived)}${r.value ? ` · оценка ${money(r.value)}` : ''}`, 'small');
     }
   }
   term.print('');
@@ -126,13 +126,20 @@ export async function ending(term: Terminal, run: Run, meta: Meta, persist = tru
   term.open(`конец · ${ENDING_TITLE[run.over ?? 'broke'].toLowerCase()}`);
   for (;;) {
     term.clear();
-    term.print(ENDING_TITLE[run.over ?? 'broke'], 'mid');
-    term.print('пост основателя', 'dim small');
-    await term.type(endingPost(run), '');
+    // the result first: one big number and one line of figures — nothing to read before it
+    const [score, caption] = endingScore(run);
+    term.print(`${ENDING_TITLE[run.over ?? 'broke']} · ${pitch(run.idea)}`, 'dim');
+    term.print(score, 'big');
+    term.print(caption, 'dim small');
+    term.print(endingStats(run), 'small');
     term.print('');
-    term.print(endingStats(run), 'dim small');
-    for (const l of got) term.print(`урок: <b>${l.title}</b>. ${l.text} <em>${l.gives}</em>`, 'small');
+    // then what the founder takes into the next startup
+    for (const l of got) term.print(`урок: <b>${l.title}</b> — <em>${l.gives}</em>`, 'small');
     if (got.length === 0) term.print('новых уроков нет: всё это ты уже проходил', 'dim small');
+    term.print('');
+    // and the post itself, for those who read posts
+    term.print('пост основателя', 'dim small');
+    for (const line of endingPost(run)) term.print(line, 'dim small');
     const k = await term.ask([{ title: 'Новый стартап', note: 'тот же основатель, новая идея' }, { title: 'Резюме основателя' }]);
     if (k === 0) return;
     await resume(term, meta);

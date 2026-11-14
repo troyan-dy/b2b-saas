@@ -72,7 +72,21 @@ function mainPost(run: Run): string[] {
   }
 }
 
+/** The result of a startup in one big number and the words under it. */
+export function endingScore(run: Run): [string, string] {
+  const s = run.stats;
+  switch (run.over) {
+    case 'sold':
+      return [`<em>${money(s.soldFor)}</em>`, 'за столько компания продана'];
+    case 'profit':
+      return [`<em>${money(s.value)}</em>`, 'оценка компании на финише — побей её в следующем стартапе'];
+    case 'late':
+      return [money(s.value), 'оценка компании на финише; в плюс она так и не вышла'];
+    default:
+      return [clock(run.t), 'столько прожил стартап'];
+  }
+}
 export function endingStats(run: Run): string {
   const s = run.stats;
-  return `прожил ${clock(run.t)} · клиентов ${s.clients}, ушло ${s.left} · пик подписок ${rate(s.peakMrr / TUNING.sprint_s)}/с · блоков ${s.shipped} · падений ${s.downs}`;
+  return `прожил ${clock(run.t)} · клиентов ${s.clients}, ушло ${s.left} · пик подписок ${rate(s.peakMrr / TUNING.sprint_s)}/с · блоков ${s.shipped} · доработок ${s.reworks} · падений ${s.downs}`;
 }
