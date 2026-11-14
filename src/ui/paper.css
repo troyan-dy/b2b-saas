@@ -569,3 +569,8 @@
   border-color: var(--coral);
   color: var(--coral);
 }
+/* a caption that starts at its point instead of being centred on it */
+.bl-tag.left {
+  transform: none;
+  text-align: left;
+}

@@ -20,7 +20,7 @@ function ideaOf(k: number): Idea {
 
 const plain: Idea = { tech: IDEAS.tech[0], form: IDEAS.form[3], aud: IDEAS.aud[1] };
 
-function summary(runs: Run[]): { alive: number; profit: number; peak: number; first: number; profitAt: number; minutes: number } {
+function summary(runs: Run[]): { alive: number; profit: number; peak: number; first: number; profitAt: number; minutes: number; earliestDeath: number } {
   const n = runs.length;
   const profitRuns = runs.filter((r) => r.stats.profitAt > 0);
   return {
@@ -30,6 +30,7 @@ function summary(runs: Run[]): { alive: number; profit: number; peak: number; fi
     first: runs.reduce((s, r) => s + r.stats.firstClientAt, 0) / n / 60,
     profitAt: profitRuns.reduce((s, r) => s + r.stats.profitAt, 0) / Math.max(1, profitRuns.length) / 60,
     minutes: runs.reduce((s, r) => s + r.t, 0) / n / 60,
+    earliestDeath: Math.min(...runs.filter((r) => r.over === 'broke').map((r) => r.t / 60), 99),
   };
 }
 
@@ -45,10 +46,13 @@ describe('economy', () => {
     const runs = Array.from({ length: 24 }, (_, k) => play(100 + k, ideaOf(k), SENSIBLE));
     const s = summary(runs);
     console.log('sensible', JSON.stringify(s));
-    expect(s.first).toBeGreaterThan(1);
+    // the first client: not before the first release, not later than the fourth minute
+    expect(s.first).toBeGreaterThan(0.6);
     expect(s.first).toBeLessThan(4);
     expect(s.alive).toBeGreaterThan(0.45);
-    expect(s.alive).toBeLessThan(0.95);
+    expect(s.alive).toBeLessThan(0.97);
+    // even an unlucky startup lives long enough to be a story
+    expect(s.earliestDeath).toBeGreaterThan(4.5);
   });
 
   it('test_run_links_and_research_pay_off', () => {

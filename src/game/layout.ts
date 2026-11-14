@@ -30,18 +30,18 @@ export const MARKET: Pt = [TRUNK_X, 286];
 
 /** buildings of the clients: three columns to the right of the trunk, filled top to bottom */
 export const CLIENT_SLOTS: readonly Pt[] = [
-  [770, -230],
-  [770, -40],
-  [770, 150],
-  [770, 340],
-  [960, -230],
-  [960, -40],
-  [960, 150],
-  [960, 340],
-  [1150, -230],
-  [1150, -40],
-  [1150, 150],
-  [1150, 340],
+  [760, -230],
+  [760, -40],
+  [760, 150],
+  [760, 340],
+  [985, -230],
+  [985, -40],
+  [985, 150],
+  [985, 340],
+  [1210, -230],
+  [1210, -40],
+  [1210, 150],
+  [1210, 340],
 ];
 
 /** the screen point the camera keeps the centre of its view under: the middle of the play area, below the money */
@@ -50,8 +50,8 @@ export const VIEW_AT: Pt = [670, 640];
 /** what the camera shows at each stage: the sheet point under VIEW_AT and the zoom */
 export const STAGE_VIEW: readonly { x: number; y: number; zoom: number }[] = [
   { x: -80, y: 150, zoom: 1 },
-  { x: 115, y: 105, zoom: 0.84 },
-  { x: 305, y: 85, zoom: 0.68 },
+  { x: 95, y: 105, zoom: 0.84 },
+  { x: 335, y: 85, zoom: 0.665 },
 ];
 
 /** where the money counter is on the screen: squares of subscriptions fly into it */

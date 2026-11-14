@@ -1,6 +1,7 @@
 import {
   burnPerS,
   canHire,
+  crunch,
   freeCells,
   friendsAt,
   hire,
@@ -12,6 +13,7 @@ import {
   setReview,
   shelf,
   sites,
+  TUNING,
   type Lane,
   type Run,
 } from '../systems/run/run';
@@ -54,9 +56,12 @@ export function playBot(run: Run, style: BotStyle = SENSIBLE): void {
     }
   }
 
+  // rested and the code is clean enough: finish a square by hand
+  if (run.energy >= TUNING.crunch.max && run.debt < 10) crunch(run);
+
   // who works: hire while the savings last a few more sprints
   const runway = netPerS(run) >= 0 ? Infinity : run.money / -netPerS(run);
-  if (run.stage >= 2 && run.agents.length < 2 + run.stage && runway > 200 + 60 * run.agents.length) {
+  if (run.stage >= 2 && run.agents.length < 2 + run.stage && runway > 280 + 60 * run.agents.length) {
     const tier = run.debt > 14 && canHire(run, 'think') ? 'think' : canHire(run, 'normal') ? 'normal' : 'fast';
     if (run.money > burnPerS(run) * 120) hire(run, tier);
   }

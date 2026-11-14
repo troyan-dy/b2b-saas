@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { BLOCK_BY_ID } from '../content/blocks';
-import { LANE_ACC, LANE_NAME, LEFT_KNOWN, LEFT_UNKNOWN, NEWS, NEWS_EVENT, releaseLines, STAGE_NAME, TIER_NAME } from '../content/texts';
+import { LANE_ACC, LANE_NAME, LEFT_KNOWN, LEFT_UNKNOWN, NEWS, NEWS_EVENT, releaseLines, TIER_NAME } from '../content/texts';
 import { logEvent, metrics } from '../core/metrics';
 import type { Rng } from '../core/rng';
 import { playSound, unlockSound } from '../core/sound';
@@ -12,6 +12,7 @@ import {
   burnPerS,
   canHire,
   clientPay,
+  crunch,
   fire,
   freeCells,
   friendsAt,
@@ -47,6 +48,8 @@ export interface GameHooks {
   /** called every simulated step, before it: a bot plays here */
   beforeStep?: (run: Run) => void;
   onEnd: (run: Run) => void;
+  /** the player drops the startup from the pause card */
+  onQuit: () => void;
 }
 
 /**
@@ -81,6 +84,10 @@ export class GameScene extends Phaser.Scene {
   private clock = 0;
   private readonly said = new Set<string>();
   private ended = false;
+  /** squares the founder has done by hand: the pitch of the click climbs with them */
+  private hands = 0;
+  /** Esc: the game stands still and asks what next */
+  private pauseCard = false;
 
   constructor(run: Run, rng: Rng, paper: Paper, hooks: GameHooks) {
     super('game');
@@ -116,7 +123,8 @@ export class GameScene extends Phaser.Scene {
       '<b>❯ Клод</b>',
       'Привет. Я твоя команда — вся.',
       'Выбери справа «Обёртку над Клодом»',
-      'и поставь её на чертёж.',
+      'и поставь её на чертёж. Клик по',
+      'стройке или Enter — помочь руками.',
     ], 600);
     this.syncStage(0);
     this.show();
@@ -163,9 +171,32 @@ export class GameScene extends Phaser.Scene {
   }
 
   private onCell(id: string): void {
+    if (id === 'site') {
+      this.byHand();
+      return;
+    }
     if (!this.picked) return;
     const [i, j] = id.split(',').map(Number);
     if (place(this.run, this.picked, i, j)) this.picked = null;
+  }
+
+  /** The founder's own square: thrown from the desk into the site. */
+  private byHand(): void {
+    unlockSound();
+    const site = this.run.blocks.find((b) => !b.built);
+    if (!site || !crunch(this.run)) {
+      playSound('waste');
+      if (site) {
+        const [x, y] = this.board.onScreen(DESK[0], DESK[1] - 200);
+        this.paper.pop(x, y, 'сил нет: подожди', 'bad');
+      }
+      return;
+    }
+    this.hands++;
+    playSound('yes', this.hands % 6);
+    const [fx, fy] = this.board.onScreen(DESK[0] - 40, DESK[1] - 130);
+    const [tx, ty] = this.board.onScreen(...this.board.top(site));
+    this.squares.fly({ x: fx - 10, y: fy - 10, w: 20, h: 20 }, { x: tx - 20, y: ty - 10, w: 40, h: 20 }, 1, PALETTE.coral, 160, [0.35, 0.45]);
   }
 
   private onKey(owner: string, key: string): void {
@@ -187,15 +218,38 @@ export class GameScene extends Phaser.Scene {
   }
 
   private onAnswer(k: number): void {
+    playSound('ui');
+    if (this.pauseCard) {
+      if (k === 1) {
+        this.hooks.onQuit();
+        return;
+      }
+      this.pauseCard = false;
+      this.paused = false;
+      return;
+    }
     answerOffer(this.run, k === 0);
     this.paper.call(null);
-    playSound('ui');
   }
 
   private onKeyDown(e: KeyboardEvent): void {
     unlockSound();
+    if (this.ended) return;
     if (e.code === 'Escape') {
-      this.picked = null;
+      // first Esc drops the picked block, the next one stops the clock
+      if (this.picked) this.picked = null;
+      else {
+        this.pauseCard = !this.pauseCard;
+        this.paused = this.pauseCard;
+      }
+      return;
+    }
+    if (this.pauseCard) {
+      if (e.code === 'Digit1' || e.code === 'Digit2') this.onAnswer(e.code === 'Digit1' ? 0 : 1);
+      return;
+    }
+    if (e.code === 'Enter' || e.code === 'NumpadEnter') {
+      if (!e.repeat) this.byHand();
       return;
     }
     const digit = /^Digit([1-9])$/.exec(e.code);
@@ -235,9 +289,9 @@ export class GameScene extends Phaser.Scene {
         const land = (): void => {
           if (block) this.landed.set(block.kind, (this.landed.get(block.kind) ?? 0) + 1);
         };
-        if (this.speed > 2 || !this.board.hasRoute(key)) land();
+        if (e.agent === 0 || this.speed > 2 || !this.board.hasRoute(key)) land();
         else this.board.flow(key, PALETTE.coral, 620, land);
-        if (this.speed <= 2) playSound('auto');
+        if (this.speed <= 2 && e.agent !== 0) playSound('auto');
         break;
       }
       case 'built': {
@@ -271,13 +325,16 @@ export class GameScene extends Phaser.Scene {
         const c = run.clients.find((x) => x.id === e.id);
         if (!c) return;
         const [x, y] = CLIENT_SLOTS[c.slot % CLIENT_SLOTS.length];
-        const img = this.place(`c${c.id}`, c.texture, x, y, c.size === 'corp' ? 150 : c.size === 'mid' ? 136 : 118, true);
+        const h = c.size === 'corp' ? 150 : c.size === 'mid' ? 136 : 118;
+        const img = this.place(`c${c.id}`, c.texture, x, y, h, true);
         this.board.route(`c${c.id}`, [
           [TRUNK_X - 80, 0],
           [TRUNK_X, 0],
           [TRUNK_X, y - 56],
-          [x - img.displayWidth / 2 - 10, y - 56],
+          // the picture is still popping in: its final width is what counts
+          [x - (img.width * (h / img.height)) / 2 - 10, y - 56],
         ]);
+        this.syncStage(1100);
         const [sx, sy] = this.board.onScreen(x, y - 150);
         this.paper.pop(sx, sy, '+ клиент', 'good');
         playSound('all');
@@ -356,12 +413,17 @@ export class GameScene extends Phaser.Scene {
     const free = this.picked ? freeCells(run) : [];
     const slots: SlotOnSheet[] = free.map((c) => ({ i: c.i, j: c.j, hot: this.picked !== null && friendsAt(run, this.picked, c.i, c.j) > 0 }));
     board.sync(blocks, slots);
-    this.paper.setCells(
-      free.map((c) => {
-        const [x, y] = board.onScreen(...board.cell(c.i, c.j));
-        return { id: `${c.i},${c.j}`, x, y };
-      }),
-    );
+    const cells = free.map((c) => {
+      const [x, y] = board.onScreen(...board.cell(c.i, c.j));
+      return { id: `${c.i},${c.j}`, x, y };
+    });
+    const site = run.blocks.find((b) => !b.built);
+    if (!this.picked && site) {
+      // the site itself takes clicks: the founder finishes the work by hand
+      const [x, y] = board.onScreen(...board.top(site));
+      cells.push({ id: 'site', x, y });
+    }
+    this.paper.setCells(cells);
 
     const keep = new Set<string>();
     for (const b of blocks) {
@@ -369,7 +431,13 @@ export class GameScene extends Phaser.Scene {
       const [x, y] = board.onScreen(...board.side(b));
       const id = `b:${b.kind}`;
       keep.add(id);
-      this.paper.tag(id, x, y, b.built ? kind.short : `${kind.short} ${b.done}/${b.need}`, b.built ? 'face' : 'face hot');
+      this.paper.tag(id, x, y, kind.short, b.built ? 'face' : 'face hot');
+      if (!b.built) {
+        // how much of the site is done: a number above it
+        const [tx, ty] = board.onScreen(...board.top(b));
+        keep.add(`b:n${b.kind}`);
+        this.paper.tag(`b:n${b.kind}`, tx, ty - 78 * z, `<b>${b.done}/${b.need}</b>`, 'small hot');
+      }
     }
     for (const s of slots) {
       if (!s.hot) continue;
@@ -381,8 +449,11 @@ export class GameScene extends Phaser.Scene {
     this.paper.pruneTags('b:', keep);
 
     // the founder and the agents
-    const [mx, my] = board.onScreen(DESK[0], DESK[1] + 8);
-    this.paper.tag('me', mx, my, `<b>ты</b> · проверяешь ${LANE_ACC[run.review]}`);
+    // the founder's caption starts at the left edge of the desk: the desk stands at the edge of the sheet
+    const [mx, my] = board.onScreen(DESK[0] - 118, DESK[1] + 8);
+    const full = Math.floor(run.energy);
+    const pips = '■'.repeat(full) + '□'.repeat(TUNING.crunch.max - full);
+    this.paper.tag('me', Math.max(10, mx), my, `<b>ты</b> · проверяешь ${LANE_ACC[run.review]}<i>силы ${pips}</i>`, 'left');
     this.syncAgents();
     const keepA = new Set<string>();
     run.agents.forEach((a, k) => {
@@ -391,7 +462,8 @@ export class GameScene extends Phaser.Scene {
       const id = `a${a.id}`;
       keepA.add(id);
       const idle = this.idle.has(a.id);
-      this.paper.tag(id, x, y, `<b>№${a.id}</b> · ${LANE_NAME[a.lane]}<i${idle ? ' class="bad"' : ''}>${idle ? 'простаивает' : TIER_NAME[a.tier]}</i>`);
+      // on a wide sheet the laptops stand close: their captions are set smaller
+      this.paper.tag(id, x, y, `<b>${LANE_NAME[a.lane]}</b><i${idle ? ' class="bad"' : ''}>№${a.id} · ${idle ? 'простаивает' : TIER_NAME[a.tier]}</i>`, z < 0.8 ? 'small' : '');
     });
     this.paper.pruneTags('a', keepA);
 
@@ -402,7 +474,7 @@ export class GameScene extends Phaser.Scene {
       const [x, y] = board.onScreen(MARKET[0], MARKET[1] + 10);
       const unknown = [...run.asks, ...(run.stage >= 2 ? run.corpAsks : [])].filter((k) => !run.known.includes(k)).length;
       const parts = [`лиды <b>${run.leads.toFixed(1).replace('.', ',')}</b>`];
-      parts.push(unknown > 0 ? `разведка <b>${run.insight}/${TUNING.research_work_per_reveal}</b>` : 'рынок изучен');
+      parts.push(unknown > 0 ? `разведка <b>${run.insight}/${TUNING.research_work_per_reveal}</b>` : 'все запросы известны');
       this.paper.tag('market', x, y, `рынок · ${parts.join(' · ')}`, 'small');
     }
 
@@ -411,12 +483,13 @@ export class GameScene extends Phaser.Scene {
       const [sx, sy] = CLIENT_SLOTS[c.slot % CLIENT_SLOTS.length];
       const [x, y] = board.onScreen(sx, sy + 6);
       const pay = clientPay(run, c);
-      const first = `<b>${c.name}</b> · ${pay > 0 ? `<em>${money(pay)}</em>` : run.down ? 'не платит: лежим' : 'бесплатно'}`;
-      let second: string;
-      if (c.happy) second = '<i>всем доволен</i>';
-      else if (run.known.includes(c.want)) second = `<i class="bad">ждёт «${BLOCK_BY_ID[c.want]?.short}» · ${c.patience} спр.</i>`;
-      else second = `<i class="bad">чего-то ждёт · ${c.patience} спр.</i>`;
-      this.paper.tag(`c${c.id}`, x, y, first + second, 'small');
+      // two short lines: the name, then the money and the mood — twelve of them must fit side by side
+      const paid = pay > 0 ? `<em>${money(pay)}</em>` : run.down ? 'лежим' : 'бесплатно';
+      let mood: string;
+      if (c.happy) mood = `<i>${paid} · доволен</i>`;
+      else if (run.known.includes(c.want)) mood = `<i class="bad">ждёт «${BLOCK_BY_ID[c.want]?.short}» · ${c.patience} спр.</i>`;
+      else mood = `<i class="bad">чего-то ждёт · ${c.patience} спр.</i>`;
+      this.paper.tag(`c${c.id}`, x, y, `<b>${c.name}</b>${c.happy ? '' : ` · ${paid}`}${mood}`, 'small');
     }
 
     // money and time
@@ -432,7 +505,13 @@ export class GameScene extends Phaser.Scene {
     this.paper.setSprint(`СПРИНТ ${Math.min(run.sprint, TUNING.last_sprint)} ИЗ ${TUNING.last_sprint} · РЕЛИЗ ЧЕРЕЗ ${leftS} С`, run.sprintT / TUNING.sprint_s);
 
     this.paper.setShelf(this.shelfView());
-    if (run.offer !== null) {
+    if (this.pauseCard) {
+      this.paper.call({
+        who: 'ПАУЗА',
+        text: 'Деньги не горят, пока ты думаешь. В жизни так не бывает.',
+        options: ['Вернуться к стартапу', 'Бросить стартап и выйти в меню'],
+      });
+    } else if (run.offer !== null) {
       this.paper.call({
         who: 'ЗВОНОК · ПОКУПАТЕЛЬ',
         text: `Нам очень нравится ваш продукт. Предлагаем <em>${money(run.offer)}</em> за компанию. Продукт мы, правда, закроем.`,
@@ -525,7 +604,8 @@ export class GameScene extends Phaser.Scene {
       if (!old) this.place(key, 'laptop', x, y, 118, true);
       const img = board.node(key)!;
       if (!this.faces.has(key)) {
-        const s = (img.displayHeight / img.height) / 0.5;
+        // the picture may still be popping in: its final size is what counts
+        const s = 118 / img.height / 0.5;
         this.addFace(key, x + 14 * s, y - 128 * s, 14 * s, 12 * s, 0.37);
       }
       const top: Pt = [x, y - 122];
@@ -545,11 +625,12 @@ export class GameScene extends Phaser.Scene {
 
   /** A new stage: the camera pulls back and shows more of the sheet. */
   private syncStage(ms: number): void {
-    if (this.stageShown === this.run.stage) return;
-    this.stageShown = this.run.stage;
-    const v = STAGE_VIEW[this.run.stage - 1];
+    // the first client is already a reason to look wider: it stands to the right of the product
+    const want = this.run.stage >= 3 ? 3 : this.run.stage === 2 || this.run.stats.clients > 0 ? 2 : 1;
+    if (this.stageShown === want) return;
+    this.stageShown = want;
+    const v = STAGE_VIEW[want - 1];
     this.board.view(v.zoom, v.x, v.y, VIEW_AT[0], VIEW_AT[1], ms, () => undefined);
-    if (ms > 0) this.news(`Этап: ${STAGE_NAME[this.run.stage]}`);
   }
 
   /** Subscriptions: green squares keep flying from the clients into the money. */

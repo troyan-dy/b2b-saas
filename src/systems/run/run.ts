@@ -117,6 +117,8 @@ export interface Run {
   /** the choice is made once a sprint */
   reviewLocked: boolean;
   debt: number;
+  /** the founder's own strength: each point is one square of work done by hand */
+  energy: number;
   leads: number;
   insight: number;
   /** what this market asks for; hidden until research reveals it */
@@ -144,6 +146,8 @@ export interface Run {
     profitAt: number;
   };
   nextId: number;
+  /** agents are numbered in the order they are hired */
+  nextAgent: number;
   /** what is shipped, the links between it and what it gives: recounted at every release, read every step */
   live: Set<string>;
   linkCount: number;
@@ -195,13 +199,14 @@ export function createRun(seed: number, idea: Idea, perks: readonly string[] = [
     t: 0,
     sprint: 1,
     sprintT: 0,
-    money: TUNING.start_money,
+    money: TUNING.start_money + (perks.includes('cash') ? 1500 : 0),
     stage: 1,
     blocks: [],
     agents: [{ id: 1, tier: 'fast', lane: 'build', carry: 0 }],
     review: 'build',
     reviewLocked: false,
     debt: 0,
+    energy: TUNING.crunch.max,
     leads: 0,
     insight: 0,
     asks: shuffle(rng, askable).slice(0, 3),
@@ -215,7 +220,8 @@ export function createRun(seed: number, idea: Idea, perks: readonly string[] = [
     over: null,
     lastReport: null,
     stats: { clients: 0, left: 0, downs: 0, peakMrr: 0, shipped: 0, corp: 0, soldFor: 0, tokens: 0, firstClientAt: 0, profitAt: 0 },
-    nextId: 2,
+    nextId: 1,
+    nextAgent: 2,
     live: new Set(),
     linkCount: 0,
     eff: { patience: 0, word_of_mouth: 1, corp_pay: 1, small_pay: 1, promo: 1, tokens: 1 },
@@ -275,16 +281,22 @@ export function priceMult(run: Run): number {
   return run.idea.tech.price * run.idea.form.price * (1 + TUNING.link_bonus * run.linkCount);
 }
 
-/** what a client pays per sprint right now */
-export function clientPay(run: Run, c: Client): number {
-  if (run.down || !isLive(run, 'pay')) return 0;
+/** what a client is worth per sprint: its subscription at today's prices, whether it pays right now or not */
+function clientWorth(run: Run, c: Client): number {
   const own = c.size === 'corp' ? run.eff.corp_pay : run.eff.small_pay;
   return c.pay * priceMult(run) * own * (c.happy ? TUNING.clients.happy_bonus : 1);
 }
 
+/** what a client pays per sprint right now */
+export function clientPay(run: Run, c: Client): number {
+  if (run.down || !isLive(run, 'pay')) return 0;
+  return clientWorth(run, c);
+}
+
 /** what a client costs in tokens per sprint: free users burn them too */
 export function clientTokens(run: Run, c: Client): number {
-  return c.pay * TUNING.clients.token_share * run.idea.tech.tokens * run.eff.tokens;
+  // the more a client uses the product, the more it burns: tokens follow the size of the subscription
+  return clientWorth(run, c) * TUNING.clients.token_share * run.idea.tech.tokens * run.eff.tokens;
 }
 
 export function mrr(run: Run): number {
@@ -306,7 +318,8 @@ export function agentCost(run: Run): number {
 }
 
 export function burnPerS(run: Run): number {
-  return TUNING.living_per_s + agentCost(run) + tokens(run) / TUNING.sprint_s;
+  // every shipped block has to be hosted and kept alive: a feature is a commitment
+  return TUNING.living_per_s + agentCost(run) + run.live.size * TUNING.upkeep_per_block_s + tokens(run) / TUNING.sprint_s;
 }
 
 export function incomePerS(run: Run): number {
@@ -329,6 +342,8 @@ export function freeCells(run: Run): { i: number; j: number }[] {
   const out: { i: number; j: number }[] = [];
   for (let i = -r; i <= r; i++) {
     for (let j = -r; j <= r; j++) {
+      // the sheet of the product is a diamond: its far corners are cut off
+      if (Math.abs(i) + Math.abs(j) > r + 1) continue;
       if (taken.has(`${i},${j}`)) continue;
       if (taken.has(`${i + 1},${j}`) || taken.has(`${i - 1},${j}`) || taken.has(`${i},${j + 1}`) || taken.has(`${i},${j - 1}`)) out.push({ i, j });
     }
@@ -340,7 +355,7 @@ export function freeCells(run: Run): { i: number; j: number }[] {
 export function shelf(run: Run): string[] {
   if (run.blocks.length === 0) return ['core'];
   const placed = new Set(run.blocks.map((b) => b.kind));
-  return Object.keys(RULES).filter((k) => !placed.has(k) && RULES[k].stage <= run.stage);
+  return Object.keys(RULES).filter((k) => !placed.has(k) && (RULES[k].stage <= run.stage || (k === 'cheap' && run.perks.includes('cheapEarly'))));
 }
 
 export function sites(run: Run): Block[] {
@@ -393,12 +408,31 @@ export function canHire(run: Run, tier: Tier): boolean {
 
 export function hire(run: Run, tier: Tier): boolean {
   if (!canHire(run, tier)) return false;
-  run.agents.push({ id: run.nextId++, tier, lane: 'build', carry: 0 });
+  run.agents.push({ id: run.nextAgent++, tier, lane: 'build', carry: 0 });
   return true;
 }
 
 export function fire(run: Run, agentId: number): void {
   run.agents = run.agents.filter((a) => a.id !== agentId);
+}
+
+/** The founder finishes the work by hand: one square into the site right now, and some debt with it. */
+export function crunch(run: Run): boolean {
+  const site = run.blocks.find((b) => !b.built);
+  if (run.over || !site || run.energy < 1) return false;
+  run.energy -= 1;
+  run.debt += TUNING.crunch.debt;
+  run.events.push({ type: 'work', agent: 0, lane: 'build', i: site.i, j: site.j });
+  addWork(run, site);
+  return true;
+}
+
+function addWork(run: Run, site: Block): void {
+  site.done++;
+  if (site.done >= site.need) {
+    site.built = true;
+    run.events.push({ type: 'built', kind: site.kind, i: site.i, j: site.j });
+  }
 }
 
 export function answerOffer(run: Run, accept: boolean): void {
@@ -417,6 +451,7 @@ export function step(run: Run, dt: number): void {
   run.t += dt;
   run.money += netPerS(run) * dt;
   run.stats.tokens += (tokens(run) / TUNING.sprint_s) * dt;
+  run.energy = Math.min(TUNING.crunch.max, run.energy + dt / TUNING.crunch.regen_s);
 
   const slow = 1 - Math.min(TUNING.debt.slow_max, run.debt * TUNING.debt.slow_per_point);
   for (const a of run.agents) {
@@ -448,13 +483,9 @@ function deliver(run: Run, a: Agent): void {
         run.events.push({ type: 'work', agent: a.id, lane: a.lane, idle: true });
         return;
       }
-      site.done++;
       run.debt += dirty;
       run.events.push({ type: 'work', agent: a.id, lane: a.lane, i: site.i, j: site.j });
-      if (site.done >= site.need) {
-        site.built = true;
-        run.events.push({ type: 'built', kind: site.kind, i: site.i, j: site.j });
-      }
+      addWork(run, site);
       return;
     }
     case 'fix':

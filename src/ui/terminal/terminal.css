@@ -1,0 +1,193 @@
+/* The full-screen terminal: the menu, the idea, the ending. Dark and mono — this is Claude's side of the game. */
+.tm {
+  position: absolute;
+  inset: 0;
+  background: var(--term-bg);
+  color: var(--term-text);
+  font: 400 24px/1.55 var(--mono);
+  pointer-events: auto;
+  display: none;
+  /* the pull-back: the terminal shrinks into the screen of the founder's laptop */
+  transform-origin: 152px 600px;
+}
+.tm.on {
+  display: block;
+}
+.tm.leave {
+  animation: tm-leave 0.9s cubic-bezier(0.65, 0, 0.35, 1) forwards;
+  pointer-events: none;
+}
+@keyframes tm-leave {
+  0% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  80% {
+    opacity: 1;
+  }
+  100% {
+    transform: scale(0.035);
+    opacity: 0;
+  }
+}
+.tm.enter {
+  animation: tm-enter 0.5s ease-out;
+}
+@keyframes tm-enter {
+  0% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+.tm-win {
+  position: absolute;
+  left: 260px;
+  right: 260px;
+  top: 90px;
+  bottom: 90px;
+  box-sizing: border-box;
+  padding: 0;
+  border: 1px solid var(--term-rule);
+  border-radius: 12px;
+  background: var(--term-panel);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.tm-bar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  height: 52px;
+  padding: 0 24px;
+  border-bottom: 1px solid var(--term-rule);
+  font-size: 17px;
+  color: var(--ink-soft);
+  letter-spacing: 0.06em;
+}
+/* his face: a coral square with two eyes */
+.tm-bar i {
+  position: relative;
+  width: 22px;
+  height: 18px;
+  background: var(--coral);
+}
+.tm-bar i::before,
+.tm-bar i::after {
+  content: '';
+  position: absolute;
+  top: 5px;
+  width: 3px;
+  height: 6px;
+  background: var(--term-panel);
+}
+.tm-bar i::before {
+  left: 6px;
+}
+.tm-bar i::after {
+  right: 6px;
+}
+.tm-bar em {
+  margin-left: auto;
+  font-style: normal;
+}
+.tm-body {
+  flex: 1;
+  min-height: 0;
+  padding: 30px 44px 26px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+}
+.tm-line {
+  margin: 0;
+  white-space: pre-wrap;
+  min-height: 1.55em;
+}
+.tm-line.dim {
+  color: var(--ink-soft);
+}
+.tm-line.big {
+  font: 600 76px/1.1 var(--serif);
+  letter-spacing: -0.01em;
+  margin-bottom: 10px;
+}
+.tm-line.mid {
+  font: 600 40px/1.25 var(--serif);
+  margin: 6px 0 10px;
+}
+.tm-line.small {
+  font-size: 19px;
+}
+.tm-line b {
+  font-weight: 700;
+}
+.tm-line em {
+  font-style: normal;
+  color: var(--money-dark);
+  font-weight: 700;
+}
+.tm-line strong {
+  color: var(--coral);
+  font-weight: 700;
+}
+.tm-ask {
+  margin-top: 16px;
+}
+.tm-opt {
+  display: grid;
+  grid-template-columns: 34px 54px minmax(0, 1fr);
+  padding: 3px 14px 5px;
+  margin: 0 -14px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.tm-opt u {
+  text-decoration: none;
+  color: var(--coral);
+  visibility: hidden;
+}
+.tm-opt small {
+  grid-column: 3;
+  font-size: 18px;
+  color: var(--ink-soft);
+}
+.tm-opt.on {
+  background: var(--coral);
+  color: var(--term-bg);
+}
+.tm-opt.on u {
+  visibility: visible;
+  color: var(--term-bg);
+}
+.tm-opt.on small {
+  color: var(--term-bg);
+}
+/* the choice is made: the line flashes inverted for two frames */
+.tm-opt.hit {
+  background: var(--term-text);
+  color: var(--term-bg);
+}
+.tm-foot {
+  flex: none;
+  padding: 0 44px 22px;
+  font-size: 16px;
+  color: var(--ink-soft);
+}
+.tm-foot kbd {
+  display: inline-block;
+  min-width: 22px;
+  padding: 0 7px;
+  margin: 0 6px 0 0;
+  border: 1px solid var(--ink-soft);
+  border-bottom-width: 3px;
+  border-radius: 6px;
+  font: inherit;
+  text-align: center;
+  color: var(--term-text);
+}

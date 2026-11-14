@@ -74,16 +74,15 @@ export function createPaper(under: HTMLElement, over: HTMLElement): Paper {
   const sheet = document.createElement('div');
   sheet.className = 'bl';
   sheet.innerHTML =
-    '<div class="bl-hud"><div class="bl-money"><b></b><span></span></div>' +
-    '<div class="bl-sprint"><i></i><u><s></s></u></div>' +
-    '<div class="bl-shop"></div>' +
-    '<div class="bl-news"><i>НОВОСТИ</i><span></span><em></em></div></div>';
+    '<div class="bl-hud"><div class="bl-money"><b></b><span></span></div>' + '<div class="bl-sprint"><i></i><u><s></s></u></div></div>';
   under.append(sheet);
   const top = document.createElement('div');
   top.className = 'bl-over';
   top.innerHTML =
     '<div class="bl-cells"></div><div class="bl-tags"></div><div class="bl-pops"></div>' +
-    '<div class="bl-term"><i></i><div></div></div><div class="bl-call"></div>';
+    '<div class="bl-term"><i></i><div></div></div><div class="bl-call"></div>' +
+    // the shelf and the news stand above the canvas: nothing drawn on the sheet may cover them
+    '<div class="bl-shop"></div><div class="bl-news"><i>НОВОСТИ</i><span></span><em></em></div>';
   over.append(top);
 
   const hud = sheet.querySelector('.bl-hud') as HTMLElement;
@@ -92,9 +91,9 @@ export function createPaper(under: HTMLElement, over: HTMLElement): Paper {
   const moneySub = money.querySelector('span') as HTMLElement;
   const sprintLabel = sheet.querySelector('.bl-sprint i') as HTMLElement;
   const sprintBar = sheet.querySelector('.bl-sprint s') as HTMLElement;
-  const shop = sheet.querySelector('.bl-shop') as HTMLElement;
-  const newsText = sheet.querySelector('.bl-news span') as HTMLElement;
-  const newsHint = sheet.querySelector('.bl-news em') as HTMLElement;
+  const shop = top.querySelector('.bl-shop') as HTMLElement;
+  const newsText = top.querySelector('.bl-news span') as HTMLElement;
+  const newsHint = top.querySelector('.bl-news em') as HTMLElement;
   const cellLayer = top.querySelector('.bl-cells') as HTMLElement;
   const tagLayer = top.querySelector('.bl-tags') as HTMLElement;
   const popLayer = top.querySelector('.bl-pops') as HTMLElement;
@@ -168,7 +167,8 @@ export function createPaper(under: HTMLElement, over: HTMLElement): Paper {
         }
         if (s.scroll) html += '</div>';
         for (const r of s.rows ?? []) {
-          const cols = `${r.label ? '104px ' : ''}repeat(${r.keys.length}, minmax(0, 1fr))`;
+          const drop = r.keys.some((k) => k.id === 'drop');
+          const cols = `${r.label ? '92px ' : ''}repeat(${r.keys.length - (drop ? 1 : 0)}, minmax(0, 1fr))${drop ? ' 30px' : ''}`;
           html += `<div class="bl-lanes${r.lock ? ' lock' : ''}" style="grid-template-columns:${cols}">`;
           if (r.label) html += `<p>${r.label}</p>`;
           for (const k of r.keys) {

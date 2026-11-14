@@ -1,8 +1,9 @@
 {
   "sprint_s": 40,
   "last_sprint": 30,
-  "start_money": 3200,
-  "living_per_s": 4,
+  "start_money": 3600,
+  "living_per_s": 3,
+  "upkeep_per_block_s": 0.5,
   "sites_max": 2,
   "link_bonus": 0.1,
   "tiers": {
@@ -11,12 +12,13 @@
     "think": { "cost_per_s": 13, "work_per_s": 0.12, "debt_per_work": 0 }
   },
   "review_boost": 1.25,
+  "crunch": { "max": 6, "regen_s": 5, "debt": 1 },
   "fix_per_work": 2,
   "promo_work_per_lead": 9,
   "research_work_per_reveal": 6,
   "debt": { "slow_per_point": 0.012, "slow_max": 0.6, "down_at": 30, "down_relief": 12 },
   "clients": {
-    "token_share": 0.4,
+    "token_share": 0.38,
     "free_token_per_s": 0.5,
     "patience": 3,
     "word_of_mouth": 0.12,
