@@ -148,6 +148,15 @@ export const CLIENT_SAYS: Record<ClientType, string> = {
   gov: '«Договор на согласовании. Подпись будет. Когда-нибудь»',
 };
 
+/** What a happy client says when it finds something to improve; `%s` — the short name of the block. */
+export const REWORK_SAYS = [
+  '«Доработайте «%s»: директор хочет кнопку побольше»',
+  '«В «%s» нужна ещё одна галочка. Всего одна»',
+  '«Сделайте «%s» как у конкурента, только лучше»',
+  '«Мы тут подумали: «%s» надо переделать»',
+  '«%s» отличный. Но есть нюанс»',
+];
+
 /** Claude at the start of the next startup: he does not remember the last one, the founder does. By how it ended. */
 export const AGAIN_SAYS: Record<string, string> = {
   broke: 'Говорят, прошлый стартап закрылся. Я его не помню: у меня новая сессия. Помнить будешь ты.',

@@ -83,6 +83,10 @@ export interface Block {
   built: boolean;
   /** shipped by a release: only a live block does anything */
   live: boolean;
+  /** the version clients see: 1 when first shipped, one more after each rework */
+  level: number;
+  /** a rework is being built on top of the shipped block; `done` and `need` count its work */
+  up: boolean;
 }
 
 export interface Client {
@@ -94,6 +98,8 @@ export interface Client {
   pay: number;
   /** the block this client is waiting for */
   want: string;
+  /** …and the version of it: 1 — the block itself, more — a rework the client asked for */
+  wantLevel: number;
   /** sprints left before it walks away */
   patience: number;
   happy: boolean;
@@ -129,6 +135,8 @@ export type RunEvent =
   /** `closed` — nothing was wrong with the product: the client itself is no more */
   | { type: 'left'; id: number; name: string; reason: string; closed?: boolean }
   | { type: 'reveal'; kind: string }
+  /** a happy client asks to improve a block: it waits for version `level` */
+  | { type: 'rework'; id: number; kind: string; level: number }
   | { type: 'down' }
   | { type: 'stage'; stage: number }
   | { type: 'offer'; price: number }
@@ -215,6 +223,8 @@ export interface Run {
     broken: number;
     /** the most links the product ever had at once */
     links: number;
+    /** reworks shipped on clients' requests */
+    reworks: number;
   };
   nextId: number;
   /** agents are numbered in the order they are hired */
@@ -299,7 +309,7 @@ export function createRun(seed: number, idea: Idea, perks: readonly string[] = [
     events: [],
     over: null,
     lastReport: null,
-    stats: { clients: 0, left: 0, downs: 0, peakMrr: 0, shipped: 0, corp: 0, soldFor: 0, tokens: 0, firstClientAt: 0, profitAt: 0, promises: 0, kept: 0, broken: 0, links: 0 },
+    stats: { clients: 0, left: 0, downs: 0, peakMrr: 0, shipped: 0, corp: 0, soldFor: 0, tokens: 0, firstClientAt: 0, profitAt: 0, promises: 0, kept: 0, broken: 0, links: 0, reworks: 0 },
     nextId: 1,
     nextAgent: 2,
     live: new Set(),
@@ -309,7 +319,7 @@ export function createRun(seed: number, idea: Idea, perks: readonly string[] = [
   };
   // what the founder learned in earlier startups
   if (perks.includes('template')) {
-    run.blocks.push({ kind: 'core', i: 0, j: 0, done: workNeed(run, 'core'), need: workNeed(run, 'core'), built: true, live: true });
+    run.blocks.push({ kind: 'core', i: 0, j: 0, done: workNeed(run, 'core'), need: workNeed(run, 'core'), built: true, live: true, level: 1, up: false });
   }
   if (perks.includes('posts')) run.leads = 1;
   if (perks.includes('buyers')) run.known.push(run.corpAsks[0]);
@@ -328,7 +338,8 @@ export function isLive(run: Run, kind: string): boolean {
 function refresh(run: Run): void {
   run.live = new Set(run.blocks.filter((b) => b.live).map((b) => b.kind));
   run.host = 0;
-  for (const kind of run.live) run.host += RULES[kind].host;
+  // a reworked block is a bigger block: every version adds to its hosting
+  for (const b of run.blocks) if (b.live) run.host += RULES[b.kind].host * (1 + TUNING.rework.host_mult * (b.level - 1));
   run.linkCount = links(run).length;
   run.stats.links = Math.max(run.stats.links, run.linkCount);
   const eff: Effects = { patience: 0, word_of_mouth: 1, corp_pay: 1, small_pay: 1, promo: 1, tokens: 1 };
@@ -465,7 +476,37 @@ export function shelf(run: Run): string[] {
 }
 
 export function sites(run: Run): Block[] {
-  return run.blocks.filter((b) => !b.built);
+  return run.blocks.filter(isSite);
+}
+
+/** work still goes into this block: it is being built, or reworked on a client's request */
+export function isSite(b: Block): boolean {
+  return !b.built || (b.up && b.done < b.need);
+}
+
+/** the client has what it waits for: the block is shipped, in the version it asked for */
+export function satisfied(run: Run, c: Client): boolean {
+  const b = run.blocks.find((x) => x.kind === c.want);
+  return b !== undefined && b.live && b.level >= c.wantLevel;
+}
+
+/** squares of work a rework takes: each next version of a block is a bigger job */
+export function reworkNeed(run: Run, b: Block): number {
+  return Math.ceil(workNeed(run, b.kind) * TUNING.rework.work_mult * b.level);
+}
+
+/** Reworks clients are waiting for and nobody has started yet, with the names of those who asked. */
+export function reworks(run: Run): { kind: string; level: number; who: string[] }[] {
+  const out: { kind: string; level: number; who: string[] }[] = [];
+  for (const c of run.clients) {
+    if (c.happy || c.wantLevel < 2) continue;
+    const b = run.blocks.find((x) => x.kind === c.want);
+    if (!b || !b.live || b.up || b.level >= c.wantLevel) continue;
+    const row = out.find((r) => r.kind === c.want);
+    if (row) row.who.push(c.name);
+    else out.push({ kind: c.want, level: c.wantLevel, who: [c.name] });
+  }
+  return out;
 }
 
 /** the product can be shown to a client: there is something to try and a page to find it on */
@@ -489,8 +530,20 @@ export function place(run: Run, kind: string, i: number, j: number): boolean {
   if (run.over || !shelf(run).includes(kind)) return false;
   if (sites(run).length >= TUNING.sites_max) return false;
   if (!freeCells(run).some((c) => c.i === i && c.j === j)) return false;
-  run.blocks.push({ kind, i, j, done: 0, need: workNeed(run, kind), built: false, live: false });
+  run.blocks.push({ kind, i, j, done: 0, need: workNeed(run, kind), built: false, live: false, level: 1, up: false });
   run.events.push({ type: 'placed', kind, i, j });
+  return true;
+}
+
+/** Starts the rework a client asked for: the shipped block goes back to the site and keeps working meanwhile. */
+export function upgrade(run: Run, kind: string): boolean {
+  const b = run.blocks.find((x) => x.kind === kind);
+  if (run.over || !b || !b.live || b.up || b.level >= TUNING.rework.max_level) return false;
+  if (sites(run).length >= TUNING.sites_max) return false;
+  b.up = true;
+  b.done = 0;
+  b.need = reworkNeed(run, b);
+  run.events.push({ type: 'placed', kind, i: b.i, j: b.j });
   return true;
 }
 
@@ -531,7 +584,7 @@ export function crunch(run: Run, lane: Lane = 'build'): boolean {
   run.energy -= 1;
   switch (lane) {
     case 'build': {
-      const site = run.blocks.find((b) => !b.built)!;
+      const site = run.blocks.find(isSite)!;
       run.debt += TUNING.crunch.debt;
       run.events.push({ type: 'work', agent: 0, lane, i: site.i, j: site.j });
       addWork(run, site);
@@ -557,7 +610,7 @@ export function crunch(run: Run, lane: Lane = 'build'): boolean {
 export function handy(run: Run, lane: Lane): boolean {
   switch (lane) {
     case 'build':
-      return run.blocks.some((b) => !b.built);
+      return run.blocks.some(isSite);
     case 'fix':
       return run.debt > 0;
     case 'promo':
@@ -691,7 +744,7 @@ function deliver(run: Run, a: Agent): void {
   const dirty = a.lane === run.review ? 0 : TUNING.tiers[a.tier].debt_per_work * (run.perks.includes('tests') ? 0.6 : 1);
   switch (a.lane) {
     case 'build': {
-      const site = run.blocks.find((b) => !b.built);
+      const site = run.blocks.find(isSite);
       if (!site) {
         run.events.push({ type: 'work', agent: a.id, lane: a.lane, idle: true });
         return;
@@ -746,6 +799,7 @@ function makeClient(run: Run): Client {
     type: rule.id,
     pay: rule.pay > 0 ? rule.pay : run.idea.aud.pay * rule.aud_mult,
     want: run.rng.pick(rule.asks === 'corp' ? run.corpAsks : run.asks),
+    wantLevel: 1,
     patience: Math.max(1, patience),
     happy: false,
     slot: -1,
@@ -760,7 +814,7 @@ function seat(run: Run, client: Client): void {
   let slot = 0;
   while (used.has(slot)) slot++;
   client.slot = slot;
-  client.happy = isLive(run, client.want);
+  client.happy = satisfied(run, client);
   if (client.happy && client.promised) {
     // built while the phone was ringing: the promise is already kept
     client.promised = false;
@@ -783,6 +837,13 @@ function release(run: Run): void {
       b.live = true;
       report.shipped.push(b.kind);
       run.stats.shipped++;
+      run.events.push({ type: 'live', kind: b.kind });
+    } else if (b.up && b.done >= b.need) {
+      // the rework is done: the block ships in its next version
+      b.up = false;
+      b.level++;
+      report.shipped.push(b.kind);
+      run.stats.reworks++;
       run.events.push({ type: 'live', kind: b.kind });
     }
   }
@@ -819,7 +880,9 @@ function release(run: Run): void {
       run.events.push({ type: 'left', id: c.id, name: c.name, reason: '', closed: true });
       continue;
     }
-    if (isLive(run, c.want)) {
+    if (satisfied(run, c)) {
+      // it asked for a rework and got it: the cheque grows with the product
+      if (!c.happy && c.wantLevel > 1) c.deal *= TUNING.rework.pay_mult;
       if (c.promised) {
         c.promised = false;
         run.stats.kept++;
@@ -848,6 +911,26 @@ function release(run: Run): void {
     run.events.push({ type: 'left', id: c.id, name: c.name, reason });
   }
   run.clients = stay;
+
+  // a happy client finds something to improve: it says which block, and waits for the new version
+  const R = TUNING.rework;
+  if (run.stage >= R.from_stage) {
+    let pending = run.clients.filter((c) => !c.happy && c.wantLevel > 1).length;
+    for (const c of run.clients) {
+      if (pending >= R.max_pending) break;
+      if (!c.happy || c.promised || run.rng.next() >= R.chance) continue;
+      const own = run.blocks.find((b) => b.kind === c.want);
+      const open = run.blocks.filter((b) => b.live && b.level < R.max_level);
+      const b = own && own.level < R.max_level ? own : open.length > 0 ? run.rng.pick(open) : undefined;
+      if (!b) continue;
+      c.want = b.kind;
+      c.wantLevel = b.level + 1;
+      c.happy = false;
+      c.patience = Math.max(1, R.patience + run.eff.patience);
+      pending++;
+      run.events.push({ type: 'rework', id: c.id, kind: b.kind, level: c.wantLevel });
+    }
+  }
 
   if (sellable(run)) {
     const wom = C.word_of_mouth * run.eff.word_of_mouth * run.idea.form.viral;

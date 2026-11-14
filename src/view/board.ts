@@ -14,6 +14,9 @@ export interface BlockOnSheet {
   need: number;
   /** grey squares at its foot */
   debt: number;
+  /** a rework is being built on top of the shipped module: done of 
+eed squares lie on it */
+  up?: boolean;
 }
 
 export interface SlotOnSheet {
@@ -160,6 +163,7 @@ export class Board {
         drawBox(b, x, y, kind.height, SIDE[kind.group]);
         drawGlyph(b, x, y, kind.height, kind.glyph);
         if (block.debt > 0) drawDebt(b, x, y, kind.height, block.debt);
+        if (block.up) drawProgress(b, x, y, kind.height, block.done, block.need);
       } else {
         drawSite(b, x, y, kind.height);
         drawProgress(b, x, y, kind.height, block.done, block.need);

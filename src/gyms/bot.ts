@@ -9,6 +9,7 @@ import {
   hire,
   netPerS,
   place,
+  reworks,
   RULES,
   sellable,
   setLane,
@@ -16,6 +17,7 @@ import {
   shelf,
   sites,
   TUNING,
+  upgrade,
   type Lane,
   type Run,
 } from '../systems/run/run';
@@ -46,6 +48,10 @@ export function playBot(run: Run, style: BotStyle = SENSIBLE): void {
   } else if (run.lastChance !== null) answerLastChance(run, true);
   // a client asks about a block that is not there: promise it only when there is room and money to build it
   if (style.calls && run.call) answerCall(run, sites(run).length < TUNING.sites_max && run.money > burnPerS(run) * 90);
+
+  // a client asked to improve a block: the rework goes first, unless something was promised on a call
+  const promised = run.clients.some((c) => c.promised && shelf(run).includes(c.want));
+  if (sites(run).length === 0 && !promised && reworks(run).length > 0) upgrade(run, reworks(run)[0].kind);
 
   // what to build next
   if (sites(run).length === 0) {

@@ -16,6 +16,7 @@
   "mortgage_s": 60,
   "mortgage_s_perk": 90,
   "corp_asks": 3,
+  "rework": { "from_stage": 2, "chance": 0.15, "patience": 3, "work_mult": 0.6, "pay_mult": 1.15, "host_mult": 0.5, "max_level": 3, "max_pending": 2 },
   "news": { "from_sprint": 4, "chance": 0.3, "chance_stage3": 0.5, "cooldown": 2 },
   "fix_per_work": 2,
   "promo_work_per_lead": 9,

@@ -20,6 +20,7 @@ import {
   NEWS,
   NEWS_EVENT,
   releaseLines,
+  REWORK_SAYS,
   TIER_NAME,
 } from '../content/texts';
 import { logEvent, metrics } from '../core/metrics';
@@ -46,6 +47,7 @@ import {
   IDEAS,
   incomePerS,
   isLive,
+  isSite,
   LANES,
   links,
   mortgageSeconds,
@@ -54,6 +56,8 @@ import {
   place,
   promiseSprints,
   researchNeed,
+  reworkNeed,
+  reworks,
   RULES,
   setLane,
   setReview,
@@ -64,6 +68,7 @@ import {
   TIERS,
   TUNING,
   unknownAsks,
+  upgrade,
   workNeed,
   type ClientType,
   type Lane,
@@ -218,6 +223,15 @@ export class GameScene extends Phaser.Scene {
   private onShelf(section: string, item: string): void {
     unlockSound();
     if (section !== 'blocks') return;
+    if (item.startsWith('up:')) {
+      // a rework: no cell to choose — it is built on the block the client named
+      if (upgrade(this.run, item.slice(3))) playSound('buy', 0);
+      else {
+        this.paper.flash('blocks', item, 'denied');
+        playSound('waste');
+      }
+      return;
+    }
     if (sites(this.run).length >= TUNING.sites_max) {
       this.paper.flash('blocks', item, 'denied');
       playSound('waste');
@@ -241,7 +255,7 @@ export class GameScene extends Phaser.Scene {
   private byHand(lane: Lane = 'build'): void {
     unlockSound();
     const run = this.run;
-    const site = run.blocks.find((b) => !b.built);
+    const site = run.blocks.find(isSite);
     const can = handy(run, lane);
     if (!can || !crunch(run, lane)) {
       playSound('waste');
@@ -460,6 +474,18 @@ export class GameScene extends Phaser.Scene {
         }
         break;
       }
+      case 'rework': {
+        // the client says it aloud: nothing to find out, only to build
+        const line = REWORK_SAYS[e.id % REWORK_SAYS.length].replace('%s', BLOCK_BY_ID[e.kind]?.short ?? e.kind);
+        this.quotes.set(e.id, { text: line, until: this.clock + 8 });
+        playSound('quip');
+        logEvent(`rework:${e.kind}`);
+        if (!this.said.has('rework')) {
+          this.said.add('rework');
+          this.say(['<b>❯ Клод</b>', 'Клиент просит доработку блока.', 'Она вверху полки, с пометкой', '«доработка». Сделаем — заплатит', 'больше. Не сделаем — уйдёт.'], 14);
+        }
+        break;
+      }
       case 'reveal': {
         const [x, y] = this.board.onScreen(MARKET[0], MARKET[1]);
         this.paper.pop(x, y - 20, `клиенты просят: ${BLOCK_BY_ID[e.kind]?.name ?? e.kind}`, 'good');
@@ -546,7 +572,8 @@ export class GameScene extends Phaser.Scene {
     // the product
     const blocks: BlockOnSheet[] = run.blocks.map((b) => {
       const landed = Math.min(this.landed.get(b.kind) ?? 0, b.need);
-      return { kind: b.kind, i: b.i, j: b.j, built: b.built && landed >= b.need, done: landed, need: b.need, debt: 0 };
+      // a block under rework stays what it is — a shipped module — with the new work lying on top of it
+      return { kind: b.kind, i: b.i, j: b.j, built: b.live || (b.built && landed >= b.need), up: b.live && b.up, done: landed, need: b.need, debt: 0 };
     });
     // debt sticks to the modules, oldest first: the picture of «it all rests on the first thing we wrote»
     let debt = Math.floor(run.debt);
@@ -564,7 +591,7 @@ export class GameScene extends Phaser.Scene {
       const [x, y] = board.onScreen(...board.cell(c.i, c.j));
       return { id: `${c.i},${c.j}`, x, y, pulse: run.blocks.length < 2 };
     });
-    const site = run.blocks.find((b) => !b.built);
+    const site = run.blocks.find(isSite);
     if (!this.picked && site) {
       // the site itself takes clicks: the founder finishes the work by hand
       const [x, y] = board.onScreen(...board.top(site));
@@ -578,13 +605,14 @@ export class GameScene extends Phaser.Scene {
       const [x, y] = board.onScreen(...board.side(b));
       const id = `b:${b.kind}`;
       keep.add(id);
-      this.paper.tag(id, x, y, kind.short, b.built ? 'face' : 'face hot');
-      if (!b.built) {
+      const level = run.blocks.find((r) => r.kind === b.kind)?.level ?? 1;
+      this.paper.tag(id, x, y, level > 1 ? `${kind.short} v${level}` : kind.short, b.built ? 'face' : 'face hot');
+      if (!b.built || b.up) {
         // how much of the site is done: a number above it
         const [tx, ty] = board.onScreen(...board.top(b));
         keep.add(`b:n${b.kind}`);
         // the first site of the run says in words that it can be clicked
-        const call = novice && b === blocks.find((x) => !x.built) ? '<i>кликай по блоку: помогай руками</i>' : '';
+        const call = b.up ? '<i>доработка</i>' : novice && b === blocks.find((x) => !x.built) ? '<i>кликай по блоку: помогай руками</i>' : '';
         this.paper.tag(`b:n${b.kind}`, tx, ty - (call ? 82 : 64) * z, `<b>${b.done}/${b.need}</b>${call}`, 'small hot');
       }
     }
@@ -669,6 +697,7 @@ export class GameScene extends Phaser.Scene {
         continue;
       }
       if (c.happy) mood = `<i>${paid} · доволен</i>`;
+      else if (c.wantLevel > 1) mood = `<i class="bad">просит доработать «${BLOCK_BY_ID[c.want]?.short}» · ${c.patience} спр.</i>`;
       else if (c.promised) mood = `<i class="bad">обещан «${BLOCK_BY_ID[c.want]?.short}» · ${c.patience} спр.</i>`;
       else if (run.known.includes(c.want)) mood = `<i class="bad">ждёт «${BLOCK_BY_ID[c.want]?.short}» · ${c.patience} спр.</i>`;
       else mood = `<i class="bad">ждёт молча · ${c.patience} спр.</i>`;
@@ -676,20 +705,15 @@ export class GameScene extends Phaser.Scene {
       this.paper.tag(`c${c.id}`, x, y, `<b>${c.name}</b>${signing(c) ? ' · <u>$0</u>' : ''}${mood}`, cls);
     }
     // what a client says aloud stands by its building for a few seconds
+    // one line at a time, in the free strip above the news: on the sheet itself it would lie over the product
+    let said: { name: string; text: string; until: number } | null = null;
     for (const [id, q] of this.quotes) {
       const c = run.clients.find((x) => x.id === id);
-      if (!c || this.clock > q.until) {
-        this.quotes.delete(id);
-        this.paper.dropTag(`q${id}`);
-        continue;
-      }
-      const [sx, sy] = CLIENT_SLOTS[c.slot % CLIENT_SLOTS.length];
-      // the line ends at the building and runs to the left of it: the shelf is to the right.
-      // Over the roof — except in the top row, where the goal is written: there it goes under the caption
-      const top = c.slot % 4 === 0;
-      const [x, y] = board.onScreen(sx + 30, top ? sy : sy - CLIENT_LOOK[c.type].height);
-      this.paper.tag(`q${id}`, x, top ? y + 52 : y - 36, q.text, 'say');
+      if (!c || this.clock > q.until) this.quotes.delete(id);
+      else if (!said || q.until > said.until) said = { name: c.name, text: q.text, until: q.until };
     }
+    if (said) this.paper.tag('quote', 1322, 968, `<b>${said.name}:</b> ${said.text}`, 'say');
+    else this.paper.dropTag('quote');
 
     // money and time
     const net = netPerS(run);
@@ -878,6 +902,17 @@ export class GameScene extends Phaser.Scene {
     }));
     // what clients are known to ask for goes to the top of the shelf
     items.sort((a, b) => Number(b.mark !== '') - Number(a.mark !== ''));
+    // and above everything — the reworks clients asked for by name
+    const more = Math.round((TUNING.rework.pay_mult - 1) * 100);
+    const ups: ShelfItem[] = reworks(run).map((r) => ({
+      id: `up:${r.kind}`,
+      title: `${BLOCK_BY_ID[r.kind].name} v${r.level}`,
+      mark: 'доработка',
+      note: `просит ${r.who.join(', ')}<span>заплатит на ${more}% больше · хостинг +${rate(RULES[r.kind].host * TUNING.rework.host_mult)}/с</span>`,
+      price: `<u></u>${reworkNeed(run, run.blocks.find((b) => b.kind === r.kind)!)}`,
+      state: full ? 'off' : 'can',
+    }));
+    items.unshift(...ups);
     const rule = TUNING.stages[run.stage - 1];
     const rows: ShelfKeys[] = [
       {
@@ -923,7 +958,7 @@ export class GameScene extends Phaser.Scene {
   private syncAgents(): void {
     const run = this.run;
     const board = this.board;
-    const site = run.blocks.find((b) => !b.built);
+    const site = run.blocks.find(isSite);
     const sig = JSON.stringify([run.agents.map((a) => [a.id, a.lane]), site ? [site.i, site.j] : null, run.review]);
     if (sig === this.routeSig) return;
     this.routeSig = sig;

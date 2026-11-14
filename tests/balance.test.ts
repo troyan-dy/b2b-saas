@@ -64,6 +64,7 @@ describe('economy', () => {
     console.log(`mortgage: taken in ${pawned.length} of ${runs.length} runs, survived after it ${pawned.filter((r) => r.over !== 'broke').length}`);
     const promises = runs.reduce((a, r) => a + r.stats.promises, 0);
     console.log(`promises: ${promises} made, ${runs.reduce((a, r) => a + r.stats.kept, 0)} kept, ${runs.reduce((a, r) => a + r.stats.broken, 0)} broken`);
+    console.log(`reworks shipped: ${runs.reduce((a, r) => a + r.stats.reworks, 0)} in ${runs.length} runs`);
     // the first client: not before the first release, not later than the fourth minute
     expect(s.first).toBeGreaterThan(0.6);
     expect(s.first).toBeLessThan(4);
