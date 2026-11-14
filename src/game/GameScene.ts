@@ -3,6 +3,7 @@ import { BLOCK_BY_ID } from '../content/blocks';
 import {
   BANK_ANSWERS,
   BANK_TEXT,
+  benefit,
   callAnswers,
   CALL_ASK,
   CLIENT_SAYS,
@@ -37,6 +38,7 @@ import {
   burnPerS,
   canHire,
   clientPay,
+  clientsMax,
   crunch,
   fire,
   flows,
@@ -693,12 +695,12 @@ export class GameScene extends Phaser.Scene {
     if (promo || research || run.clients.length > 0 || run.leads > 0) {
       // the caption stands in the free corner of the sheet: left of the trunk, above the lines of the agents
       const [x, y] = board.onScreen(MARKET[0], MARKET[1]);
-      const places = TUNING.stages[run.stage - 1].clients_max;
+      const places = clientsMax(run);
       // promotion is a funnel with one number: how much of the next client is already there
       const whole = Math.floor(run.leads);
       const part = Math.round((run.leads - whole) * 100);
       const coming = whole > 0 ? `<b>${whole}</b> ${plural(whole, ['клиент придёт', 'клиента придут', 'клиентов придут'])} на релизе` : `до нового клиента <b>${part}%</b>`;
-      const full = run.clients.length >= places ? ' · мест нет' : '';
+      const full = run.clients.length >= places ? ' · <b>мест нет</b>: их добавляют блоки «+ места»' : '';
       const ask = unknownAsks(run).length > 0 ? `разведка: до ответа <b>${run.insight} из ${researchNeed(run)}</b>` : 'разведка: все запросы известны';
       // big clients that are happy put their logos on the landing page: promotion works better with every one
       const trust = logos(run) > 0 ? `<i>логотипы на лендинге: ${logos(run)} · продвижение ×${String(1 + TUNING.logos.promo * logos(run)).replace('.', ',')}</i>` : '';
@@ -777,8 +779,7 @@ export class GameScene extends Phaser.Scene {
         options: this.pauseOptions(),
       });
     } else if (run.lastChance !== null) {
-      const life = mortgageSeconds(run) > 60 ? 'полторы минуты' : 'минута';
-      this.paper.call({ who: 'ЗВОНОК · БАНК', text: BANK_TEXT.replace('%s', money(run.lastChance)).replace('%t', life), options: BANK_ANSWERS });
+      this.paper.call({ who: 'ЗВОНОК · БАНК', text: BANK_TEXT.replace('%s', money(run.lastChance)).replace('%t', String(mortgageSeconds(run))), options: BANK_ANSWERS });
     } else if (run.call) {
       this.paper.call({
         who: `ЗВОНОК · ${run.call.name.toUpperCase()}`,
@@ -865,6 +866,10 @@ export class GameScene extends Phaser.Scene {
         ? '<em>демо-день</em>: есть что показать — на релизе придут новые клиенты'
         : '<strong>демо-день</strong>: дострой к релизу блок или доработку — придут 3 клиента; покажешь пустоту — один уйдёт';
     }
+    // no room for one more client: the way to grow is written out
+    if (run.clients.length >= clientsMax(run) && run.clients.length < TUNING.clients.slots) {
+      return `<strong>мест для клиентов нет</strong> (${run.clients.length} из ${clientsMax(run)}) — построй блок с пометкой <b>«+ места»</b>: поддержку, обучение, пуши`;
+    }
     if (net < 0) return `цель: выйти в плюс — не хватает <b>${money(-net)}</b> в секунду; клиентов приводит <b>продвижение</b>, удерживает <b>разведка</b>`;
     if (run.stage < 3) return `<em>в плюсе</em> · расти до подписок <b>${rate(TUNING.stage3_mrr / TUNING.sprint_s)}/с</b>: тогда у компании появится оценка и покупатель`;
     // the third stage is played for the price tag of the company
@@ -897,6 +902,9 @@ export class GameScene extends Phaser.Scene {
       playSound('quip');
       this.nagAt = this.clock + 34;
       return;
+    }
+    if (run.stage >= 2 && run.sprintT > 3) {
+      if (tell('t:grow', ['Как расти. Больше клиентов —', 'продвижение и блоки «+ места».', 'Дороже клиент — блоки «чек ×»,', 'связки соседних блоков и доработки.'])) return;
     }
     if (run.stage >= 2 && run.agents.length === 1 && run.sprintT > 6) {
       if (tell('t:hire', ['Можно нанять второго агента.', 'Он стоит денег каждую секунду —', 'смотри на «денег на…» под счётчиком.'])) return;
@@ -951,7 +959,8 @@ export class GameScene extends Phaser.Scene {
       id: kind,
       title: BLOCK_BY_ID[kind].name,
       // clients are here and there is nothing to charge them with: the shelf says so on the block itself
-      mark: kind === 'pay' && run.clients.length > 0 ? 'нужен сейчас' : run.known.includes(kind) ? 'просят' : '',
+      // next to the name — why to build it: someone asks for it, or what it gives (more clients, a bigger cheque)
+      mark: kind === 'pay' && run.clients.length > 0 ? 'нужен сейчас' : [run.known.includes(kind) ? 'просят' : '', benefit(kind)].filter((x) => x !== '').join(' · '),
       note: note(kind),
       price: `<u></u>${workNeed(run, kind)}`,
       state: this.picked === kind ? 'on' : full ? 'off' : 'can',
@@ -959,7 +968,8 @@ export class GameScene extends Phaser.Scene {
       pulse: run.blocks.length === 0 && this.picked === null,
     }));
     // what clients are known to ask for goes to the top of the shelf
-    items.sort((a, b) => Number(b.mark !== '') - Number(a.mark !== ''));
+    const asked = (it: ShelfItem): number => Number(it.mark === 'нужен сейчас' || (it.mark ?? '').startsWith('просят'));
+    items.sort((a, b) => asked(b) - asked(a));
     // and above everything — the reworks clients asked for by name
     const more = Math.round((TUNING.rework.pay_mult - 1) * 100);
     const ups: ShelfItem[] = reworks(run).map((r) => ({
@@ -1078,7 +1088,8 @@ export class GameScene extends Phaser.Scene {
   /** A new stage: the camera pulls back and shows more of the sheet. */
   private syncStage(ms: number): void {
     // the first client is already a reason to look wider: it stands to the right of the product
-    const want = this.run.stage >= 3 ? 3 : this.run.stage === 2 || this.run.stats.clients > 0 ? 2 : 1;
+    // more than four clients need the second column of buildings: the widest view, whatever the stage
+    const want = this.run.stage >= 3 || this.run.clients.length > 4 ? 3 : this.run.stage === 2 || this.run.stats.clients > 0 ? 2 : 1;
     if (this.stageShown === want) return;
     this.stageShown = want;
     const v = STAGE_VIEW[want - 1];

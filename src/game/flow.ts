@@ -28,7 +28,7 @@ export async function menu(term: Terminal, meta: Meta, state: MenuState, version
       term.print(`прошлый стартап: ${last.pitch} — ${ENDING_TITLE[last.ending].toLowerCase()}`, 'dim small');
     }
     const options = [
-      { title: meta.runs.length > 0 ? 'Новый стартап' : 'Основать стартап', note: meta.lessons.length > 0 ? `тот же основатель, уроков: ${meta.lessons.length}` : 'одна попытка — 20 минут' },
+      { title: meta.runs.length > 0 ? 'Новый стартап' : 'Основать стартап', note: meta.lessons.length > 0 ? `тот же основатель, уроков: ${meta.lessons.length}` : `одна попытка — ${Math.round((TUNING.last_sprint * TUNING.sprint_s) / 60)} минут` },
       { title: 'Резюме основателя', note: meta.runs.length > 0 ? `стартапов: ${meta.runs.length}` : 'пока пустое' },
       { title: `Звук: ${state.sound ? 'включён' : 'выключен'}` },
       { title: `Музыка: ${state.music ? 'включена' : 'выключена'}` },
@@ -114,7 +114,7 @@ export async function mixIdea(term: Terminal, seed: number, meta: Meta): Promise
     term.print('как это устроено:', 'dim small');
     term.print('1. Справа — блоки. Выбери блок, потом клетку на чертеже.', 'small');
     term.print('2. Я строю. Клик по стройке или Enter — помочь руками.', 'small');
-    term.print('3. Каждые 40 секунд релиз: достроенное начинает работать.', 'small');
+    term.print(`3. Каждые ${TUNING.sprint_s} секунды релиз: достроенное начинает работать.`, 'small');
     term.print('4. Клиенты придут после ядра и лендинга. Платить начнут после «Приёма оплаты».', 'small');
     term.print('5. Ты один и проверяешь одно направление: там работа идёт быстрее и чище.', 'small');
     term.print('Что делать дальше, всегда написано под счётчиком денег.', 'dim small');

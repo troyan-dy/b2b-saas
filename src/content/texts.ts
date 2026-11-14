@@ -1,22 +1,36 @@
 import effects from '../data/balance/effects.json';
 import headlines from '../data/balance/headlines.json';
 import type { ClientType, Lane, Tier } from '../systems/run/run';
-import { rate } from '../ui/format';
+import { plural, rate } from '../ui/format';
 
 const EFFECT_NAME: Record<string, string> = {
   word_of_mouth: 'сарафан',
-  corp_pay: 'крупные платят',
-  small_pay: 'малый бизнес платит',
+  corp_pay: 'чек крупных',
+  small_pay: 'чек малого бизнеса',
   promo: 'продвижение',
   tokens: 'токены',
 };
+
+function effectWords(k: string, v: number): string {
+  if (k === 'seats') return `+${v} ${plural(v, ['место', 'места', 'мест'])} для клиентов`;
+  if (k === 'patience') return `клиенты терпеливее на ${v} спр.`;
+  return `${EFFECT_NAME[k] ?? k} ×${String(v).replace('.', ',')}`;
+}
+
+/** The main thing a block gives, in two or three words: the shelf writes it next to the name. */
+export function benefit(kind: string): string {
+  const e = (effects as Record<string, Record<string, number>>)[kind];
+  if (!e) return '';
+  const [k, v] = Object.entries(e)[0];
+  return k === 'seats' ? `+${v} ${plural(v, ['место', 'места', 'мест'])}` : k === 'small_pay' || k === 'corp_pay' ? `чек ×${String(v).replace('.', ',')}` : effectWords(k, v);
+}
 
 /** What a shipped block gives, in the words of the shelf: «продвижение ×1,5». Empty for a block that only stands there. */
 export function effectLine(kind: string): string {
   const e = (effects as Record<string, Record<string, number>>)[kind];
   if (!e) return '';
   return Object.entries(e)
-    .map(([k, v]) => (k === 'patience' ? `клиенты терпеливее на ${v} спр.` : `${EFFECT_NAME[k] ?? k} ×${String(v).replace('.', ',')}`))
+    .map(([k, v]) => effectWords(k, v))
     .join(' · ');
 }
 
@@ -141,7 +155,7 @@ export function callAnswers(honestMult: number, sureMult: number, sprints: numbe
 }
 
 /** `%s` — the sum, `%t` — how long it lasts */
-export const BANK_TEXT = 'Деньги кончились. Под залог квартиры дадим <em>%s</em> — это ещё %t жизни. Не выйдете в плюс — квартира наша.';
+export const BANK_TEXT = 'Деньги кончились. Под залог квартиры дадим <em>%s</em> — это ещё %t секунд жизни. Не выйдете в плюс — квартира наша.';
 export const BANK_ANSWERS = ['Заложить квартиру', 'Закрыть стартап достойно'];
 
 /** The very first client is an acquaintance of the founder: it speaks like a friend and bargains like an enemy. */

@@ -35,7 +35,8 @@ interface BlockRule {
   role: string;
 }
 export const RULES = blocksData as Record<string, BlockRule>;
-const EFFECTS = effectsData as Record<string, Record<string, number>>;
+/** what each shipped block gives; the shelf and the bots read it too */
+export const EFFECTS = effectsData as Record<string, Record<string, number>>;
 /** the one object the mechanics read every step: a tuning panel binds to it */
 export const TUNING = tuningData;
 export const IDEAS = ideasData;
@@ -249,6 +250,8 @@ export interface Run {
 
 interface Effects {
   patience: number;
+  /** places for clients the shipped blocks add to those of the stage */
+  seats: number;
   word_of_mouth: number;
   corp_pay: number;
   small_pay: number;
@@ -324,7 +327,7 @@ export function createRun(seed: number, idea: Idea, perks: readonly string[] = [
     live: new Set(),
     host: 0,
     linkCount: 0,
-    eff: { patience: 0, word_of_mouth: 1, corp_pay: 1, small_pay: 1, promo: 1, tokens: 1 },
+    eff: { patience: 0, seats: 0, word_of_mouth: 1, corp_pay: 1, small_pay: 1, promo: 1, tokens: 1 },
   };
   // what the founder learned in earlier startups
   if (perks.includes('template')) {
@@ -351,12 +354,13 @@ function refresh(run: Run): void {
   for (const b of run.blocks) if (b.live) run.host += RULES[b.kind].host * (1 + TUNING.rework.host_mult * (b.level - 1));
   run.linkCount = links(run).length;
   run.stats.links = Math.max(run.stats.links, run.linkCount);
-  const eff: Effects = { patience: 0, word_of_mouth: 1, corp_pay: 1, small_pay: 1, promo: 1, tokens: 1 };
+  const eff: Effects = { patience: 0, seats: 0, word_of_mouth: 1, corp_pay: 1, small_pay: 1, promo: 1, tokens: 1 };
   for (const [kind, e] of Object.entries(EFFECTS)) {
     if (!run.live.has(kind)) continue;
     for (const [name, v] of Object.entries(e)) {
       const key = name as keyof Effects;
-      eff[key] = key === 'patience' ? eff[key] + v : eff[key] * v;
+      // sprints of patience and places for clients add up; everything else multiplies
+      eff[key] = key === 'patience' || key === 'seats' ? eff[key] + v : eff[key] * v;
     }
   }
   run.eff = eff;
@@ -454,6 +458,11 @@ export function incomePerS(run: Run): number {
 
 export function netPerS(run: Run): number {
   return incomePerS(run) - burnPerS(run);
+}
+
+/** How many clients the startup can serve: the stage gives some places, support and onboarding blocks add more. */
+export function clientsMax(run: Run): number {
+  return Math.min(TUNING.clients.slots, stageRule(run).clients_max + run.eff.seats);
 }
 
 export function stageRule(run: Run): (typeof TUNING.stages)[number] {
@@ -720,7 +729,7 @@ export function answerCall(run: Run, sure: boolean): void {
   const c = run.call;
   if (!c || run.over) return;
   run.call = null;
-  if (run.clients.length >= stageRule(run).clients_max) return;
+  if (run.clients.length >= clientsMax(run)) return;
   if (sure) {
     c.deal = TUNING.call.sure_mult;
     c.promised = true;
@@ -1015,7 +1024,7 @@ function release(run: Run): void {
     }
     // the very first client is an acquaintance: no promotion needed
     if (run.stats.clients === 0) run.leads = Math.max(run.leads, 1);
-    const max = stageRule(run).clients_max;
+    const max = clientsMax(run);
     while (run.leads >= 1 && run.clients.length < max) {
       run.leads -= 1;
       const c = makeClient(run);

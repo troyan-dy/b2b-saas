@@ -1,12 +1,14 @@
 {
-  "bot": { "patience": 1 },
-  "dark": { "word_of_mouth": 2 },
+  "bot": { "seats": 2, "patience": 1 },
+  "onb": { "seats": 1, "small_pay": 1.1 },
+  "push": { "seats": 1 },
+  "mobile": { "seats": 1, "small_pay": 1.2 },
+  "crm": { "seats": 1 },
   "dash": { "corp_pay": 1.2 },
-  "mobile": { "small_pay": 1.2 },
-  "api": { "promo": 1.5 },
-  "cheap": { "tokens": 0.5 },
-  "wait": { "promo": 1.15 },
-  "onb": { "small_pay": 1.1 },
+  "c1": { "corp_pay": 1.15 },
+  "dark": { "word_of_mouth": 2 },
   "ref": { "word_of_mouth": 1.5 },
-  "c1": { "corp_pay": 1.15 }
+  "api": { "promo": 1.5 },
+  "wait": { "promo": 1.15 },
+  "cheap": { "tokens": 0.5 }
 }

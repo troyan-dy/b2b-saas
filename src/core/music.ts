@@ -12,7 +12,8 @@ export const TRACKS: readonly Track[] = [
   { id: 'chip', title: 'Чиптюн', mood: '8 бит · ровный ритм', author: 'iamoneabe', file: 'assets/audio/chiploop.ogg' },
   { id: 'path', title: 'Забытая тропа', mood: '8 бит · задумчиво', author: 'johndekale', file: 'assets/audio/forgotten_path.ogg' },
   { id: 'bossa', title: 'Босса-нова для лифта', mood: 'иронично · 8 бит · бодро', author: 'Joth', file: 'assets/audio/bossa_nova.ogg' },
-  { id: 'lofi', title: 'Лоу-фай', mood: 'бит для работы · тепло', author: 'omfgdude, qubodup', file: 'assets/audio/chill_lofi.ogg' },];
+  { id: 'lofi', title: 'Лоу-фай', mood: 'бит для работы · тепло', author: 'omfgdude, qubodup', file: 'assets/audio/chill_lofi.ogg' },
+];
 const VOLUME = 0.3;
 
 let audio: HTMLAudioElement | null = null;

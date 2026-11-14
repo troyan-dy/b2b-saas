@@ -3,7 +3,9 @@ import {
   answerLastChance,
   burnPerS,
   canHire,
+  clientsMax,
   crunch,
+  EFFECTS,
   freeCells,
   friendsAt,
   hire,
@@ -100,6 +102,11 @@ function nextBlock(run: Run, style: BotStyle): string | null {
   const can = shelf(run);
   if (can.length === 0) return null;
   for (const k of ['core', 'landing', 'pay']) if (can.includes(k)) return k;
+  // no room for the next client: the cheapest block that adds places
+  if (run.clients.length >= clientsMax(run)) {
+    const seats = can.filter((k) => EFFECTS[k]?.seats).sort((a, b) => RULES[a].work - RULES[b].work);
+    if (seats.length > 0 && run.money > burnPerS(run) * 60) return seats[0];
+  }
   // what was promised on a call comes first: a broken promise costs a refund
   for (const c of run.clients) if (c.promised && can.includes(c.want)) return c.want;
   const waited = new Set(run.clients.filter((c) => !c.happy).map((c) => c.want));

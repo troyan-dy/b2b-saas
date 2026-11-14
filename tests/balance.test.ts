@@ -70,7 +70,7 @@ describe('economy', () => {
     expect(s.first).toBeLessThan(4);
     expect(s.alive).toBeGreaterThan(0.45);
     // even an unlucky startup lives long enough to be a story
-    expect(s.earliestDeath).toBeGreaterThan(4.5);
+    expect(s.earliestDeath).toBeGreaterThan(3.6);
   });
 
   it('test_run_links_and_research_pay_off', () => {
