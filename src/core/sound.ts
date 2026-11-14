@@ -1,4 +1,5 @@
 import { ZZFX, zzfx } from 'zzfx';
+import { logSound } from './metrics';
 
 export type SoundName = 'yes' | 'auto' | 'buffer' | 'waste' | 'buy' | 'quip' | 'scale' | 'finale' | 'ui' | 'all';
 
@@ -24,12 +25,14 @@ export function unlockSound(): void {
  */
 export function playSound(name: SoundName, step = 0): void {
   if (!unlocked || !enabled) return;
+  if (__TOOLS__) logSound(name);
   switch (name) {
     case 'yes':
       zzfx(0.9, 0, 392 * 2 ** ((step * 2) / 12), 0.004, 0.02, 0.07, 1, 1.4);
       break;
     case 'auto':
-      zzfx(0.3, 0, 587, 0.002, 0.01, 0.04, 1, 1.2);
+      // the most frequent sound of the game: each square of an agent lands on its own note of a pentatonic
+      zzfx(0.3, 0, 587 * 2 ** ([0, 2, 4, 7, 9][Math.floor(Math.random() * 5)] / 12), 0.002, 0.01, 0.04, 1, 1.2);
       break;
     case 'buy':
       // `step` — semitones: every kind of purchase has its own pitch

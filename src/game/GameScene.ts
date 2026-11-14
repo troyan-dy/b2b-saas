@@ -533,12 +533,14 @@ export class GameScene extends Phaser.Scene {
       case 'hungup': {
         const [x, y] = this.board.onScreen(MARKET[0], MARKET[1]);
         this.paper.pop(x, y - 20, `${e.name}: не дозвонились и ушли`, 'bad');
+        playSound('waste');
         logEvent('hungup');
         break;
       }
       case 'kept': {
         const [x, y] = this.board.onScreen(...this.nodePos(`c${e.id}`));
         this.paper.pop(x, y - 170 * this.board.zoom, 'обещание выполнено', 'good');
+        playSound('buy', 9);
         logEvent('kept');
         break;
       }
@@ -546,6 +548,7 @@ export class GameScene extends Phaser.Scene {
         const [x, y] = this.board.onScreen(...this.nodePos(`c${e.id}`));
         this.paper.pop(x, y - 190 * this.board.zoom, `возврат ${money(-e.sum)}`, 'bad');
         this.cameras.main.shake(140, 0.003);
+        playSound('waste');
         logEvent('refund');
         break;
       }
