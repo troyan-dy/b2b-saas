@@ -49,7 +49,7 @@ export const VIEW_AT: Pt = [670, 640];
 
 /** what the camera shows at each stage: the sheet point under VIEW_AT and the zoom */
 export const STAGE_VIEW: readonly { x: number; y: number; zoom: number }[] = [
-  { x: -90, y: 160, zoom: 1 },
+  { x: -90, y: 148, zoom: 1 },
   { x: 80, y: 110, zoom: 0.84 },
   { x: 310, y: 90, zoom: 0.665 },
 ];

@@ -307,6 +307,14 @@ export class GameScene extends Phaser.Scene {
         if (e.agent === 0 || this.speed > 2 || !this.board.hasRoute(key)) land();
         else this.board.flow(key, PALETTE.coral, 620, land);
         if (this.speed <= 2 && e.agent !== 0) playSound('auto');
+        // the founder checks this lane: for every square of work an ink square leaves his desk
+        if (e.agent !== 0 && e.lane === run.review && this.speed <= 2 && this.board.hasRoute('me')) {
+          this.board.flow('me', PALETTE.ink, 600);
+          if (!this.said.has('t:review') && (this.termUntil === 0 || this.clock > this.termUntil - 4)) {
+            this.said.add('t:review');
+            this.say(['<b>❯ Клод</b>', 'Тёмные квадраты от стола — это ты:', 'ты проверяешь одно направление.', 'Там работа идёт быстрее и без долга.', 'Сменить его — клавиши справа внизу.'], 14);
+          }
+        }
         break;
       }
       case 'built': {
@@ -501,7 +509,7 @@ export class GameScene extends Phaser.Scene {
         // how much of the site is done: a number above it
         const [tx, ty] = board.onScreen(...board.top(b));
         keep.add(`b:n${b.kind}`);
-        this.paper.tag(`b:n${b.kind}`, tx, ty - 78 * z, `<b>${b.done}/${b.need}</b>`, 'small hot');
+        this.paper.tag(`b:n${b.kind}`, tx, ty - 64 * z, `<b>${b.done}/${b.need}</b>`, 'small hot');
       }
     }
     for (const s of slots) {
@@ -738,9 +746,30 @@ export class GameScene extends Phaser.Scene {
     const run = this.run;
     const board = this.board;
     const site = run.blocks.find((b) => !b.built);
-    const sig = JSON.stringify([run.agents.map((a) => [a.id, a.lane]), site ? [site.i, site.j] : null]);
+    const sig = JSON.stringify([run.agents.map((a) => [a.id, a.lane]), site ? [site.i, site.j] : null, run.review]);
     if (sig === this.routeSig) return;
     this.routeSig = sig;
+
+    // where the work of a lane goes on the sheet
+    const targetOf = (lane: Lane): Pt | null => {
+      if (lane === 'build') {
+        if (!site) return null;
+        const [cx, cy] = board.cell(site.i, site.j);
+        return [cx, cy + 56];
+      }
+      if (lane === 'fix') {
+        const [cx, cy] = board.cell(0, 0);
+        return [cx, cy + 56];
+      }
+      return MARKET;
+    };
+
+    // the founder's own connector: from the desk to what he checks. His squares are ink, not coral:
+    // every square of work on that lane is looked at by a human
+    const mine = targetOf(run.review);
+    const from: Pt = [DESK[0] + 118, DESK[1] - 64];
+    if (mine) board.route('me', [from, [from[0] + 40, from[1]], [from[0] + 40, BUS_Y - 9], [mine[0], BUS_Y - 9], mine]);
+    else board.dropRoute('me');
 
     const ids = new Set(run.agents.map((a) => `a${a.id}`));
     for (const key of [...this.faces.keys()]) {
@@ -769,14 +798,7 @@ export class GameScene extends Phaser.Scene {
       }
       const top: Pt = [x, y - 122];
       const bus = BUS_Y + k * BUS_GAP;
-      let target: Pt | null = null;
-      if (a.lane === 'build' && site) {
-        const [cx, cy] = board.cell(site.i, site.j);
-        target = [cx, cy + 56];
-      } else if (a.lane === 'fix') {
-        const [cx, cy] = board.cell(0, 0);
-        target = [cx, cy + 56];
-      } else if (a.lane === 'promo' || a.lane === 'research') target = MARKET;
+      const target = targetOf(a.lane);
       if (target) board.route(key, [top, [x, bus], [target[0], bus], target]);
       else board.dropRoute(key);
     });

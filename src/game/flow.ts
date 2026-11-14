@@ -107,6 +107,7 @@ export async function mixIdea(term: Terminal, seed: number, meta: Meta): Promise
     term.print('2. Я строю. Клик по стройке или Enter — помочь руками.', 'small');
     term.print('3. Каждые 40 секунд релиз: достроенное начинает работать.', 'small');
     term.print('4. Клиенты придут после ядра и лендинга. Платить начнут после «Приёма оплаты».', 'small');
+    term.print('5. Ты один и проверяешь одно направление: там работа идёт быстрее и чище.', 'small');
     term.print('Что делать дальше, всегда написано под счётчиком денег.', 'dim small');
   }
   await term.wait('начать');
