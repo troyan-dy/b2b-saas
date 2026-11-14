@@ -21,6 +21,7 @@ import {
   hire,
   IDEAS,
   incomePerS,
+  isLive,
   LANES,
   links,
   netPerS,
@@ -90,6 +91,8 @@ export class GameScene extends Phaser.Scene {
   private hands = 0;
   /** Esc: the game stands still and asks what next */
   private pauseCard = false;
+  /** when Claude may next repeat what stops the money */
+  private nagAt = 0;
 
   constructor(run: Run, rng: Rng, paper: Paper, hooks: GameHooks) {
     super('game');
@@ -322,7 +325,7 @@ export class GameScene extends Phaser.Scene {
         logEvent(`release:${e.report.sprint}`);
         const names = e.report.shipped.map((k) => `«${BLOCK_BY_ID[k]?.short ?? k}»`);
         const reasons = e.report.reasons.map((k) => BLOCK_BY_ID[k]?.short ?? '');
-        this.say(releaseLines({ ...e.report, shipped: names, reasons }), 16);
+        this.say(releaseLines({ ...e.report, shipped: names, reasons, unpaid: isLive(run, 'pay') ? 0 : run.clients.length }), 16);
         playSound('scale');
         // the release is the beat of the game: what ships bursts, the sheet breathes, the money answers
         for (const kind of e.report.shipped) {
@@ -550,6 +553,11 @@ export class GameScene extends Phaser.Scene {
       // two short lines: the name, then the money and the mood — twelve of them must fit side by side
       const paid = pay > 0 ? `<em>${money(pay)}</em>` : run.down ? 'лежим' : 'бесплатно';
       let mood: string;
+      // nothing to charge with: this is said on every client, in coral — «free and happy» reads as «all is well»
+      if (!isLive(run, 'pay')) {
+        this.paper.tag(`c${c.id}`, x, y, `<b>${c.name}</b><i class="bad">не платит: нет «оплаты»</i>`, 'small');
+        continue;
+      }
       if (c.happy) mood = `<i>${paid} · доволен</i>`;
       else if (c.promised) mood = `<i class="bad">обещан «${BLOCK_BY_ID[c.want]?.short}» · ${c.patience} спр.</i>`;
       else if (run.known.includes(c.want)) mood = `<i class="bad">ждёт «${BLOCK_BY_ID[c.want]?.short}» · ${c.patience} спр.</i>`;
@@ -569,10 +577,7 @@ export class GameScene extends Phaser.Scene {
     const leftS = Math.ceil(TUNING.sprint_s - run.sprintT);
     this.paper.setSprint(`СПРИНТ ${Math.min(run.sprint, TUNING.last_sprint)} ИЗ ${TUNING.last_sprint} · РЕЛИЗ ЧЕРЕЗ ${leftS} С`, run.sprintT / TUNING.sprint_s);
     // the goal is always on the sheet: three frames taken at random must say what to do
-    if (run.blocks.length === 0) this.paper.setGoal('цель: поставить первый блок — <b>выбери его справа</b>');
-    else if (run.stats.clients === 0) this.paper.setGoal('цель: первый клиент — нужны <b>ядро</b> и <b>лендинг</b> в релизе');
-    else if (net < 0) this.paper.setGoal(`цель: выйти в плюс — не хватает <b>${money(-net)}</b> в секунду`);
-    else this.paper.setGoal(`<em>в плюсе</em> · удержись до ${TUNING.last_sprint}-го спринта или расти до звонка покупателя`);
+    this.paper.setGoal(this.nextStep(net));
     if (!this.ended) this.teach();
 
     this.paper.setShelf(this.shelfView());
@@ -605,7 +610,28 @@ export class GameScene extends Phaser.Scene {
   }
 
   /**
-   * Teaching through play: Claude says one thing at the moment it matters, once. Never while his card
+   * The line under the sprint ruler: the one thing to do next, in plain words. The first startup is
+   * walked through by it step by step: block, landing, payment, client, profit.
+   */
+  private nextStep(net: number): string {
+    const run = this.run;
+    const has = (kind: string): boolean => run.blocks.some((b) => b.kind === kind);
+    const pay = run.blocks.find((b) => b.kind === 'pay');
+    if (run.blocks.length === 0) return 'что делать: выбери справа <b>«Обёртку над Клодом»</b>, потом клетку на чертеже';
+    if (!has('landing')) return 'что делать: поставь <b>«Лендинг»</b> — без него клиенты не найдут продукт';
+    if (!pay) return run.clients.length > 0 ? '<strong>клиенты не платят</strong> — поставь <b>«Приём оплаты»</b>: выбери его справа' : 'что делать: поставь <b>«Приём оплаты»</b> — без него клиенты будут пользоваться бесплатно';
+    if (!isLive(run, 'pay')) {
+      if (!pay.built) return `${run.clients.length > 0 ? '<strong>клиенты не платят</strong> — ' : 'что делать: '}дострой <b>«Приём оплаты»</b>: клик по стройке или Enter — помочь руками`;
+      return '«Приём оплаты» готов: клиенты начнут платить с ближайшего релиза';
+    }
+    if (run.stats.clients === 0) return 'жди релиза: первый клиент придёт сам, когда выйдут <b>ядро</b> и <b>лендинг</b>';
+    if (net < 0) return `цель: выйти в плюс — не хватает <b>${money(-net)}</b> в секунду; клиентов приводит <b>продвижение</b>, удерживает <b>разведка</b>`;
+    return `<em>в плюсе</em> · удержись до ${TUNING.last_sprint}-го спринта или расти до звонка покупателя`;
+  }
+
+  /**
+   * Teaching through play: Claude says one thing at the moment it matters. Most things once; what stops
+   * the money (no way to charge the clients) — again and again until it is fixed. Never while his card
    * is busy with a release.
    */
   private teach(): void {
@@ -618,8 +644,17 @@ export class GameScene extends Phaser.Scene {
       playSound('quip');
       return true;
     };
-    if (run.clients.length > 0 && !run.blocks.some((b) => b.kind === 'pay')) {
-      if (tell('t:pay', ['У нас клиент, но брать с него', 'деньги нечем. Поставь «Приём оплаты».'])) return;
+    if (run.clients.length > 0 && !isLive(run, 'pay') && this.clock >= this.nagAt) {
+      const pay = run.blocks.find((b) => b.kind === 'pay');
+      const lines = !pay
+        ? ['Клиенты пользуются бесплатно:', 'нам нечем брать с них деньги.', 'Выбери справа «Приём оплаты»', 'и поставь его на чертёж.']
+        : !pay.built
+          ? ['«Приём оплаты» ещё строится —', 'до него клиенты не платят.', 'Клик по стройке или Enter: помоги.']
+          : ['«Приём оплаты» готов. Клиенты', 'начнут платить с ближайшего релиза.'];
+      this.say(['<b>❯ Клод</b>', ...lines], 16);
+      playSound('quip');
+      this.nagAt = this.clock + 34;
+      return;
     }
     if (run.stage >= 2 && run.agents.length === 1 && run.sprintT > 6) {
       if (tell('t:hire', ['Можно нанять второго агента.', 'Он стоит денег каждую секунду —', 'смотри на «денег на…» под счётчиком.'])) return;
@@ -654,7 +689,8 @@ export class GameScene extends Phaser.Scene {
     const items: ShelfItem[] = shelf(run).map((kind) => ({
       id: kind,
       title: BLOCK_BY_ID[kind].name,
-      mark: run.known.includes(kind) ? 'просят' : '',
+      // clients are here and there is nothing to charge them with: the shelf says so on the block itself
+      mark: kind === 'pay' && run.clients.length > 0 ? 'нужен сейчас' : run.known.includes(kind) ? 'просят' : '',
       note: BLOCK_BY_ID[kind].note,
       price: `<u></u>${workNeed(run, kind)}`,
       state: this.picked === kind ? 'on' : full ? 'off' : 'can',

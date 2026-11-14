@@ -107,6 +107,8 @@ export function releaseLines(r: {
   tokens: number;
   debt: number;
   down: boolean;
+  /** clients who use the product for free because there is nothing to charge them with */
+  unpaid?: number;
 }): string[] {
   const lines = [`<b>❯ релиз · спринт ${r.sprint}</b>`];
   if (r.shipped.length > 0) lines.push(`выпущено: ${r.shipped.join(', ')}`);
@@ -116,7 +118,8 @@ export function releaseLines(r: {
     const left = r.left > 0 ? ` · <strong>−${r.left}</strong> ${r.reasons[0] ? `ушёл: нет «${r.reasons[0]}»` : 'ушёл молча'}` : '';
     lines.push(came + left);
   }
-  lines.push(`подписки <em>$${Math.round(r.mrr)}</em> · токены −$${Math.round(r.tokens)}`);
+  if (r.unpaid) lines.push(`<strong>клиенты не платят: нет «Приёма оплаты»</strong>`, `токены за них: −$${Math.round(r.tokens)} за спринт`);
+  else lines.push(`подписки <em>$${Math.round(r.mrr)}</em> · токены −$${Math.round(r.tokens)}`);
   if (r.down) lines.push('<strong>продукт лежит весь спринт: никто не платит</strong>');
   else if (r.debt >= 20) lines.push(`<strong>долг ${Math.round(r.debt)} — следующий релиз может всё уронить</strong>`);
   else if (r.debt >= 8) lines.push(`<span>долг ${Math.round(r.debt)} — держится на честном слове</span>`);

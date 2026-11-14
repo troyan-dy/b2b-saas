@@ -99,6 +99,16 @@ export async function mixIdea(term: Terminal, seed: number, meta: Meta): Promise
   ];
   if (meta.lessons.length > 0) lines.push(`С тобой твой опыт: уроков — ${meta.lessons.length}.`);
   await term.type(lines, '');
+  if (meta.runs.length === 0) {
+    // the first startup: how the sheet works, in four lines — the rest is taught on the sheet itself
+    term.print('');
+    term.print('как это устроено:', 'dim small');
+    term.print('1. Справа — блоки. Выбери блок, потом клетку на чертеже.', 'small');
+    term.print('2. Я строю. Клик по стройке или Enter — помочь руками.', 'small');
+    term.print('3. Каждые 40 секунд релиз: достроенное начинает работать.', 'small');
+    term.print('4. Клиенты придут после ядра и лендинга. Платить начнут после «Приёма оплаты».', 'small');
+    term.print('Что делать дальше, всегда написано под счётчиком денег.', 'dim small');
+  }
   await term.wait('начать');
   return idea;
 }
