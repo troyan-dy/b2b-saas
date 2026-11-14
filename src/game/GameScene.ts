@@ -37,9 +37,11 @@ import {
   answerOffer,
   busy,
   canHire,
+  cellsMax,
   clientPay,
   clientsMax,
   crunch,
+  demolish,
   dilemmaOf,
   fire,
   flows,
@@ -127,6 +129,8 @@ export class GameScene extends Phaser.Scene {
   private readonly hooks: GameHooks;
   /** the block picked on the shelf and waiting for a cell */
   private picked: string | null = null;
+  /** «снести блок» is on: the next click on a shipped block takes it off the sheet */
+  private razing = false;
   /** squares that have arrived at each block: the sheet shows work when it lands, not when it is sent */
   private readonly landed = new Map<string, number>();
   private readonly faces = new Map<string, Phaser.GameObjects.Rectangle>();
@@ -231,6 +235,14 @@ export class GameScene extends Phaser.Scene {
   private onShelf(section: string, item: string): void {
     unlockSound();
     if (section !== 'blocks') return;
+    if (item === 'x') {
+      // the wrecking tool: on, then a click on the block that has to go
+      this.razing = !this.razing;
+      this.picked = null;
+      playSound('ui');
+      return;
+    }
+    this.razing = false;
     if (item.startsWith('up:')) {
       // a rework: no cell to choose — it is built on the block the client named
       if (upgrade(this.run, item.slice(3))) playSound('buy', 0);
@@ -240,7 +252,7 @@ export class GameScene extends Phaser.Scene {
       }
       return;
     }
-    if (sites(this.run).length >= TUNING.sites_max) {
+    if (sites(this.run).length >= TUNING.sites_max || this.run.blocks.length >= cellsMax(this.run)) {
       this.paper.flash('blocks', item, 'denied');
       playSound('waste');
       return;
@@ -252,6 +264,11 @@ export class GameScene extends Phaser.Scene {
   private onCell(id: string): void {
     if (id === 'site') {
       this.byHand();
+      return;
+    }
+    if (id.startsWith('x:')) {
+      if (demolish(this.run, id.slice(2))) this.razing = false;
+      else playSound('waste');
       return;
     }
     if (!this.picked) return;
@@ -334,8 +351,11 @@ export class GameScene extends Phaser.Scene {
     unlockSound();
     if (this.ended) return;
     if (e.code === 'Escape') {
-      // first Esc drops the picked block, the next one stops the clock
-      if (this.picked) this.picked = null;
+      // first Esc drops the picked block or the wrecking tool, the next one stops the clock
+      if (this.picked || this.razing) {
+        this.picked = null;
+        this.razing = false;
+      }
       else {
         this.pauseCard = !this.pauseCard;
         this.paused = this.pauseCard;
@@ -488,6 +508,21 @@ export class GameScene extends Phaser.Scene {
         }
         break;
       }
+      case 'trend': {
+        this.news(NEWS_EVENT.trend.replace('%s', BLOCK_BY_ID[e.kind]?.name ?? e.kind));
+        this.newsHold = 16;
+        this.newsAt = 16;
+        const [x, y] = this.board.onScreen(MARKET[0], MARKET[1]);
+        this.paper.pop(x, y - 20, `тренд: клиенты хотят ${BLOCK_BY_ID[e.kind]?.name ?? e.kind}`, 'good');
+        playSound('quip');
+        logEvent(`trend:${e.kind}`);
+        break;
+      }
+      case 'razed':
+        this.landed.delete(e.kind);
+        playSound('waste');
+        logEvent(`razed:${e.kind}`);
+        break;
       case 'rework': {
         // the client says it aloud: nothing to find out, only to build
         const line = REWORK_SAYS[e.id % REWORK_SAYS.length].replace('%s', BLOCK_BY_ID[e.kind]?.short ?? e.kind);
@@ -652,8 +687,16 @@ export class GameScene extends Phaser.Scene {
       const [x, y] = board.onScreen(...board.cell(c.i, c.j));
       return { id: `${c.i},${c.j}`, x, y, pulse: run.blocks.length < 2 };
     });
+    // the wrecking tool: every shipped block but the base three can be clicked off the sheet
+    if (this.razing) {
+      for (const b of run.blocks) {
+        if (!b.live || b.up || RULES[b.kind].role === 'base') continue;
+        const [x, y] = board.onScreen(...board.top(b));
+        cells.push({ id: `x:${b.kind}`, x, y, pulse: true });
+      }
+    }
     const site = run.blocks.find(isSite);
-    if (!this.picked && site) {
+    if (!this.picked && !this.razing && site) {
       // the site itself takes clicks: the founder finishes the work by hand
       const [x, y] = board.onScreen(...board.top(site));
       cells.push({ id: 'site', x, y, pulse: novice && run.energy >= 1 });
@@ -905,6 +948,11 @@ export class GameScene extends Phaser.Scene {
         ? '<em>демо-день</em>: есть что показать — на релизе придут новые клиенты'
         : '<strong>демо-день</strong>: дострой к релизу блок или доработку — придут 3 клиента; покажешь пустоту — один уйдёт';
     }
+    // the sheet is full and a client waits for what is not on it: something has to go
+    if (run.blocks.length >= cellsMax(run)) {
+      const want = run.clients.find((c) => !c.happy && run.known.includes(c.want) && shelf(run).includes(c.want));
+      if (want) return `<strong>чертёж полон</strong>, а клиент ждёт <b>«${BLOCK_BY_ID[want.want]?.name}»</b> — освободи клетку: <b>«Снести блок»</b> в конце полки`;
+    }
     // no room for one more client: the way to grow is written out
     if (run.clients.length >= clientsMax(run) && run.clients.length < TUNING.clients.slots) {
       return `<strong>мест для клиентов нет</strong> (${run.clients.length} из ${clientsMax(run)}) — построй блок с пометкой <b>«+ места»</b>: поддержку, обучение, пуши`;
@@ -941,6 +989,9 @@ export class GameScene extends Phaser.Scene {
       playSound('quip');
       this.nagAt = this.clock + 34;
       return;
+    }
+    if (run.blocks.length >= cellsMax(run) && run.stage >= 2) {
+      if (tell('t:full', ['Чертёж полон: всё построить нельзя.', 'Лишний блок можно снести — «Снести', 'блок» в конце полки. Клиенты, которым', 'он был нужен, начнут ждать снова.'])) return;
     }
     if (run.stage >= 2 && run.sprintT > 3) {
       if (tell('t:grow', ['Как расти. Больше клиентов —', 'продвижение и блоки «+ места».', 'Дороже клиент — блоки «чек ×»,', 'связки соседних блоков и доработки.'])) return;
@@ -1015,13 +1066,21 @@ export class GameScene extends Phaser.Scene {
     const more = Math.round((TUNING.rework.pay_mult - 1) * 100);
     const ups: ShelfItem[] = reworks(run).map((r) => ({
       id: `up:${r.kind}`,
-      title: `${BLOCK_BY_ID[r.kind].name} v${r.level}`,
-      mark: 'доработка',
+      // a short name: the tile must say «rework» and of what, in one line
+      title: `Доработка: ${BLOCK_BY_ID[r.kind].short} v${r.level}`,
+      mark: '',
       note: `${r.who[0]}${r.who.length > 1 ? ` и ещё ${r.who.length - 1}` : ''}: +${more}% к чеку · хостинг +${rate(RULES[r.kind].host * TUNING.rework.host_mult)}/с`,
       price: `<u></u>${reworkNeed(run, run.blocks.find((b) => b.kind === r.kind)!)}`,
       state: full ? 'off' : 'can',
     }));
     items.unshift(...ups);
+    // the sheet holds fewer blocks than the startup can build: at the end of the shelf — the tool that makes room
+    const cap = cellsMax(run);
+    const packed = run.blocks.length >= cap;
+    if (packed) for (const it of items) if (!it.id.startsWith('up:')) it.state = 'off';
+    if (run.blocks.some((b) => b.live && RULES[b.kind].role !== 'base')) {
+      items.push({ id: 'x', title: 'Снести блок', note: this.razing ? '<i>кликни блок на чертеже</i> · Esc — отмена' : 'освободить клетку под другой блок', price: '', state: this.razing ? 'on' : 'can' });
+    }
     const rule = TUNING.stages[run.stage - 1];
     // what opens the stronger agents and more desks is written out: it is a goal, not a secret
     const unlock =
@@ -1045,8 +1104,8 @@ export class GameScene extends Phaser.Scene {
     return [
       {
         id: 'blocks',
-        title: 'БЛОКИ · ЧТО СТРОИМ ДАЛЬШЕ',
-        hint: this.picked ? 'теперь клетка на чертеже' : full ? `стройка занята: ${TUNING.sites_max} из ${TUNING.sites_max}` : items.length === 0 ? 'всё построено' : '',
+        title: `БЛОКИ · НА ЧЕРТЕЖЕ ${run.blocks.length} ИЗ ${cap}`,
+        hint: this.razing ? 'кликни блок, который снести' : this.picked ? 'теперь клетка на чертеже' : packed ? 'чертёж полон' : full ? `стройка занята: ${TUNING.sites_max} из ${TUNING.sites_max}` : '',
         items,
         grid: true,
         // the list takes all the height the agents leave: at best every block is seen without scrolling

@@ -177,6 +177,10 @@ export type RunEvent =
   /** a lie came out */
   | { type: 'exposed'; text: string }
   | { type: 'reveal'; kind: string }
+  /** the market wants something new: one more block joins what clients ask for */
+  | { type: 'trend'; kind: string }
+  /** a block is taken off the sheet */
+  | { type: 'razed'; kind: string }
   /** a happy client asks to improve a block: it waits for version `level` */
   | { type: 'rework'; id: number; kind: string; level: number }
   | { type: 'down' }
@@ -226,6 +230,8 @@ export interface Run {
   energy: number;
   leads: number;
   insight: number;
+  /** the blocks this startup can build besides the base three: a different set every time */
+  pool: string[];
   /** what this market asks for; hidden until research reveals it */
   asks: string[];
   corpAsks: string[];
@@ -339,6 +345,15 @@ export function createRun(seed: number, idea: Idea, perks: readonly string[] = [
   const rng = createRng(seed);
   const askable = Object.keys(RULES).filter((k) => RULES[k].role === 'ask');
   const corp = Object.keys(RULES).filter((k) => RULES[k].role === 'corp');
+  const asks = shuffle(rng, askable).slice(0, 3);
+  const corpAsks = shuffle(rng, corp).slice(0, TUNING.corp_asks);
+  // the toolkit of this startup: what the market asks for, two blocks that add places for clients,
+  // and a random handful of the rest — never all of them
+  const others = shuffle(rng, Object.keys(RULES).filter((k) => RULES[k].role !== 'base'));
+  const must = new Set([...asks, ...corpAsks]);
+  if (perks.includes('cheapEarly')) must.add('cheap');
+  for (const k of others) if (EFFECTS[k]?.seats && [...must].filter((x) => EFFECTS[x]?.seats).length < 2) must.add(k);
+  const pool = [...must, ...others.filter((k) => !must.has(k))].slice(0, TUNING.pool_size);
   const run: Run = {
     seed,
     rng,
@@ -358,8 +373,9 @@ export function createRun(seed: number, idea: Idea, perks: readonly string[] = [
     energy: TUNING.crunch.max,
     leads: 0,
     insight: 0,
-    asks: shuffle(rng, askable).slice(0, 3),
-    corpAsks: shuffle(rng, corp).slice(0, TUNING.corp_asks),
+    pool,
+    asks,
+    corpAsks,
     known: [],
     clients: [],
     down: false,
@@ -531,9 +547,15 @@ export function stageRule(run: Run): (typeof TUNING.stages)[number] {
   return TUNING.stages[run.stage - 1];
 }
 
+/** how many blocks the sheet of this stage holds: fewer than the startup could build — a product is a choice */
+export function cellsMax(run: Run): number {
+  return stageRule(run).cells_max;
+}
+
 /** Cells the next block may stand on: inside the sheet of this stage, next to what is already there. */
 export function freeCells(run: Run): { i: number; j: number }[] {
   if (run.blocks.length === 0) return [{ i: 0, j: 0 }];
+  if (run.blocks.length >= cellsMax(run)) return [];
   const r = stageRule(run).radius;
   const taken = new Set(run.blocks.map((b) => `${b.i},${b.j}`));
   const out: { i: number; j: number }[] = [];
@@ -552,7 +574,8 @@ export function freeCells(run: Run): { i: number; j: number }[] {
 export function shelf(run: Run): string[] {
   if (run.blocks.length === 0) return ['core'];
   const placed = new Set(run.blocks.map((b) => b.kind));
-  return Object.keys(RULES).filter((k) => !placed.has(k) && (RULES[k].stage <= run.stage || (k === 'cheap' && run.perks.includes('cheapEarly'))));
+  const mine = (k: string): boolean => RULES[k].role === 'base' || run.pool.includes(k);
+  return Object.keys(RULES).filter((k) => mine(k) && !placed.has(k) && (RULES[k].stage <= run.stage || (k === 'cheap' && run.perks.includes('cheapEarly'))));
 }
 
 export function sites(run: Run): Block[] {
@@ -612,6 +635,25 @@ export function place(run: Run, kind: string, i: number, j: number): boolean {
   if (!freeCells(run).some((c) => c.i === i && c.j === j)) return false;
   run.blocks.push({ kind, i, j, done: 0, need: workNeed(run, kind), built: false, live: false, level: 1, up: false, hand: false });
   run.events.push({ type: 'placed', kind, i, j });
+  return true;
+}
+
+/**
+ * Takes a shipped block off the sheet to make room: what it gave is gone at once, and the clients
+ * that came for it start to wait again. The core stays: without it there is no product.
+ */
+export function demolish(run: Run, kind: string): boolean {
+  const b = run.blocks.find((x) => x.kind === kind);
+  if (run.over || !b || !b.live || b.up || RULES[kind].role === 'base') return false;
+  run.blocks = run.blocks.filter((x) => x !== b);
+  refresh(run);
+  for (const c of run.clients) {
+    if (c.want !== kind || !c.happy) continue;
+    c.happy = false;
+    c.wantLevel = 1;
+    c.patience = Math.max(1, CLIENT_RULE[c.type].patience + run.eff.patience);
+  }
+  run.events.push({ type: 'razed', kind });
   return true;
 }
 
@@ -1179,6 +1221,18 @@ function release(run: Run): void {
       run.stats.left++;
       run.events.push({ type: 'demo', ok: false, name: c.name });
       run.events.push({ type: 'left', id: c.id, name: c.name, reason: '', demo: true });
+    }
+  }
+
+  // the market moves on: on schedule one more block of the toolkit becomes something clients ask for
+  if (TUNING.trends.at.includes(run.sprint)) {
+    const next = run.pool.filter((k) => RULES[k].role === 'ask' && !run.asks.includes(k));
+    if (next.length > 0) {
+      const kind = run.rng.pick(next);
+      run.asks.push(kind);
+      // a trend is no secret: everybody talks about it
+      if (!run.known.includes(kind)) run.known.push(kind);
+      run.events.push({ type: 'trend', kind });
     }
   }
 

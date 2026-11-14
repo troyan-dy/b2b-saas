@@ -4,8 +4,10 @@ import {
   answerLastChance,
   burnPerS,
   canHire,
+  cellsMax,
   clientsMax,
   crunch,
+  demolish,
   dilemmaOf,
   EFFECTS,
   freeCells,
@@ -61,6 +63,16 @@ export function playBot(run: Run, style: BotStyle = SENSIBLE): void {
   const promised = run.clients.some((c) => c.promised && shelf(run).includes(c.want));
   if (sites(run).length === 0 && !promised && reworks(run).length > 0) upgrade(run, reworks(run)[0].kind);
 
+  // the sheet is full and a client waits for a block that is not on it: something nobody asked for goes
+  if (run.blocks.length >= cellsMax(run) && sites(run).length === 0) {
+    const waited = new Set(run.clients.filter((c) => !c.happy).map((c) => c.want));
+    if (shelf(run).some((k) => waited.has(k) && run.known.includes(k))) {
+      const wanted = new Set(run.clients.map((c) => c.want));
+      const spare = run.blocks.find((b) => b.live && !b.up && RULES[b.kind].role !== 'base' && !wanted.has(b.kind) && !EFFECTS[b.kind]?.seats);
+      if (spare) demolish(run, spare.kind);
+    }
+  }
+
   // what to build next
   if (sites(run).length === 0) {
     const kind = nextBlock(run, style);
@@ -106,7 +118,8 @@ export function playBot(run: Run, style: BotStyle = SENSIBLE): void {
 
 function nextBlock(run: Run, style: BotStyle): string | null {
   const can = shelf(run);
-  if (can.length === 0) return null;
+  const room = cellsMax(run) - run.blocks.length;
+  if (can.length === 0 || room <= 0) return null;
   for (const k of ['core', 'landing', 'pay']) if (can.includes(k)) return k;
   // no room for the next client: the cheapest block that adds places
   if (run.clients.length >= clientsMax(run)) {
@@ -125,7 +138,8 @@ function nextBlock(run: Run, style: BotStyle): string | null {
   if (can.includes('cheap') && run.clients.length >= 4) return 'cheap';
   for (const k of run.known) if (can.includes(k)) return k;
   // everything known is built and the startup pays for itself: grow the product, cheapest first
-  if (netPerS(run) >= 0 && run.clients.length > 0) return [...can].sort((a, b) => RULES[a].work - RULES[b].work)[0];
+  // …but two cells of the sheet are kept for what clients will ask for next
+  if (netPerS(run) >= 0 && run.clients.length > 0 && room > 2) return [...can].sort((a, b) => RULES[a].work - RULES[b].work)[0];
   // nothing known yet and money is tight: a careful founder waits for the interviews rather than guesses
   return null;
 }
