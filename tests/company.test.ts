@@ -1,7 +1,24 @@
 import { describe, expect, it } from 'vitest';
 import { companyContext, companyTotals, customerCount } from '../src/systems/company/company';
-import { createMarket, priceForecast, schedulePrice, segmentView } from '../src/systems/company/market';
-import { clientPay, clientTokens, createRun, flows, IDEAS, mrr, refreshRun, RULES, step, tokens, TUNING } from '../src/systems/run/run';
+import {
+  createMarket,
+  priceForecast,
+  schedulePrice,
+  segmentView,
+} from '../src/systems/company/market';
+import {
+  clientPay,
+  clientTokens,
+  createRun,
+  flows,
+  IDEAS,
+  mrr,
+  refreshRun,
+  RULES,
+  step,
+  tokens,
+  TUNING,
+} from '../src/systems/run/run';
 
 function company() {
   const run = createRun(7, { tech: IDEAS.tech[0], form: IDEAS.form[0], aud: IDEAS.aud[0] });
@@ -11,11 +28,34 @@ function company() {
   run.newsWait = 100;
   run.market = createMarket(Object.keys(RULES));
   run.blocks = ['core', 'landing', 'pay', 'crm', 'bot'].map((kind, i) => ({
-    kind, i, j: 0, done: 10, need: 10, built: true, live: true, level: 2, up: false, hand: false,
+    kind,
+    i,
+    j: 0,
+    done: 10,
+    need: 10,
+    built: true,
+    live: true,
+    level: 2,
+    up: false,
+    hand: false,
   }));
   run.market.groups[0].profiles[0].count = 10;
-  run.clients = [{ id: 1, name: 'Key account', texture: 'client', type: 'small', pay: 100,
-    want: 'core', wantLevel: 1, patience: 5, happy: true, slot: 0, deal: 1, promised: false }];
+  run.clients = [
+    {
+      id: 1,
+      name: 'Key account',
+      texture: 'client',
+      type: 'small',
+      pay: 100,
+      want: 'core',
+      wantLevel: 1,
+      patience: 5,
+      happy: true,
+      slot: 0,
+      deal: 1,
+      promised: false,
+    },
+  ];
   refreshRun(run);
   return run;
 }
@@ -26,13 +66,18 @@ describe('company integration', () => {
     expect(customerCount(run)).toBe(11);
     expect(mrr(run)).toBeCloseTo(companyTotals(run).income + clientPay(run, run.clients[0]));
     expect(tokens(run)).toBeCloseTo(companyTotals(run).tokens + clientTokens(run, run.clients[0]));
-    const f = flows(run), money = run.money;
+    const f = flows(run),
+      money = run.money;
     step(run, 0.25);
-    expect(run.money - money).toBeCloseTo((f.income - f.agents - f.hosting - f.living - f.tokens) * 0.25);
+    expect(run.money - money).toBeCloseTo(
+      (f.income - f.agents - f.hosting - f.living - f.tokens) * 0.25,
+    );
   });
 
   it('does not turn a higher contract price into higher usage costs', () => {
-    const run = company(), before = tokens(run), revenue = mrr(run);
+    const run = company(),
+      before = tokens(run),
+      revenue = mrr(run);
     run.clients[0].deal = 2;
     run.market.groups[0].price = 2;
     expect(mrr(run)).toBeGreaterThan(revenue);
@@ -47,15 +92,25 @@ describe('company integration', () => {
     step(run, 0.25);
     expect(run.market.groups[0].price).toBeCloseTo(1.5);
     expect(run.draft).toHaveLength(3);
-    const snapshot = JSON.stringify({ money: run.money, market: run.market, t: run.t, tasks: run.tasks });
+    const snapshot = JSON.stringify({
+      money: run.money,
+      market: run.market,
+      t: run.t,
+      tasks: run.tasks,
+    });
     step(run, 100);
-    expect(JSON.stringify({ money: run.money, market: run.market, t: run.t, tasks: run.tasks })).toBe(snapshot);
+    expect(
+      JSON.stringify({ money: run.money, market: run.market, t: run.t, tasks: run.tasks }),
+    ).toBe(snapshot);
   });
 
   it('passes a real CRM-support connection to the market and prices infrastructure hosting', () => {
     const run = company();
-    expect(companyContext(run).links.some(pair => pair.includes('crm') && pair.includes('bot'))).toBe(true);
-    const before = companyTotals(run), hosting = flows(run).hosting;
+    expect(
+      companyContext(run).links.some((pair) => pair.includes('crm') && pair.includes('bot')),
+    ).toBe(true);
+    const before = companyTotals(run),
+      hosting = flows(run).hosting;
     run.infrastructure = 2;
     expect(companyTotals(run).capacity).toBeGreaterThan(before.capacity * 2);
     expect(flows(run).hosting - hosting).toBe(companyTotals(run).hosting);

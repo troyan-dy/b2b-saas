@@ -265,6 +265,7 @@ export function createWorkbench(
     selected = id;
     tab = 'clients';
     switchTab();
+    segments.scrollTop = 0;
     send({ type: 'select-segment', segment: id });
   };
 
@@ -388,8 +389,8 @@ export function createWorkbench(
     text(
       page.querySelector('.wb-happiness span')!,
       L(
-        `Удовлетворённость ${whole(segment.happiness)}%`,
-        `Satisfaction ${whole(segment.happiness)}%`,
+        `Удовлетворённость ${whole(segment.happiness)}/100`,
+        `Satisfaction ${whole(segment.happiness)}/100`,
       ),
     );
     const meter = page.querySelector('meter')!;
@@ -504,7 +505,7 @@ export function createWorkbench(
         view.segments
           .map(
             (segment) =>
-              `<button type="button" class="wb-cloud" data-wb-action="select-segment" data-wb-id="${segment.id}" data-wb-key="cloud:${segment.id}" aria-label="${esc(`${segment.title}: ${whole(segment.count)}, ${L('удовлетворённость', 'satisfaction')} ${whole(segment.happiness)}%`)}"><span class="wb-cloud-head"><i aria-hidden="true"></i><span>${esc(segment.title)}</span></span><strong>${whole(segment.count)}</strong><span class="wb-cloud-foot"><span>${whole(segment.happiness)}% ${L('довольны', 'satisfied')}</span><span>${signed(segment.delta)}${L('/спр.', '/sprint')}</span></span></button>`,
+              `<button type="button" class="wb-cloud" data-wb-action="select-segment" data-wb-id="${segment.id}" data-wb-key="cloud:${segment.id}" aria-label="${esc(`${segment.title}: ${whole(segment.count)}, ${L('удовлетворённость', 'satisfaction')} ${whole(segment.happiness)}/100`)}"><span class="wb-cloud-head"><i aria-hidden="true"></i><span>${esc(segment.title)}</span></span><strong>${whole(segment.count)}</strong><span class="wb-cloud-foot"><span>${whole(segment.happiness)}/100 ${segment.count ? L('довольство', 'satisfaction') : L('ожидается', 'expected')}</span><span>${signed(segment.delta)}${L('/спр.', '/sprint')}</span></span></button>`,
           )
           .join(''),
       );

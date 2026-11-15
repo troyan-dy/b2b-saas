@@ -3,7 +3,7 @@
   "buyers": { "title": "I know procurement", "text": "You survived the procurement department and its requirements spreadsheet.", "gives": "20 enterprise prospects in the starting funnel; their requirements still need to be met" },
   "word": { "title": "I keep my word", "text": "You promised clients what didn’t exist — and managed to build it. Twice.", "gives": "a promised block gets three sprints instead of two" },
   "no": { "title": "Learned to say “no”", "text": "A broken promise cost more than an honest answer.", "gives": "an honest answer on a call costs a 15% discount instead of 25%" },
-  "banker": { "title": "I know my banker", "text": "You mortgaged the flat and bought it back. The bank remembered.", "gives": "the mortgage buys 90 seconds instead of 60" },
+  "banker": { "title": "I know my banker", "text": "You mortgaged the flat and bought it back. The bank remembered.", "gives": "the mortgage buys 75 seconds instead of 50" },
   "arch": { "title": "I see the architecture", "text": "Three combos in one product is no longer an accident.", "gives": "each friendly connection adds 16% to bills instead of 8%" },
   "name": { "title": "A name on the market", "text": "Ten clients in one startup: people started to recognize you.", "gives": "the first client of the next startup is a chain right away" },
   "ear": { "title": "I know how to listen", "text": "Turns out you can just ask the clients.", "gives": "15 small-business prospects in the starting funnel" },

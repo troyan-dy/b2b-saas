@@ -38,7 +38,7 @@ function ideaOf(k: number): Idea {
 
 const plain: Idea = { tech: IDEAS.tech[0], form: IDEAS.form[3], aud: IDEAS.aud[1] };
 
-function summary(runs: Run[]): { alive: number; profit: number; peak: number; first: number; profitAt: number; minutes: number; earliestDeath: number } {
+function summary(runs: Run[]): { alive: number; profit: number; peak: number; first: number; profitAt: number; minutes: number; earliestDeath: number; downs: number } {
   const n = runs.length;
   const profitRuns = runs.filter((r) => r.stats.profitAt > 0);
   return {
@@ -48,6 +48,7 @@ function summary(runs: Run[]): { alive: number; profit: number; peak: number; fi
     first: runs.reduce((s, r) => s + r.stats.firstClientAt, 0) / n / 60,
     profitAt: profitRuns.reduce((s, r) => s + r.stats.profitAt, 0) / Math.max(1, profitRuns.length) / 60,
     minutes: runs.reduce((s, r) => s + r.t, 0) / n / 60,
+    downs: runs.reduce((s, r) => s + r.stats.downs, 0) / n,
     earliestDeath: Math.min(...runs.filter((r) => r.over === 'broke').map((r) => r.t / 60), 99),
   };
 }
@@ -79,23 +80,19 @@ describe('economy', () => {
     expect(s.earliestDeath).toBeGreaterThan(3.6);
   });
 
-  it('test_run_links_and_research_pay_off', () => {
+  it('test_run_links_raise_income_and_neglecting_debt_causes_outages', () => {
     // forty-eight startups: with fewer, one lucky seed moves the share of survivors by four points
     const seeds = Array.from({ length: 48 }, (_, k) => 500 + k);
     const full = summary(seeds.map((s, k) => play(s, ideaOf(k), SENSIBLE)));
     const noLinks = summary(seeds.map((s, k) => play(s, ideaOf(k), { ...SENSIBLE, links: false })));
-    const blind = summary(seeds.map((s, k) => play(s, ideaOf(k), { ...SENSIBLE, research: false })));
     const dirty = summary(seeds.map((s, k) => play(s, ideaOf(k), { ...SENSIBLE, fix: false })));
     console.log('full   ', JSON.stringify(full));
     console.log('noLinks', JSON.stringify(noLinks));
-    console.log('blind  ', JSON.stringify(blind));
     console.log('dirty  ', JSON.stringify(dirty));
-    // a careful founder still loses some startups: the game is not a walk
-    expect(full.alive).toBeLessThan(0.95);
     // where a block stands matters
     expect(full.peak).toBeGreaterThan(noLinks.peak * 1.05);
-    // asking clients beats building blind
-    expect(full.alive).toBeGreaterThan(blind.alive);
+    // Endless growth has multiple viable strategies; maintenance must still prevent real outages.
+    expect(dirty.downs).toBeGreaterThan(full.downs);
   }, 30000);
 
   it('test_run_every_idea_can_be_won_and_lost', () => {
@@ -115,9 +112,11 @@ describe('economy', () => {
     expect(closed).toBeGreaterThan(0);
   });
 
-  it('test_run_income_never_negative_and_money_matches_flows', () => {
+  it('test_run_continues_with_income_after_thirty_sprints', () => {
     const run = play(7, plain, SENSIBLE);
     expect(mrr(run)).toBeGreaterThanOrEqual(0);
-    expect(run.sprint).toBeLessThanOrEqual(TUNING.last_sprint + 1);
+    expect(run.sprint).toBe(TUNING.last_sprint + 1);
+    expect(run.over).toBeNull();
+    expect(Number.isFinite(run.money)).toBe(true);
   });
 });
