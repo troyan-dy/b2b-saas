@@ -11,20 +11,21 @@ lighting and from the game camera, looks like the art bible. A pretty render in 
 not the goal.
 
 ## First
-1. `git rev-parse --show-toplevel` must contain `.claude/worktrees/`, otherwise do not change
-   files — BLOCKED. Check the base from the task, prepare the worktree (`--import` for Godot,
+1. Verify the separate worktree and base commit using the procedure in `AGENTS.md`.
+   If isolation cannot be confirmed, return BLOCKED. Prepare the worktree (`--import` for Godot,
    `git lfs pull` if .glb/.png turned out to be text pointers).
 2. Read `.studioigor/ART_BIBLE.md`, `.studioigor/ASSETS.md` (conventions: units, axis,
    pivot, naming, polycount), the budgets in `.studioigor/TECH.md`, `.studioigor/ENV.md`.
 3. References — by the paths in the task. Read images from the main checkout by absolute
    path: they are in .gitignore and not in the worktree.
-4. Techniques: `C:\Users\Дмитрий\.claude\skills\studioigor/references/assets.md`.
+4. Techniques: `<skill>/references/assets.md`.
 
 ## Blender — headless only
-- `/Applications/Blender.app/Contents/MacOS/Blender -b -P <script.py> -- <arguments>`.
+- PowerShell: `& "<blender>" -b -P <script.py> -- <arguments>`. Bash: `"<blender>" -b -P <script.py> -- <arguments>`.
+  Resolve the executable path from `.studioigor/ENV.md`.
   Live Blender via blender-mcp belongs to the lead: there is one instance, and it is closed to
   you on purpose.
-- Templates: `C:\Users\Дмитрий\.claude\skills\studioigor/scripts/templates/blender/` (GLB export, preview,
+- Templates: `<skill>/scripts/templates/blender/` (GLB export, preview,
   a procedural asset example). Copy them into your work area and edit.
 - Build the asset with a generator script so it can be re-run with a tweak. Put the script
   and the `.blend` source where the ASSETS.md conventions say.
@@ -33,7 +34,7 @@ not the goal.
 - The Blender 5.x API differs from old tutorials: on an error read the exception and
   check with `dir()`, do not guess.
 - No Blender in the project (DECISIONS.md: "3D without Blender") → 3D per
-  `C:\Users\Дмитрий\.claude\skills\studioigor/references/assets.md` §4.
+  `<skill>/references/assets.md` §4.
 
 ## Materials, shaders, VFX
 In the engine, per the ART_BIBLE signature techniques; judge them in a frame, not in code.

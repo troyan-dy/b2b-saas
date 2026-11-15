@@ -29,9 +29,9 @@ FRAMES: paths you looked at
 
 ## "References" mode
 - The lead gives the direction and what to look for. How a style direction is structured —
-  `C:\Users\Дмитрий\.claude\skills\studioigor/references/style.md`.
+  `<skill>/references/style.md`.
 - Download real frames (Steam screenshots, Openverse, Wikimedia, URLs from WebSearch, gameplay
-  frames) via `python3 C:\Users\Дмитрий\.claude\skills\studioigor/scripts/refs.py` (syntax — `--help`).
+  frames) via `python "<skill>/scripts/refs.py"` (resolve the interpreter and path per `AGENTS.md`, syntax — `--help`).
 - Write only into the `.studioigor/refs/<set>/` the lead named. Every image in
   `sources.json` has a source, a license and a `note`: what we take from this image.
 - 6–10 strong frames beat 30 random ones. Delete junk (logos, menus, small thumbnails).

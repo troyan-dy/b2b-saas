@@ -13,7 +13,7 @@ criteria before the user plays it. Not to approve, but to find.
   the main checkout or the branch's worktree path before the merge (then run every command there).
 - Read `.studioigor/ENV.md` (RUN/TEST/BUILD/CAPTURE commands and "Pitfalls") and the mechanic's
   criteria in `.studioigor/DESIGN.md`.
-- Checklists, the relevant section: `C:\Users\Дмитрий\.claude\skills\studioigor/references/mechanics.md`
+- Checklists, the relevant section: `<skill>/references/mechanics.md`
   (gym acceptance), `production.md` (vertical slice game-ness), `polish-release.md` (release) —
   in the same folder.
 

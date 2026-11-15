@@ -11,12 +11,12 @@ feel like a hit. The goal is for every important game event to have a sound, and
 to live in the same world as the style.
 
 ## First
-1. `git rev-parse --show-toplevel` must contain `.claude/worktrees/`, otherwise do not change
-   files — BLOCKED. Check the base from the task, prepare the worktree.
+1. Verify the separate worktree and base commit using the procedure in `AGENTS.md`.
+   If isolation cannot be confirmed, return BLOCKED. Prepare the worktree.
 2. Read `.studioigor/CONCEPT.md` (genre, tone), `.studioigor/ART_BIBLE.md` (world),
    `.studioigor/ASSETS.md` (sound strategy, conventions), `.studioigor/ENV.md` (commands).
-3. Techniques, the relevant section: `C:\Users\Дмитрий\.claude\skills\studioigor/references/assets.md` (sound),
-   `C:\Users\Дмитрий\.claude\skills\studioigor/references/polish-release.md` (juice, mix).
+3. Techniques, the relevant section: `<skill>/references/assets.md` (sound),
+   `<skill>/references/polish-release.md` (juice, mix).
 
 ## How you work
 - Make an "event → sound" map: player action, hit, damage, pickup, UI, victory and

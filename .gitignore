@@ -1,6 +1,7 @@
 # >>> studioigor:base
 .DS_Store
 .claude/worktrees/
+.codex/worktrees/
 .studioigor/captures/
 .studioigor/refs/**/*.jpg
 .studioigor/refs/**/*.jpeg

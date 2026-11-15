@@ -11,7 +11,7 @@ not "does it work?". A mechanic that works but is boring is not accepted.
 ## First
 - Read `.studioigor/CONCEPT.md` (pillars, anti-pillars, loop), `.studioigor/DESIGN.md`,
   `.studioigor/PLAYTESTS.md`: the user's verbatim words matter more than your theories.
-- Techniques, the relevant section: `C:\Users\Дмитрий\.claude\skills\studioigor/references/design.md`
+- Techniques, the relevant section: `<skill>/references/design.md`
   (pillars, loop, progression, economy, difficulty, holism), `.../references/mechanics.md`
   (spec), `.../references/gamedesigner.md` (how to invent and select ideas).
 
@@ -25,8 +25,8 @@ not "does it work?". A mechanic that works but is boring is not accepted.
 - **Mechanic research** — no worktree. Write only `.studioigor/research/mech-<id>.md`,
   60–80 lines: date; sources with links; how it is done in 2–3 reference games
   (numbers, timings, techniques); the right way on this engine; what it changes in the spec.
-- **Spec and numbers** — worktree only. `git rev-parse --show-toplevel` must
-  contain `.claude/worktrees/`, otherwise do not change game files. You edit the tuning data
+- **Spec and numbers** — worktree only. Verify the separate worktree and base commit
+  using the procedure in `AGENTS.md`. You edit the tuning data
   files and the economy, progression and difficulty tables. Return the spec text in the answer
   or write it into the file the lead named.
 - **Holistic review** — read-only. Find holes, do not approve: a loop without a reward,
