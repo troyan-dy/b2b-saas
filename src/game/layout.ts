@@ -6,7 +6,7 @@ import type { Pt } from '../view/iso';
  */
 
 /** the founder's desk: bottom-left of the product, clear of its widest sheet */
-export const DESK: Pt = [-580, 330];
+export const DESK: Pt = [-540, 330];
 
 /** laptops of the agents, in the order they are hired: a row under the product */
 export const AGENT_SLOTS: readonly Pt[] = [

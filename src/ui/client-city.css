@@ -1,14 +1,72 @@
-.client-city { position: absolute; inset: 0; pointer-events: none; color: var(--ink); }
-.client-city[hidden] { display: none; }
-.client-city button { border: 0; border-radius: 0; background: none; color: inherit; cursor: pointer; pointer-events: auto; }
-.client-city header { position: absolute; display: flex; align-items: baseline; justify-content: space-between; gap: 12px; transform: translateX(-50%); background: var(--paper); }
-.client-city header button { padding: 0; font: 14px var(--mono); color: var(--dim); }
-.client-city header .city-total { font: 16px var(--mono); letter-spacing: .06em; }
-.city-total strong { font: 400 23px var(--serif); color: var(--ink); letter-spacing: 0; }
-.client-city button:hover { color: var(--coral); }
-.city-node { position: absolute; transform: translateX(-50%); }
-.city-node:focus-visible { outline: 1px dashed var(--ink); outline-offset: 3px; }
-.city-district { position: absolute; transform: translateX(-50%); padding: 2px 0; text-align: center; font: 19px/1.25 var(--serif); }
-.city-district span, .city-district small { background: var(--paper); }
-.city-district b { font-weight: 600; }
-.city-district small { display: block; width: fit-content; margin: 3px auto 0; font: 14px var(--mono); color: var(--dim); }
+.client-city {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  color: var(--ink);
+}
+.client-city[hidden] {
+  display: none;
+}
+.client-city button {
+  border: 0;
+  border-radius: 0;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+  pointer-events: auto;
+}
+.client-city header {
+  position: absolute;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  transform: translateX(-50%);
+  background: var(--paper);
+}
+.client-city header button {
+  padding: 0;
+  font: 14px var(--mono);
+  color: var(--dim);
+}
+.client-city header .city-total {
+  font: 16px var(--mono);
+  letter-spacing: 0.06em;
+}
+.city-total strong {
+  font: 400 23px var(--serif);
+  color: var(--ink);
+  letter-spacing: 0;
+}
+.client-city button:hover {
+  color: var(--coral);
+}
+.city-node {
+  position: absolute;
+  transform: translateX(-50%);
+}
+.city-node:focus-visible {
+  outline: 1px dashed var(--ink);
+  outline-offset: 3px;
+}
+.city-district {
+  position: absolute;
+  transform: translateX(-50%);
+  padding: 2px 0;
+  text-align: center;
+  font: 19px/1.25 var(--serif);
+}
+.city-district span,
+.city-district small {
+  background: var(--paper);
+}
+.city-district b {
+  font-weight: 600;
+}
+.city-district small {
+  display: block;
+  width: fit-content;
+  margin: 3px auto 0;
+  font: 14px var(--mono);
+  color: var(--dim);
+}

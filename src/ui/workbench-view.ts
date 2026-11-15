@@ -207,7 +207,10 @@ function moduleView(
   return {
     id: kind,
     title: blockName(kind),
-    shortTitle: kind === 'core' ? L('Обёртка Клода', 'Claude wrapper') : shortName(kind).replace(/^./, (letter) => letter.toUpperCase()),
+    shortTitle:
+      kind === 'core'
+        ? L('Обёртка Клода', 'Claude wrapper')
+        : shortName(kind).replace(/^./, (letter) => letter.toUpperCase()),
     level: liveLevel,
     current: liveLevel
       ? productEffects(kind, liveLevel)

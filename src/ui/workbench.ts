@@ -174,7 +174,8 @@ function button(
 }
 
 function moduleCard(module: WorkbenchModule): string {
-  const title = esc(module.shortTitle ?? module.title) + (module.level ? ` v${module.level + 1}` : '');
+  const title =
+    esc(module.shortTitle ?? module.title) + (module.level ? ` v${module.level + 1}` : '');
   const effect = esc(
     primary(module.next || module.current).replace('мест именных договоров', 'договоры'),
   );

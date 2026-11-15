@@ -175,6 +175,7 @@ export class GameScene extends Phaser.Scene {
   private draftShown = false;
   private cityCollapsed = false;
   private citySignature = '';
+  private cityProductSignature = '';
   private cityNodes: { id: string; segment: 'small' | 'medium' | 'large'; texture: string; title: string; x: number; y: number; height: number; chain: boolean }[] = [];
 
   constructor(run: Run, rng: Rng, paper: Paper, hooks: GameHooks) {
@@ -1360,6 +1361,16 @@ export class GameScene extends Phaser.Scene {
       return {id, segment, contracts, count: segment.count + contracts.length};
     }).filter((group) => group.count > 0);
     this.syncStage(1100);
+    const outlet = groups.length ? run.blocks.filter((block) => block.live).sort((a,b) => (b.i-b.j)-(a.i-a.j))[0] : undefined;
+    const productSignature = outlet ? `${outlet.kind}:${outlet.i}:${outlet.j}` : '';
+    if (productSignature !== this.cityProductSignature) {
+      if (outlet) {
+        const [x,y] = board.cell(outlet.i,outlet.j);
+        const edgeY = y - (BLOCK_BY_ID[outlet.kind]?.height ?? 20) / 2;
+        board.route('city-feed', [[x+96,edgeY], [TRUNK_X,edgeY], [TRUNK_X,0]], false);
+      } else board.dropRoute('city-feed');
+      this.cityProductSignature = productSignature;
+    }
     const nodes: typeof this.cityNodes = [];
     groups.forEach((group, column) => {
       const amount = this.cityCollapsed ? 1 : Math.min(4, group.count);
@@ -1379,14 +1390,22 @@ export class GameScene extends Phaser.Scene {
     });
     const signature = JSON.stringify(nodes.map((node) => [node.id, node.texture, node.x, node.y, node.height, node.chain]));
     if (signature !== this.citySignature) {
+      const next = new Set(nodes.map((node) => node.id));
       for (const old of this.cityNodes) {
+        if (next.has(old.id)) continue;
+        board.node(old.id)?.setVisible(false);
+        board.node(`${old.id}:branch`)?.setVisible(false);
         board.dropNode(old.id);
         board.dropNode(`${old.id}:branch`);
         board.dropRoute(old.id);
       }
       for (const node of nodes) {
-        if (node.chain) this.place(`${node.id}:branch`, node.texture, node.x - 38, node.y - 20, node.height * .82);
-        const image = this.place(node.id, node.texture, node.x, node.y, node.height, true);
+        if (node.chain) {
+          const branch = board.node(`${node.id}:branch`) ?? this.place(`${node.id}:branch`, node.texture, node.x - 38, node.y - 20, node.height * .82);
+          branch.setPosition(node.x - 38, node.y - 20);
+        }
+        const image = board.node(node.id) ?? this.place(node.id, node.texture, node.x, node.y, node.height, true);
+        image.setPosition(node.x, node.y);
         board.route(node.id, [[TRUNK_X - 80, 0], [TRUNK_X, 0], [TRUNK_X, node.y - 56], [node.x - image.width * (node.height / image.height) / 2 - 10, node.y - 56]]);
       }
       this.citySignature = signature;
@@ -1396,7 +1415,7 @@ export class GameScene extends Phaser.Scene {
     const [hx,hy] = board.onScreen(760 + Math.max(0, groups.length - 1) * 225 / 2, -425);
     const view: CityView = {
       total: customerCount(run), collapsed: this.cityCollapsed,
-      heading: {x: Math.min(hx, 1180), y: hy, width: Math.max(275, groups.length * 225 * z)},
+      heading: {x: Math.min(hx, 1180), y: hy, width: Math.min(420, Math.max(275, groups.length * 225 * z))},
       groups: groups.map((group, column) => {
         const lastRow = this.cityCollapsed ? 0 : Math.min(4, group.count) - 1;
         const [sx,sy] = CLIENT_SLOTS[column * 4 + lastRow];
