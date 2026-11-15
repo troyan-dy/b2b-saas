@@ -1,0 +1,32 @@
+{
+  "capacity": { "base": 20, "core_per_level": 30, "support_per_level": 35, "onboarding_per_level": 15, "crm_per_level": 10, "expansion_mult": 1.6, "hosting_per_expansion": 8 },
+  "acquisition": { "per_lead": 12, "first_leads": 8, "referral_rate": 0.025, "conversion": 0.65, "market_expansion_mult": 1.5 },
+  "satisfaction": { "base": 45, "fulfilled": 35, "debt_penalty": 15, "down_penalty": 45, "overload_penalty": 30, "price_penalty": 70, "batch_large_penalty": 12 },
+  "price": { "min": 0.75, "max": 2.5, "step": 0.05, "base_comfort": 1.1, "fulfilled_comfort": 0.3, "premium_comfort": 2, "batch_large_max": 1.25 },
+  "churn": { "happy": 0.002, "neutral": 0.01, "unhappy": 0.035, "below_50_per_point": 0.003, "max": 0.3 },
+  "token_share": 0.38,
+  "segments": [
+    { "id": "small", "market": 800, "weight": 0.65, "price_scale": 0.2, "load": 1,
+      "profiles": [
+        { "share": 40, "needs": [{"block":"onb","level":2},{"block":"bot","level":1}] },
+        { "share": 25, "needs": [{"block":"excel","level":1},{"block":"dash","level":1}] },
+        { "share": 20, "needs": [{"block":"mobile","level":1},{"block":"push","level":1}] },
+        { "share": 15, "needs": [{"block":"dark","level":2},{"block":"ref","level":1}] }
+      ]
+    },
+    { "id": "medium", "market": 220, "weight": 0.28, "price_scale": 0.65, "load": 3,
+      "profiles": [
+        { "share": 40, "needs": [{"block":"api","level":2},{"block":"crm","level":1}] },
+        { "share": 35, "needs": [{"block":"roles","level":1},{"block":"excel","level":2}] },
+        { "share": 25, "needs": [{"block":"dash","level":2},{"block":"c1","level":1}] }
+      ]
+    },
+    { "id": "large", "market": 70, "weight": 0.07, "price_scale": 2.5, "load": 8,
+      "profiles": [
+        { "share": 65, "needs": [{"block":"crm","level":2},{"block":"bot","level":2}], "connection": ["crm","bot"] },
+        { "share": 20, "needs": [{"block":"sso","level":1},{"block":"audit","level":1},{"block":"shield","level":1}] },
+        { "share": 15, "needs": [{"block":"api","level":2},{"block":"roles","level":1}], "instant": true }
+      ]
+    }
+  ]
+}
