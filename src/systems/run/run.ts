@@ -465,6 +465,13 @@ function refresh(run: Run): void {
   run.eff = eff;
 }
 
+/** Rebuilds derived values after loading; does not advance time or consume randomness. */
+export function refreshRun(run: Run): void {
+  refresh(run);
+  run.mod = { tokens: 1, price: 1, promo: 1 };
+  for (const m of run.mods) run.mod[m.kind] *= m.mult;
+}
+
 /** how many squares of work a block takes in this run */
 export function workNeed(run: Run, kind: string): number {
   return Math.ceil(RULES[kind].work * run.idea.tech.work * run.idea.form.work * Math.max(0.5, 1 - trait(run, 'engineering')));
