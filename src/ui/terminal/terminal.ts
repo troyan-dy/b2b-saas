@@ -349,6 +349,11 @@ export function createTerminal(root: HTMLElement, sound: (name: 'ui' | 'yes') =>
             mark();
           }
         });
+        box.addEventListener('mouseleave', () => {
+          const focused = document.activeElement?.closest('.tm-card') as HTMLElement | null;
+          at = focused && box.contains(focused) ? Number(focused.dataset.k) : -1;
+          mark();
+        });
       });
     },
     wait(hint) {
