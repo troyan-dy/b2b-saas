@@ -5,7 +5,11 @@
     "voice": { "adj": "Voice", "note": "voice AI: calls the clients so you don’t have to", "does": "building costs ×1.25, clients wait a sprint longer" },
     "gen": { "adj": "Generative", "note": "image generation: a sixth finger on the house", "does": "promotion ×1.6, tokens burn ×1.3" },
     "copilot": { "adj": "Copilot", "note": "a copilot: gives advice while you do the work", "does": "building costs ×0.85, tokens ×0.8, bill ×0.9" },
-    "rag": { "adj": "Well-read", "note": "AI over your documents: confident even when there is no document", "does": "research twice as fast, tokens burn ×1.2" }
+    "rag": { "adj": "Well-read", "note": "AI over your documents: confident even when there is no document", "does": "research twice as fast, tokens burn ×1.2" },
+    "buyer": { "adj": "Shopping", "note": "picked a plan itself. With your card", "does": "bill ×1.2, building costs ×1.1, promotion ×0.9" },
+    "multiplayer": { "adj": "Multiplayer", "note": "five agents are typing. No decision yet", "does": "promotion ×1.25, tokens burn ×1.25" },
+    "guarded": { "adj": "Cautious", "note": "first, consent to process your consent", "does": "bill ×1.15, building costs ×1.2, clients wait a sprint longer" },
+    "oncall": { "adj": "On-call", "note": "answers at 3 a.m. Starts pitching", "does": "work required ×0.9, tokens burn ×1.2" }
   },
   "form": {
     "tinder": { "name": "Tinder", "note": "swipe right — and the meeting is in the calendar", "does": "word of mouth ×2.2, bill ×0.9" },
@@ -15,7 +19,13 @@
     "uber": { "name": "Uber", "note": "connects people who never asked for it", "does": "word of mouth ×1.5, building costs ×1.1, bill ×0.9" },
     "tracker": { "name": "task tracker", "note": "one more. This one has AI", "does": "building costs ×0.85, bill ×0.85, clients wait a sprint longer" },
     "market": { "name": "marketplace", "note": "sells other people’s stuff and charges both sides", "does": "bill ×1.2, word of mouth ×1.3, promotion ×0.8, building costs ×1.2" },
-    "mail": { "name": "cold mailer", "note": "writes emails nobody was waiting for", "does": "promotion ×1.3, bill ×1.1, clients wait a sprint less" }
+    "mail": { "name": "cold mailer", "note": "writes emails nobody was waiting for", "does": "promotion ×1.3, bill ×1.1, clients wait a sprint less" },
+    "procure": { "name": "buyer", "note": "negotiates with another AI. Both bill hourly", "does": "bill ×1.25, word of mouth ×0.85, building costs ×1.1" },
+    "security": { "name": "security guard", "note": "no prompt gets in without a visitor pass", "does": "bill ×1.2, building costs ×1.15, word of mouth ×0.8" },
+    "api-updater": { "name": "API updater", "note": "fixes the integration before it breaks again", "does": "work required ×0.85, promotion ×0.9" },
+    "robot-dispatch": { "name": "robot dispatcher", "note": "robot is busy. Transferring you to a human", "does": "bill ×1.3, building costs ×1.25" },
+    "internal": { "name": "internal portal", "note": "all spreadsheet passwords in one spreadsheet", "does": "work required ×0.9, promotion ×0.9, clients wait a sprint longer" },
+    "minutes": { "name": "minute taker", "note": "that meeting could be an email. Now it is both", "does": "word of mouth ×1.4, bill ×0.95, clients wait a sprint less" }
   },
   "aud": {
     "dent": { "name": "dental clinics", "note": "pay well, book by phone", "does": "", "clients": ["Smile", "Dent-Lux", "32 Pearls", "Tooth Fairy", "Cavity & Partners", "The Filling"] },
@@ -25,7 +35,13 @@
     "school": { "name": "private schools", "note": "the decision is made by the parents’ group chat", "does": "wait a sprint longer, promotion ×0.9", "clients": ["Lyceum No. 2", "School of the Future", "Growth Academy", "Smarty", "Straight A’s", "Recess"] },
     "pizza": { "name": "pizzerias", "note": "want everything, and by Friday", "does": "wait a sprint less, promotion ×1.2", "clients": ["Margherita", "The Dough", "Pepperoni Club", "Four Cheese", "The Crust", "Wood-Fired"] },
     "farm": { "name": "farms", "note": "the internet only works by the gate", "does": "wait two sprints longer, promotion ×0.8", "clients": ["Sunrise", "Bessie", "Wheat Ear", "Quiet Homestead", "Three Hectares", "Milk, Period"] },
-    "build": { "name": "property developers", "note": "pay a lot, take half a year to decide", "does": "wait two sprints longer, promotion ×0.6", "clients": ["Monolith", "Storeys", "New Quarter", "The Pit", "Keys on Time", "Tower 2"] }
+    "build": { "name": "property developers", "note": "pay a lot, take half a year to decide", "does": "wait two sprints longer, promotion ×0.6", "clients": ["Monolith", "Storeys", "New Quarter", "The Pit", "Keys on Time", "Tower 2"] },
+    "micro-startups": { "name": "micro-startups", "note": "one founder and a department of browser tabs", "does": "promotion ×1.3, wait a sprint less", "clients": ["One Plus AI", "No Headcount", "Solo.ai", "One More Tab", "Evening MVP", "Kitchen Round"] },
+    "automation": { "name": "automation agencies", "note": "automate everything. Invoice by hand", "does": "promotion ×1.1", "clients": ["Hands Off", "Three Webhooks", "No Operator", "The Chain", "Setup Tomorrow", "Trigger"] },
+    "pickup": { "name": "parcel pickup shops", "note": "the parcel arrived. The integration did not", "does": "promotion ×1.2", "clients": ["On Its Way", "Show Your Code", "Next Entrance", "Little Box", "Last Mile", "Pickup Window"] },
+    "robot-farms": { "name": "robot farms", "note": "humans rest. Except the one at the stop button", "does": "wait a sprint longer, promotion ×0.85", "clients": ["Manipulator", "Quiet Shift", "No Smoke Break", "Robo Workshop", "Stop Button", "Sixth Axis"] },
+    "compliance": { "name": "compliance teams", "note": "please submit a certificate for this demo", "does": "wait two sprints longer, promotion ×0.75", "clients": ["Approved", "Second Signature", "Clause 4.2", "Audit Folder", "By the Book", "One More Form"] },
+    "creators": { "name": "content studios", "note": "run a channel about running channels", "does": "promotion ×1.2, wait a sprint less", "clients": ["Content Calendar", "Need a Hook", "Shot Vertical", "Another Take", "Organic Reach", "Three Seconds"] }
   },
   "corp": ["Bank", "Factory", "Shopping Mall", "Holding", "Logistics", "Corporation"],
   "startup": ["Wrapper.ai", "NeuroLawyer", "Prompt & Partners", "AI Tinder for Dogs", "GPT Accountant", "Agent.ai"],

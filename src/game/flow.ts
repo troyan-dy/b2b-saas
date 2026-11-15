@@ -4,9 +4,10 @@ import { clock, ENDING_TITLE, endingPost, endingScore, endingStats } from '../co
 import { AGAIN_SAYS } from '../content/texts';
 import { L } from '../core/lang';
 import { dec, money, rate } from '../ui/format';
-import type { Card, Terminal } from '../ui/terminal/terminal';
+import type { Card, CardOptions, Terminal } from '../ui/terminal/terminal';
 import { finish, LESSONS, pastPitch, raise, saveMeta, traitChoices, traitGives, TRAITS, unlockedNow, type Meta, type Trait } from '../systems/meta/meta';
-import { dealIdea, pitch, TUNING, type Idea, type Run } from '../systems/run/run';
+import { pitch, TUNING, type Idea, type Run } from '../systems/run/run';
+import { createPitchDraft, type PitchDeck } from '../systems/run/pitch';
 
 /** What the player does outside a run: the menu, the idea, the ending, the résumé. All of it in the terminal. */
 
@@ -119,85 +120,215 @@ function traitCard(t: Trait, level: number, kicker: string, to: number): Card {
 }
 
 /**
- * Three decks, three cards dealt from each: the idea is mixed by hand. A founder with traits then
+ * Three decks, four cards dealt from each: the idea is mixed by hand. A founder with traits then
  * picks one to lean on twice as hard in this startup.
  */
-export async function mixIdea(term: Terminal, seed: number, meta: Meta): Promise<{ idea: Idea; boost: string }> {
-  const deal = dealIdea(seed, meta.runs.length);
+export async function mixIdea(
+  term: Terminal,
+  seed: number,
+  meta: Meta,
+): Promise<{ idea: Idea; boost: string }> {
+  const draft = createPitchDraft(seed, meta.runs.length);
+  const draftOptions = (deck: PitchDeck, render: () => Card[]): CardOptions => ({
+    reroll: {
+      remaining: draft.remaining,
+      redraw(indices) {
+        draft.reroll(deck, indices);
+        return { cards: render(), remaining: draft.remaining };
+      },
+    },
+  });
   term.clear();
-  await term.type([L('❯ Опишите стартап в трёх словах. Слово первое: какой у нас ИИ?', '❯ Describe the startup in three words. Word one: what kind of AI is it?')], '');
-  const tech = deal.tech[await term.cards(deal.tech.map((c) => ({ kicker: L('какой ИИ', 'what kind of AI'), title: L(`${c.adj} ИИ`, `${c.adj} AI`), note: c.note, art: CARD_ART[c.id], facts: facts(c.does) })))];
+  await term.type(
+    [
+      L(
+        '❯ Опишите стартап в трёх словах. Слово первое: какой у нас ИИ?',
+        '❯ Describe the startup in three words. Word one: what kind of AI is it?',
+      ),
+    ],
+    '',
+  );
+  const techCards = (): Card[] =>
+    draft.hands.tech.map((c) => ({
+      kicker: L('какой ИИ', 'what kind of AI'),
+      title: L(`${c.adj} ИИ`, `${c.adj} AI`),
+      note: c.note,
+      art: CARD_ART[c.id],
+      facts: facts(c.does),
+    }));
+  const tech = draft.hands.tech[await term.cards(techCards(), '', draftOptions('tech', techCards))];
 
   term.clear();
   term.print(L(`${tech.adj} ИИ-…`, `${tech.adj} AI …`), 'mid');
   await term.type([L('Слово второе: на что это похоже?', 'Word two: what is it like?')], '');
-  const form = deal.form[await term.cards(deal.form.map((c) => ({ kicker: L('на что похоже', 'what it is like'), title: L(`ИИ-${c.name}`, `AI ${c.name}`), note: c.note, art: CARD_ART[c.id], facts: facts(c.does) })))];
+  const formCards = (): Card[] =>
+    draft.hands.form.map((c) => ({
+      kicker: L('на что похоже', 'what it is like'),
+      title: L(`ИИ-${c.name}`, `AI ${c.name}`),
+      note: c.note,
+      art: CARD_ART[c.id],
+      facts: facts(c.does),
+    }));
+  const form = draft.hands.form[await term.cards(formCards(), '', draftOptions('form', formCards))];
 
   term.clear();
   term.print(L(`${tech.adj} ИИ-${form.name} для…`, `${tech.adj} AI ${form.name} for…`), 'mid');
   await term.type([L('Слово третье: кому это продаём?', 'Word three: who do we sell it to?')], '');
-  const aud =
-    deal.aud[
-      await term.cards(
-        deal.aud.map((c) => ({
-          kicker: L('кому продаём', 'who we sell to'),
-          title: L(`для ${c.name}`, `for ${c.name}`),
-          note: c.note,
-          art: c.texture,
-          facts: [L(`клиент платит от ${rate(c.pay / TUNING.sprint_s)} в секунду`, `a client pays from ${rate(c.pay / TUNING.sprint_s)} per second`), ...facts(c.does)],
-        })),
-      )
-    ];
+  const audCards = (): Card[] =>
+    draft.hands.aud.map((c) => ({
+      kicker: L('кому продаём', 'who we sell to'),
+      title: L(`для ${c.name}`, `for ${c.name}`),
+      note: c.note,
+      art: c.texture,
+      facts: [
+        L(
+          `клиент платит от ${rate(c.pay / TUNING.sprint_s)} в секунду`,
+          `a client pays from ${rate(c.pay / TUNING.sprint_s)} per second`,
+        ),
+        ...facts(c.does),
+      ],
+    }));
+  const aud = draft.hands.aud[await term.cards(audCards(), '', draftOptions('aud', audCards))];
 
   // the founder's traits: one of them counts twice in this startup
   let boost = '';
   const grown = TRAITS.filter((t) => (meta.traits[t.id] ?? 0) > 0);
-  // one trait is no choice: it is the bet by itself
-  if (grown.length === 1) boost = grown[0].id;
-  if (grown.length > 1) {
+  if (grown.length > 0) {
     term.clear();
-    term.print(pitch({ tech, form, aud }), 'mid');
-    await term.type([L('На что сделаем ставку? Эта черта в этом стартапе сработает вдвое.', 'What do we bet on? This trait will count double in this startup.')], '');
-    const three = grown.slice(0, 3);
-    boost = three[await term.cards(three.map((t) => traitCard(t, meta.traits[t.id] ?? 0, L('ставка стартапа · ×2', 'the startup’s bet · ×2'), (meta.traits[t.id] ?? 0) * 2)))].id;
+    term.print(L('Твоя коллекция', 'Your collection'), 'mid');
+    term.print(
+      L(
+        'Все действуют; одну усилим вдвое на этот забег.',
+        'All are active; boost one to double strength for this run.',
+      ),
+    );
+    term.print(
+      L(
+        'Наведи на карту, чтобы сравнить. Нажми, чтобы отметить.',
+        'Hover to compare. Click to select.',
+      ),
+      'dim small',
+    );
+    boost =
+      grown[
+        await term.cards(
+          grown.map((t) => ({
+            kicker: L(
+              `постоянная черта · ур. ${meta.traits[t.id]}`,
+              `permanent trait · lv. ${meta.traits[t.id]}`,
+            ),
+            title: t.title,
+            note: t.note,
+            art: t.art,
+            boost: {
+              current: traitGives(t, meta.traits[t.id]),
+              doubled: traitGives(t, meta.traits[t.id] * 2),
+            },
+          })),
+          '',
+          { confirm: L('Усилить и продолжить', 'Boost and continue') },
+        )
+      ].id;
   }
 
   const idea: Idea = { tech, form, aud };
   term.clear();
   term.print(pitch(idea), 'mid');
-  const minutes = dec(Math.round((TUNING.start_money / (TUNING.living_per_s + TUNING.tiers.fast.cost_per_s) / 60) * 10) / 10);
+  const minutes = dec(
+    Math.round(
+      (TUNING.start_money / (TUNING.living_per_s + TUNING.tiers.fast.cost_per_s) / 60) * 10,
+    ) / 10,
+  );
   const lines = [
     CLAUDE,
-    L('Звучит как стартап. Инвесторов у нас нет — есть твои сбережения.', 'Sounds like a startup. We have no investors — we have your savings.'),
-    L(`Их хватит минут на ${minutes}, если ничего не продадим.`, `They will last about ${minutes} minutes if we sell nothing.`),
-    L(`У тебя ${TUNING.last_sprint} спринтов. Выведи компанию в прибыль к последнему релизу — или выгодно продай.`, `You have ${TUNING.last_sprint} sprints. Make the company profitable by the final release — or sell at a good price.`),
+    L(
+      'Звучит как стартап. Инвесторов у нас нет — есть твои сбережения.',
+      'Sounds like a startup. We have no investors — we have your savings.',
+    ),
+    L(
+      `Их хватит минут на ${minutes}, если ничего не продадим.`,
+      `They will last about ${minutes} minutes if we sell nothing.`,
+    ),
+    L(
+      `У тебя ${TUNING.last_sprint} спринтов. Выведи компанию в прибыль к последнему релизу — или выгодно продай.`,
+      `You have ${TUNING.last_sprint} sprints. Make the company profitable by the final release — or sell at a good price.`,
+    ),
   ];
   const last = meta.runs[meta.runs.length - 1];
   // the same founder, a new session of Claude: the past is told to him, not remembered
   if (last) lines.splice(1, 0, AGAIN_SAYS[last.ending] ?? AGAIN_SAYS.broke);
   if (meta.runs.length >= 3) {
-    lines.push(L(`Это твой ${meta.runs.length + 1}-й стартап. В резюме это называется «опыт».`, `This is your startup number ${meta.runs.length + 1}. On a résumé that is called “experience”.`));
+    lines.push(
+      L(
+        `Это твой ${meta.runs.length + 1}-й стартап. В резюме это называется «опыт».`,
+        `This is your startup number ${meta.runs.length + 1}. On a résumé that is called “experience”.`,
+      ),
+    );
   }
-  if (meta.lessons.length > 0) lines.push(L(`С тобой твой опыт: уроков — ${meta.lessons.length}.`, `Your experience comes along: lessons — ${meta.lessons.length}.`));
+  if (meta.lessons.length > 0)
+    lines.push(
+      L(
+        `С тобой твой опыт: уроков — ${meta.lessons.length}.`,
+        `Your experience comes along: lessons — ${meta.lessons.length}.`,
+      ),
+    );
   const bet = TRAITS.find((t) => t.id === boost);
   if (bet) {
     const gives = traitGives(bet, (meta.traits[bet.id] ?? 0) * 2);
-    lines.push(L(`Ставка этого стартапа — <em>${bet.title.toLowerCase()}</em>: ${gives}.`, `This startup’s bet is <em>${bet.title.toLowerCase()}</em>: ${gives}.`));
+    lines.push(
+      L(
+        `Ставка этого стартапа — <em>${bet.title.toLowerCase()}</em>: ${gives}.`,
+        `This startup’s bet is <em>${bet.title.toLowerCase()}</em>: ${gives}.`,
+      ),
+    );
   }
   await term.type(lines, '');
   if (meta.runs.length === 0) {
     // the first startup: how the sheet works, in four lines — the rest is taught on the sheet itself
     term.print('');
     term.print(L('как это устроено:', 'how it works:'), 'dim small');
-    term.print(L('1. Справа — блоки. Выбери блок, потом клетку на чертеже.', '1. Blocks are on the right. Pick a block, then a cell on the blueprint.'), 'small');
-    term.print(L('2. Задачи идут по очереди. Улучшения остаются в своих зданиях. Enter — помочь руками.', '2. Tasks share one queue. Upgrades stay in their buildings. Enter helps with the work.'), 'small');
-    term.print(L(`3. Каждые ${TUNING.sprint_s} секунды релиз и выбор одной из трёх карт. На выборе время стоит.`, `3. Every ${TUNING.sprint_s} seconds: release and a choice of three cards. Time pauses for the choice.`), 'small');
     term.print(
-      L('4. Клиенты придут после ядра и лендинга. Платить начнут после «Приёма оплаты».', '4. Clients come after the core and the landing page. They start paying after “Payments”.'),
+      L(
+        '1. Справа — блоки. Выбери блок, потом клетку на чертеже.',
+        '1. Blocks are on the right. Pick a block, then a cell on the blueprint.',
+      ),
       'small',
     );
-    term.print(L('5. Ты один и проверяешь одно направление: там работа идёт быстрее и чище.', '5. There is one of you, and you review one lane: work there goes faster and cleaner.'), 'small');
-    term.print(L('Что делать дальше, всегда написано под счётчиком денег.', 'What to do next is always written under the money counter.'), 'dim small');
+    term.print(
+      L(
+        '2. Задачи идут по очереди. Улучшения остаются в своих зданиях. Enter — помочь руками.',
+        '2. Tasks share one queue. Upgrades stay in their buildings. Enter helps with the work.',
+      ),
+      'small',
+    );
+    term.print(
+      L(
+        `3. Каждые ${TUNING.sprint_s} секунды релиз и выбор одной из трёх карт. На выборе время стоит.`,
+        `3. Every ${TUNING.sprint_s} seconds: release and a choice of three cards. Time pauses for the choice.`,
+      ),
+      'small',
+    );
+    term.print(
+      L(
+        '4. Клиенты придут после ядра и лендинга. Платить начнут после «Приёма оплаты».',
+        '4. Clients come after the core and the landing page. They start paying after “Payments”.',
+      ),
+      'small',
+    );
+    term.print(
+      L(
+        '5. Ты один и проверяешь одно направление: там работа идёт быстрее и чище.',
+        '5. There is one of you, and you review one lane: work there goes faster and cleaner.',
+      ),
+      'small',
+    );
+    term.print(
+      L(
+        'Что делать дальше, всегда написано под счётчиком денег.',
+        'What to do next is always written under the money counter.',
+      ),
+      'dim small',
+    );
   }
   await term.wait(L('начать', 'start'));
   return { idea, boost };

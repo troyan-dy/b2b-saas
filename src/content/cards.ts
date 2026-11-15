@@ -7,6 +7,10 @@ export const CARD_ART: Readonly<Record<string, string>> = {
   gen: 'studio',
   copilot: 'desk',
   rag: 'datacenter',
+  buyer: 'supermarket',
+  multiplayer: 'racks',
+  guarded: 'admin',
+  oncall: 'desk_empty',
   // what it is like
   tinder: 'handshake',
   apply: 'office',
@@ -16,4 +20,10 @@ export const CARD_ART: Readonly<Record<string, string>> = {
   tracker: 'box',
   market: 'supermarket',
   mail: 'warehouse',
+  procure: 'handshake',
+  security: 'bank',
+  'api-updater': 'laptop',
+  'robot-dispatch': 'factory',
+  internal: 'office',
+  minutes: 'desk',
 };
