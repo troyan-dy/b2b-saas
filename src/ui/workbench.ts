@@ -142,7 +142,14 @@ const buildLabel = (action: WorkbenchBuildAction): string =>
     none: L('Выпущено', 'Shipped'),
   })[action];
 
-function button(action: string, id: string, label: string, off = false, cls = ''): string {
+function button(
+  action: string,
+  id: string,
+  label: string,
+  off = false,
+  cls = '',
+  tip = '',
+): string {
   return (
     '<button type="button" class="' +
     cls +
@@ -157,6 +164,7 @@ function button(action: string, id: string, label: string, off = false, cls = ''
     ':' +
     cls +
     '"' +
+    (tip ? ' title="' + esc(tip) + '"' : '') +
     (off ? ' disabled' : '') +
     '>' +
     label +
@@ -169,21 +177,25 @@ function moduleCard(module: WorkbenchModule): string {
   const effect = esc(
     primary(module.next || module.current).replace('мест именных договоров', 'договоры'),
   );
-  const demand = module.demand
-    ? `<span class="wb-build-wanted">${L('Просят: ', 'Wanted: ')}${esc(module.demand)}</span>`
-    : '';
+  const tip = [
+    module.title,
+    primary(module.next || module.current),
+    module.demand,
+    `${money(module.cost)} · ${whole(module.work)} ${L('работы', 'work')}`,
+  ]
+    .filter(Boolean)
+    .join(' · ');
   return (
     `<article class="wb-build${module.selected ? ' wb-selected' : ''}">` +
     button(
       module.action,
       module.id,
-      `<strong>${title}</strong><span class="wb-build-effect">${effect}</span>${demand}` +
-        `<span class="wb-build-price"><span>${money(module.cost)}</span> · ${whole(module.work)} ${L('работы', 'work')}</span>` +
-        (module.selected
-          ? `<span class="wb-picked-hint">${L('Теперь клетка ↙', 'Pick a cell ↙')}</span>`
-          : ''),
+      `<strong>${title}</strong><span class="wb-build-work" aria-label="${whole(module.work)} ${L('работы', 'work')}"><i aria-hidden="true"></i>${whole(module.work)}</span>` +
+        `<span class="wb-build-effect${module.selected ? ' wb-picked-hint' : ''}">${module.selected ? L('кликни клетку на чертеже', 'click a cell on the blueprint') : effect}</span>` +
+        `<span class="wb-build-price">${money(module.cost)}</span>`,
       module.disabled,
       'wb-build-main',
+      tip,
     ) +
     button(
       'inspect-module',
@@ -368,15 +380,14 @@ export function createWorkbench(
   const root = document.createElement('section');
   root.className = 'wb-main';
   root.hidden = true;
-  const back = button('close-panel', '', '← ' + L('Постройки', 'Buildings'), false, 'wb-back');
+  const back = button('close-panel', '', '← ' + L('Блоки', 'Blocks'), false, 'wb-back');
   root.innerHTML =
-    '<ul class="wb-perks" aria-label="' +
-    L('Усиления продукта', 'Product boosts') +
-    '" hidden></ul>' +
     '<section class="wb-catalog"><header><h2 tabindex="-1">' +
-    L('Постройки', 'Buildings') +
+    L('БЛОКИ', 'BLOCKS') +
     '</h2></header>' +
-    '<p class="wb-catalog-hint"></p><div class="wb-builds"></div></section>' +
+    '<div class="wb-builds"></div><ul class="wb-perks" aria-label="' +
+    L('Активные эффекты', 'Active effects') +
+    '" hidden></ul></section>' +
     '<section class="wb-detail wb-module-panel" aria-label="' +
     L('Постройка', 'Building') +
     '" hidden>' +
@@ -688,6 +699,7 @@ export function createWorkbench(
           .join(''),
       );
       const panel = view.panel ?? null;
+      root.classList.toggle('wb-context', panel !== null);
       catalog.hidden = panel !== null;
       modulePanel.hidden = panel !== 'module';
       clientPanel.hidden = panel !== 'clients';
@@ -713,12 +725,6 @@ export function createWorkbench(
                   'Everything available is on the blueprint.<br>Click a building to improve it.',
                 ) +
                 '</p>',
-        );
-        text(
-          find('.wb-catalog-hint'),
-          available.some((module) => module.selected)
-            ? L('Теперь выбери клетку на чертеже.', 'Now choose a cell on the blueprint.')
-            : L('Улучшения — клик по зданию на карте.', 'To upgrade, click a building on the map.'),
         );
       }
       if (panel === 'module') {
