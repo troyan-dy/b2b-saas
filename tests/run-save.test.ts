@@ -168,6 +168,25 @@ describe('company save', () => {
     expect(loaded.rng.state()).toBe(run.rng.state());
   });
 
+  it('roundtrips starting market leads from ear and buyers before the market opens', () => {
+    const run = createRun(110, idea, ['ear', 'buyers']);
+    expect(run.market.opened).toBe(false);
+    expect(
+      run.market.groups
+        .find((group) => group.id === 'small')!
+        .profiles.reduce((sum, profile) => sum + profile.leads, 0),
+    ).toBe(TUNING.lessons.ear_leads);
+    expect(
+      run.market.groups
+        .find((group) => group.id === 'large')!
+        .profiles.reduce((sum, profile) => sum + profile.leads, 0),
+    ).toBe(TUNING.lessons.buyers_leads);
+    expect(saveRun(run)).toBe(true);
+    const loaded = loadRun()!;
+    expect(snapshot(loaded)).toEqual(snapshot(run));
+    expect(loaded.rng.state()).toBe(run.rng.state());
+  });
+
   it('restores a completed grant project and pays it only on its first release', () => {
     const run = marketCompany();
     run.agents = [];

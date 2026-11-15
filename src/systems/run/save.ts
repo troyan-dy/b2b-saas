@@ -173,11 +173,7 @@ function market(value: unknown, infrastructure: number): boolean {
     return group.profiles.every(
       (profile: unknown, index: number) =>
         marketProfile(profile, segment.profiles[index].share, capacity) &&
-        (value.opened ||
-          (record(profile) &&
-            profile.count === 0 &&
-            profile.leads === 0 &&
-            profile.churnCarry === 0)),
+        (value.opened || (record(profile) && profile.count === 0 && profile.churnCarry === 0)),
     );
   });
 }
