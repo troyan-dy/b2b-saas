@@ -1,27 +1,27 @@
 {
   "mass": {
     "title": "The client served itself",
-    "description": "Clients serve themselves. Link onboarding to AI support to double support capacity. Compute can still be the bottleneck.",
-    "impact": "Promotion ×2 · +4 named contract slots",
-    "tradeoff": "Hosting +$32 per sprint. Cannot run alongside personal support."
+    "description": "Clients help themselves; servers get breathing room. Every copy grows the company.",
+    "impact": "Capacity ×1.2 · promotion ×1.2 · +2 contract slots",
+    "tradeoff": "Hosting +$32 per sprint for each copy."
   },
   "premium": {
     "title": "Now that is enterprise",
-    "description": "Large clients get a personal manager. CRM v2 linked to AI support lets large companies accept a price up to ×2 without a penalty. You set the price yourself.",
-    "impact": "Named corporate bills ×2 · patience +2",
-    "tradeoff": "Hosting +$96 per sprint. With batch processing, the penalty-free price limit is only ×1.25."
+    "description": "A personal manager sells at a premium. Raises bills for all large companies, including the client cloud.",
+    "impact": "Large-company bills ×1.5 · +1 sprint of contract patience",
+    "tradeoff": "Hosting +$96 per sprint for each copy."
   },
   "batch": {
     "title": "Your answer was ready yesterday",
-    "description": "Requests run in batches: the model processes a whole group at once. Cheaper, but answers take longer.",
-    "impact": "Token cost −50%",
-    "tradeoff": "Large-company satisfaction −12, named-client patience −1. Clients needing fast answers stop joining."
+    "description": "Group background requests. Cheaper, but large clients dislike waiting.",
+    "impact": "Token cost ×0.8",
+    "tradeoff": "Per copy: −4 large-company satisfaction and −1 sprint of contract patience."
   },
   "instant": {
     "title": "While you were typing",
-    "description": "Every request is processed immediately. Clients recommend the product and wait longer for improvements.",
-    "impact": "Promotion ×1.5 · patience +2",
-    "tradeoff": "Tokens +20%, hosting +$48 per sprint. Cannot run alongside batch processing."
+    "description": "Urgent answers skip the queue. Happy clients recommend the product more often.",
+    "impact": "Promotion ×1.2 · +1 sprint of contract patience",
+    "tradeoff": "Per copy: tokens ×1.1 and hosting +$48 per sprint."
   },
   "leads": {
     "title": "Someone noticed us in a chat",

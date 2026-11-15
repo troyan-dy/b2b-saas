@@ -4,10 +4,10 @@
   "max_level": 3,
   "infrastructure": { "cost": 900, "cost_growth": 1.6, "work": 12, "work_growth": 4 },
   "strategy": {
-    "mass": { "promo": 2, "seats": 4 },
-    "premium": { "corp_pay": 2, "patience": 2 },
-    "batch": { "tokens": 0.5, "patience": -1 },
-    "instant": { "promo": 1.5, "tokens": 1.2, "patience": 2 }
+    "mass": { "promo": 1.2, "seats": 2, "capacity": 1.2 },
+    "premium": { "corp_pay": 1.5, "patience": 1 },
+    "batch": { "tokens": 0.8, "patience": -1, "large_satisfaction": -4 },
+    "instant": { "promo": 1.2, "tokens": 1.1, "patience": 1 }
   },
   "strategy_host": { "mass": 1, "premium": 3, "batch": 0, "instant": 1.5 },
   "upgrade_steps": {

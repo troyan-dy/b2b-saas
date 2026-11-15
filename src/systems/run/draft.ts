@@ -3,6 +3,13 @@ import cardsEn from '../../data/balance/draft.en.json';
 import tuning from '../../data/balance/run.json';
 import { worded } from '../../core/lang';
 import { refreshRun, type Run } from './run';
+import {
+  PRODUCTION,
+  restoreCardStacks,
+  strategyCount,
+  STRATEGY_IDS,
+  type StrategyId,
+} from './product';
 
 export interface DraftCard {
   id: string;
@@ -28,7 +35,7 @@ function available(run: Run, card: DraftCard): boolean {
   const pending = run.tasks.some((task) => task.kind === 'card' && task.card === card.id);
   if (card.once && (run.claimedGrants.includes(card.id) || pending)) return false;
   if (card.slot === 'operation') return true;
-  if (run.strategy[card.slot] === card.id) return false;
+  if (strategyCount(run, card.id as StrategyId) >= tuning.last_sprint) return false;
   return !pending;
 }
 
@@ -76,8 +83,21 @@ export function releaseCard(run: Run, id: string): void {
     if (run.claimedGrants.includes(id)) return;
     run.claimedGrants.push(id);
   }
-  if (id === 'mass' || id === 'premium') run.strategy.support = id;
-  if (id === 'batch' || id === 'instant') run.strategy.processing = id;
+  if (STRATEGY_IDS.includes(id as StrategyId)) {
+    restoreCardStacks(run);
+    const key = id as StrategyId;
+    const count = strategyCount(run, key);
+    if (count >= tuning.last_sprint) return;
+    run.cardStacks[key] = count + 1;
+    const effect = PRODUCTION.strategy[key];
+    if ('patience' in effect) {
+      const waiting = run.call ? [...run.clients, run.call] : run.clients;
+      for (const client of waiting)
+        if (!client.happy) client.patience = Math.max(1, client.patience + effect.patience);
+    }
+    if (id === 'mass' || id === 'premium') run.strategy.support = id;
+    if (id === 'batch' || id === 'instant') run.strategy.processing = id;
+  }
   run.leads += card.leads ?? 0;
   run.money += card.money ?? 0;
   if (card.debt !== undefined) run.debt = Math.max(0, run.debt + card.debt);

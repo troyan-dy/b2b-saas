@@ -13,6 +13,11 @@ export interface SprintCardView {
   readonly replacement: string;
   readonly status: 'active' | 'available' | 'locked' | 'claimed' | 'queued';
   readonly statusLabel: string;
+  readonly benefits?: readonly string[];
+  readonly penalties?: readonly string[];
+  readonly level?: number;
+  readonly nextLevel?: number;
+  readonly detailLabel?: string;
 }
 
 export interface SprintCardsView {
@@ -41,14 +46,23 @@ function cardHtml(card: SprintCardView, index?: number): string {
   return (
     `<${tag} class="sc-card sc-${card.status}${choosing ? ' sc-choice' : ''}" ${choosing ? `type="button" data-sc-choice="${esc(card.id)}"` : ''}>` +
     `<span class="sc-art"><img src="${import.meta.env.BASE_URL}assets/img/nodes/${esc(card.art)}.webp" alt="" draggable="false">` +
-    `<span class="sc-mark">${choosing ? index + 1 : esc(card.statusLabel)}</span></span>` +
+    `<span class="sc-mark">${choosing ? index + 1 : esc(card.statusLabel)}</span>` +
+    (card.level !== undefined
+      ? `<span class="sc-level">${card.nextLevel !== undefined ? `×${card.level} → ×${card.nextLevel}` : `×${card.level}`}</span>`
+      : '') +
+    '</span>' +
     `<span class="sc-category">${esc(card.category)}</span><strong class="sc-title">${esc(card.title)}</strong>` +
-    `<span class="sc-impact">${esc(card.impact)}</span><span class="sc-description">${esc(card.description)}</span>` +
+    `<span class="sc-impact${card.benefits ? ' sc-benefit' : ''}">${esc(card.impact)}</span>` +
+    (card.detailLabel ? `<span class="sc-detail-label">${esc(card.detailLabel)}</span>` : '') +
+    (card.benefits?.length || card.penalties?.length
+      ? `<span class="sc-badges">${(card.benefits ?? []).map((text) => `<span class="sc-badge sc-good">${esc(text)}</span>`).join('')}${(card.penalties ?? []).map((text) => `<span class="sc-badge sc-cost">${esc(text)}</span>`).join('')}</span>`
+      : '') +
+    `<span class="sc-description">${esc(card.description)}</span>` +
     (card.tradeoff ? `<span class="sc-tradeoff">${esc(card.tradeoff)}</span>` : '') +
     `<span class="sc-lifetime">${esc(card.duration)}</span>` +
     (card.replacement ? `<span class="sc-replacement">${esc(card.replacement)}</span>` : '') +
     (choosing
-      ? `<span class="sc-take">${L('Взять карту', 'Take this card')} <kbd>${index + 1}</kbd></span>`
+      ? `<span class="sc-take">${card.nextLevel !== undefined ? L(`Усилить до ×${card.nextLevel}`, `Upgrade to ×${card.nextLevel}`) : L('Получить сейчас', 'Claim now')} <kbd>${index + 1}</kbd></span>`
       : '') +
     `</${tag}>`
   );
@@ -116,22 +130,19 @@ export function createSprintCards(parent: HTMLElement, onChoose: (id: string) =>
       '<div class="sc-album-sheet"><header class="sc-album-header">' +
       `<div><span class="sc-eyebrow">${L('ТВОЯ КОМПАНИЯ', 'YOUR COMPANY')}</span><h2 id="sc-album-title">${L('Карты и усиления', 'Cards and effects')}</h2></div>` +
       `<button type="button" class="sc-close" data-sc-close aria-label="${L('Закрыть карты', 'Close cards')}">×</button></header>` +
-      `<p class="sc-guide">${L('Два режима: один для поддержки, один для обработки. Другая карта той же категории заменит только режим. Постройки остаются.', 'Two modes: one for support, one for processing. A different card in the same category replaces only that mode. Your buildings stay.')}</p>` +
+      `<p class="sc-guide">${L('Все усиления работают вместе до финала. Каждая копия добавляет уровень: множители перемножаются, прибавки складываются. Деньги, лиды, ремонт и силы выдаются разово.', 'All upgrades work together until the end. Every copy adds a level: multipliers multiply, additions add up. Cash, leads, repairs and energy are one-off rewards.')}</p>` +
       '<div class="sc-album-body">' +
       section(
         L('Действуют сейчас', 'Active now'),
         view.cards.filter((card) => card.status === 'active'),
         L(
-          'Режимов пока нет. Выбирай их из трёх карт между спринтами.',
-          'No modes yet. Choose them from three cards between sprints.',
+          'Усилений пока нет. Выбирай их из трёх карт между спринтами.',
+          'No upgrades yet. Choose them from three cards between sprints.',
         ),
       ) +
       section(L('Временные события', 'Temporary events'), view.events) +
       section(L('Основатель', 'Founder'), view.founder) +
-      section(
-        L('Коллекция спринтов', 'Sprint collection'),
-        view.cards.filter((card) => card.status !== 'active'),
-      ) +
+      section(L('Вся коллекция · 9 карт', 'Full collection · 9 cards'), view.cards) +
       '</div>' +
       `<footer>${L('Здесь можно только смотреть. Новые карты выбираются между спринтами. Время идёт.', 'This is a reference. Choose new cards between sprints. Time is running.')}</footer></div>`;
     const body = album.querySelector('.sc-album-body');
@@ -216,7 +227,10 @@ export function createSprintCards(parent: HTMLElement, onChoose: (id: string) =>
         return;
       }
       const count =
-        view.cards.filter((card) => card.status === 'active').length +
+        view.cards.reduce(
+          (sum, card) => sum + (card.level ?? (card.status === 'active' ? 1 : 0)),
+          0,
+        ) +
         view.founder.length +
         view.events.length;
       opener.textContent = L(`Карты · ${count}`, `Cards · ${count}`);
@@ -240,9 +254,9 @@ export function createSprintCards(parent: HTMLElement, onChoose: (id: string) =>
           '<div class="sc-deal"><header class="sc-deal-header">' +
           `<span class="sc-eyebrow">${L(`СПРИНТ ${deal.sprint} / ${deal.limit} · ВРЕМЯ ОСТАНОВЛЕНО`, `SPRINT ${deal.sprint} / ${deal.limit} · TIME PAUSED`)}</span>` +
           `<h2 id="sc-draft-title">${L('Следующий ход компании', 'Your company’s next move')}</h2>` +
-          `<p>${L('Выбери одну карту. Она сработает сразу.', 'Choose one card. It takes effect immediately.')}</p></header>` +
+          `<p>${L('Выбери одну. Усиления копятся и работают сразу.', 'Choose one. Upgrades stack and work immediately.')}</p></header>` +
           `<div class="sc-choices">${deal.cards.map((card, index) => cardHtml(card, index)).join('')}</div>` +
-          `<p class="sc-deal-rule">${L('Режимы сохраняются до замены или конца партии. Разовая помощь выдаётся один раз при выборе. Постройки не заменяются.', 'Modes stay until replaced or the run ends. One-off help is granted when chosen. Buildings are never replaced.')}</p>` +
+          `<p class="sc-deal-rule">${L('Зелёное — выгода. Терракотовое — цена. Все собранные карты и постройки остаются с тобой.', 'Green is the benefit. Terracotta is the cost. All collected cards and buildings stay with you.')}</p>` +
           `<footer class="sc-report">${esc(deal.summary)}${deal.news ? `<span>${esc(deal.news.text)}</span>` : ''}</footer></div>`;
         draft.querySelector<HTMLButtonElement>('[data-sc-choice]')?.focus({ preventScroll: true });
       } else if (beforeDraft?.isConnected) beforeDraft.focus({ preventScroll: true });

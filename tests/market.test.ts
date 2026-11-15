@@ -139,24 +139,30 @@ describe('customer cohorts', () => {
       );
   });
 
-  it('keeps expensive instant contracts incompatible with batch processing', () => {
+  it('stacks the batch satisfaction cost while fast-request clients can still join', () => {
     const state = createMarket(toolkit),
       ctx = product();
-    ctx.support = 'premium';
-    state.groups[2].profiles[0].count = 10;
-    const instant = priceForecast(state, ctx, 'large', 2);
-    ctx.processing = 'batch';
-    const batch = priceForecast(state, ctx, 'large', 2);
-    expect(batch.after.satisfaction).toBeLessThan(instant.after.satisfaction);
-    expect(batch.lost).toBeGreaterThan(instant.lost);
+    const before = segmentView(state, ctx, 'large');
+    ctx.cardStacks = { premium: 2, batch: 5, instant: 1 };
+    const batch = segmentView(state, ctx, 'large');
+    expect(batch.satisfaction).toBe(before.satisfaction - 20);
+    expect(batch.reasons.delay).toBe(20);
+    advanceMarket(state, ctx, 100);
+    expect(
+      state.groups[2].profiles
+        .filter((profile) => profile.instant)
+        .every((profile) => profile.count > 0),
+    ).toBe(true);
+    expect(segmentView(state, ctx, 'small').reasons.delay).toBe(0);
   });
 
   it('makes expansion recover revenue and customer satisfaction under a real overload', () => {
-    const state = createMarket(toolkit), ctx = product();
+    const state = createMarket(toolkit),
+      ctx = product();
     ctx.infrastructure = 0;
     state.opened = true;
     for (const profile of state.groups[0].profiles) {
-      profile.count = 120 * profile.share / 100;
+      profile.count = (120 * profile.share) / 100;
       profile.leads = 8;
     }
     const expanded = { ...ctx, infrastructure: 1 };
@@ -174,35 +180,42 @@ describe('customer cohorts', () => {
     expect(expandedRelease.left).toBeLessThanOrEqual(overloadedRelease.left);
   });
 
-  it('doubles mass support only with its link and never invents compute capacity', () => {
+  it('grows effective capacity with every mass card even alongside premium', () => {
     const ctx = product();
     ctx.infrastructure = 0;
     ctx.levels = { core: 3, bot: 1, onb: 1 };
     ctx.links = [['onb', 'bot']];
     expect(marketCapacity(ctx)).toBe(70);
-    expect(marketCapacity({ ...ctx, support: 'mass' })).toBe(110);
-    expect(marketCapacity({ ...ctx, support: 'mass', links: [] })).toBe(70);
+    expect(marketCapacity({ ...ctx, support: 'mass' })).toBe(84);
+    expect(
+      marketCapacity({ ...ctx, support: 'premium', cardStacks: { mass: 5, premium: 1 } }),
+    ).toBe(174);
+    expect(marketCapacity({ ...ctx, support: 'mass', links: [] })).toBe(84);
     ctx.levels = { core: 1, bot: 3, onb: 3 };
-    expect(marketCapacity({ ...ctx, support: 'mass' })).toBe(marketCapacity(ctx));
+    expect(marketCapacity({ ...ctx, support: 'mass' })).toBe(60);
   });
 
   it('makes unaffordable tariffs lose the market instead of granting unlimited income', () => {
-    const initial = createMarket(toolkit), ctx = product();
+    const initial = createMarket(toolkit),
+      ctx = product();
     ctx.infrastructure = 8;
     initial.opened = true;
-    for (const profile of initial.groups[0].profiles) profile.count = 200 * profile.share / 100;
-    const fair = structuredClone(initial), expensive = structuredClone(initial);
+    for (const profile of initial.groups[0].profiles) profile.count = (200 * profile.share) / 100;
+    const fair = structuredClone(initial),
+      expensive = structuredClone(initial);
     expect(schedulePrice(expensive, 'small', MARKET.price.max + MARKET.price.step)).toBe(false);
     expect(schedulePrice(expensive, 'small', Infinity)).toBe(false);
     expect(schedulePrice(expensive, 'small', MARKET.price.max)).toBe(true);
-    let fairIncome = 0, expensiveIncome = 0;
+    let fairIncome = 0,
+      expensiveIncome = 0;
     for (let sprint = 0; sprint < 15; sprint++) {
       advanceMarket(fair, ctx, 0);
       advanceMarket(expensive, ctx, 0);
       fairIncome += segmentView(fair, ctx, 'small').income;
       expensiveIncome += segmentView(expensive, ctx, 'small').income;
     }
-    const retained = segmentView(fair, ctx, 'small'), lost = segmentView(expensive, ctx, 'small');
+    const retained = segmentView(fair, ctx, 'small'),
+      lost = segmentView(expensive, ctx, 'small');
     expect(lost.count).toBeLessThan(retained.count / 3);
     expect(lost.satisfaction).toBeLessThan(retained.satisfaction / 2);
     expect(expensiveIncome).toBeLessThan(fairIncome);

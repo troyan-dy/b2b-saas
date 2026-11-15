@@ -1,7 +1,7 @@
 import { createRng } from '../../core/rng';
 import draftCards from '../../data/balance/draft.json';
 import { MARKET } from '../company/market';
-import { PRODUCTION } from './product';
+import { PRODUCTION, STRATEGY_IDS } from './product';
 import {
   CLIENT_TYPES,
   createRun,
@@ -208,6 +208,17 @@ function production(value: RecordValue, blocks: Run['blocks']): boolean {
     )
       return false;
   }
+  if (
+    value.cardStacks !== undefined &&
+    (!record(value.cardStacks) ||
+      Object.entries(value.cardStacks).some(
+        ([id, count]) =>
+          !STRATEGY_IDS.includes(id as (typeof STRATEGY_IDS)[number]) ||
+          !integer(count) ||
+          count > TUNING.last_sprint,
+      ))
+  )
+    return false;
   if (value.tasks !== undefined && !Array.isArray(value.tasks)) return false;
   const tasks = (value.tasks ?? []) as unknown[];
   if (value.nextTask !== undefined && (!integer(value.nextTask) || value.nextTask < 1))
@@ -288,7 +299,8 @@ function production(value: RecordValue, blocks: Run['blocks']): boolean {
     if (!entry.requires.every((kind) => blocks.some((block) => block.kind === kind && block.live)))
       return false;
     return (
-      entry.slot === 'operation' || (value.strategy as RecordValue | undefined)?.[entry.slot] !== id
+      entry.slot === 'operation' ||
+      Number((value.cardStacks as RecordValue | undefined)?.[id] ?? 0) < TUNING.last_sprint
     );
   });
 }

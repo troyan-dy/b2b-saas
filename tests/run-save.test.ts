@@ -197,6 +197,60 @@ describe('company save', () => {
     expect(loaded.rng.state()).toBe(run.rng.state());
   });
 
+  it('migrates old exclusive modes into one stack and preserves every other saved field', () => {
+    const run = marketCompany();
+    expect(saveRun(run)).toBe(true);
+    const data = savedData();
+    delete data.run.cardStacks;
+    data.run.strategy = { support: 'mass', processing: 'batch' };
+    memory.set(RUN_SAVE_KEY, JSON.stringify(data));
+    const loaded = loadRun()!;
+    expect(loaded.cardStacks).toEqual({ mass: 1, batch: 1 });
+    expect(loaded.money).toBe(run.money);
+    expect(loaded.blocks).toEqual(run.blocks);
+    expect(loaded.market).toEqual(run.market);
+    expect(loaded.tasks).toEqual(run.tasks);
+    expect(loaded.rng.state()).toBe(run.rng.state());
+    refreshRun(loaded);
+    expect(loaded.cardStacks).toEqual({ mass: 1, batch: 1 });
+    loaded.draft = ['premium', 'batch', 'maintenance'];
+    expect(chooseCard(loaded, 'premium')).toBe(true);
+    expect(loaded.cardStacks).toEqual({ mass: 1, batch: 1, premium: 1 });
+    expect(saveRun(loaded)).toBe(true);
+    expect(snapshot(loadRun()!)).toEqual(snapshot(loaded));
+  });
+
+  it('roundtrips all stacked cards and an offered repeat without replaying their effects', () => {
+    const run = marketCompany();
+    for (let count = 0; count < 5; count++) {
+      for (const id of ['mass', 'premium', 'batch', 'instant']) {
+        run.draft = [id, 'maintenance', 'rest'];
+        expect(chooseCard(run, id)).toBe(true);
+      }
+    }
+    run.draft = ['premium', 'batch', 'maintenance'];
+    expect(saveRun(run)).toBe(true);
+    const loaded = loadRun()!;
+    expect(snapshot(loaded)).toEqual(snapshot(run));
+    expect(loaded.eff).toEqual(run.eff);
+    expect(loaded.host).toBe(run.host);
+    expect(chooseCard(loaded, 'premium')).toBe(true);
+    expect(loaded.cardStacks.premium).toBe(6);
+    expect(loaded.eff.corp_pay).toBeCloseTo(run.eff.corp_pay * 1.5);
+    expect(loaded.cardStacks.mass).toBe(5);
+  });
+
+  it.each([{ mass: -1 }, { batch: 0.5 }, { premium: 31 }, { instant: null }, { money: 1 }])(
+    'rejects a malformed stack map %j',
+    (cardStacks) => {
+      expect(saveRun(marketCompany())).toBe(true);
+      const data = savedData();
+      data.run.cardStacks = cardStacks;
+      memory.set(RUN_SAVE_KEY, JSON.stringify(data));
+      expect(loadRun()).toBeNull();
+    },
+  );
+
   it('roundtrips starting market leads from ear and buyers before the market opens', () => {
     const run = createRun(110, idea, ['ear', 'buyers']);
     expect(run.market.opened).toBe(false);
@@ -304,8 +358,8 @@ describe('company save', () => {
     expect(loaded).not.toBeNull();
     expect(snapshot(loaded)).toEqual(snapshot(run));
     expect(loaded.claimedGrants).toEqual(['credits']);
-    expect(loaded.eff.promo).toBe(2);
-    expect(loaded.eff.seats).toBe(4);
+    expect(loaded.eff.promo).toBe(1.2);
+    expect(loaded.eff.seats).toBe(2);
     expect(loaded.host).toBe(run.host);
     expect(loaded.blocks.map((block) => [block.kind, block.level, block.up])).toEqual([
       ['core', 1, false],
@@ -341,7 +395,7 @@ describe('company save', () => {
     expect(loaded.strategy.processing).toBeNull();
     step(loaded, TUNING.sprint_s);
     expect(loaded.strategy.processing).toBe('batch');
-    expect(loaded.eff.tokens).toBeCloseTo(0.475);
+    expect(loaded.eff.tokens).toBeCloseTo(0.76);
     expect(loaded.tasks).toHaveLength(0);
     expect(saveRun(loaded)).toBe(true);
     expect(loadRun()!.strategy.processing).toBe('batch');

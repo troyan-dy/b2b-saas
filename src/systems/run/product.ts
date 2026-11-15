@@ -5,6 +5,26 @@ import type { Run } from './run';
 
 export const PRODUCTION = productionData;
 export type ProductEffects = Record<string, number>;
+export type StrategyId = keyof typeof PRODUCTION.strategy;
+export type CardStacks = Partial<Record<StrategyId, number>>;
+export const STRATEGY_IDS = Object.keys(PRODUCTION.strategy) as StrategyId[];
+
+export function strategyCount(
+  run: { cardStacks?: CardStacks; strategy: Run['strategy'] },
+  id: StrategyId,
+): number {
+  return (
+    run.cardStacks?.[id] ?? (run.strategy.support === id || run.strategy.processing === id ? 1 : 0)
+  );
+}
+
+export function restoreCardStacks(run: Run): void {
+  run.cardStacks ??= {};
+  for (const id of STRATEGY_IDS) {
+    const count = strategyCount(run, id);
+    if (count > 0) run.cardStacks[id] = count;
+  }
+}
 
 export function blockEffects(kind: string, level: number): ProductEffects {
   const base = (effectsData as Record<string, ProductEffects>)[kind] ?? {};
@@ -16,14 +36,22 @@ export function blockEffects(kind: string, level: number): ProductEffects {
 }
 
 export function strategyEffects(run: Run): ProductEffects[] {
-  return [run.strategy.support, run.strategy.processing]
-    .filter((id) => id !== null)
-    .map((id) => PRODUCTION.strategy[id]);
+  return STRATEGY_IDS.map((id) => {
+    const count = strategyCount(run, id);
+    return Object.fromEntries(
+      Object.entries(PRODUCTION.strategy[id])
+        .filter(([key]) => key !== 'capacity' && key !== 'large_satisfaction')
+        .map(([key, value]) => [
+          key,
+          key === 'seats' || key === 'patience' ? value * count : value ** count,
+        ]),
+    );
+  });
 }
 
 export function strategyHosting(run: Run): number {
-  return [run.strategy.support, run.strategy.processing].reduce(
-    (sum, id) => sum + (id ? PRODUCTION.strategy_host[id] : 0),
+  return STRATEGY_IDS.reduce(
+    (sum, id) => sum + PRODUCTION.strategy_host[id] * strategyCount(run, id),
     0,
   );
 }

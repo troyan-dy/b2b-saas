@@ -25,8 +25,15 @@ import {
   takeReleasedTasks,
   type WorkTask,
 } from './production';
-import { blockEffects, PRODUCTION, strategyEffects, strategyHosting } from './product';
 import { agentDebtPerWork, agentFixPerWork, agentWorkRate } from './workforce';
+import {
+  blockEffects,
+  PRODUCTION,
+  restoreCardStacks,
+  strategyEffects,
+  strategyHosting,
+  type CardStacks,
+} from './product';
 
 export { DRAFT_CARDS, chooseCard, draftCards, type DraftCard } from './draft';
 export {
@@ -315,6 +322,7 @@ export interface Run {
   draft: string[] | null;
   claimedGrants: string[];
   strategy: { support: 'mass' | 'premium' | null; processing: 'batch' | 'instant' | null };
+  cardStacks: CardStacks;
   infrastructure: number;
   agents: Agent[];
   /** the lane the founder checks: no debt there, and the work goes faster */
@@ -490,6 +498,7 @@ export function createRun(
     draft: null,
     claimedGrants: [],
     strategy: { support: null, processing: null },
+    cardStacks: {},
     infrastructure: 0,
     agents: [{ id: 1, tier: 'fast', lane: 'build', carry: 0 }],
     review: 'build',
@@ -628,6 +637,7 @@ export function refreshRun(run: Run): void {
   run.draft ??= null;
   run.claimedGrants ??= [];
   run.strategy ??= { support: null, processing: null };
+  restoreCardStacks(run);
   run.infrastructure ??= 0;
   run.market ??= createMarket(['core', 'landing', 'pay', ...run.pool]);
   syncProduction(run);

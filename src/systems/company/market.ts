@@ -1,4 +1,5 @@
 import data from '../../data/balance/market.json';
+import { PRODUCTION, strategyCount, type CardStacks, type StrategyId } from '../run/product';
 
 export type SegmentId = 'small' | 'medium' | 'large';
 export const SEGMENTS: readonly SegmentId[] = ['small', 'medium', 'large'];
@@ -39,6 +40,7 @@ export interface MarketContext {
   infrastructure: number;
   support: 'mass' | 'premium' | null;
   processing: 'batch' | 'instant' | null;
+  cardStacks?: CardStacks;
   debt: number;
   down: boolean;
   sellable: boolean;
@@ -94,6 +96,11 @@ const rule = (id: SegmentId) => data.segments.find((s) => s.id === id)!;
 const clamp = (n: number, min: number, max: number) => Math.max(min, Math.min(max, n));
 const linked = (ctx: MarketContext, a: string, b: string) =>
   ctx.links.some((pair) => pair.includes(a) && pair.includes(b));
+const stacks = (ctx: MarketContext, id: StrategyId) =>
+  strategyCount(
+    { cardStacks: ctx.cardStacks, strategy: { support: ctx.support, processing: ctx.processing } },
+    id,
+  );
 
 export function createMarket(toolkit: readonly string[]): MarketState {
   return {
@@ -132,8 +139,8 @@ export function marketCapacity(ctx: MarketContext): number {
     (ctx.levels.bot ?? 0) * c.support_per_level +
     (ctx.levels.onb ?? 0) * c.onboarding_per_level +
     (ctx.levels.crm ?? 0) * c.crm_per_level;
-  const mass = ctx.support === 'mass' && linked(ctx, 'onb', 'bot') ? 2 : 1;
-  return Math.round(Math.min(compute, support * mass) * c.expansion_mult ** ctx.infrastructure);
+  const mass = PRODUCTION.strategy.mass.capacity ** stacks(ctx, 'mass');
+  return Math.round(Math.min(compute, support) * mass * c.expansion_mult ** ctx.infrastructure);
 }
 
 export function marketLoad(state: MarketState, ctx: MarketContext): number {
@@ -155,22 +162,11 @@ function coverage(profile: Profile, ctx: MarketContext): number {
     ) / profile.needs.length;
   if (profile.connection && !linked(ctx, profile.connection[0], profile.connection[1]))
     value *= 0.5;
-  if (profile.instant && ctx.processing === 'batch') value *= 0.5;
   return value;
 }
 
-export function acceptedPrice(profile: Profile, id: SegmentId, ctx: MarketContext): number {
-  let value = data.price.base_comfort + data.price.fulfilled_comfort * coverage(profile, ctx);
-  if (
-    id === 'large' &&
-    ctx.support === 'premium' &&
-    linked(ctx, 'crm', 'bot') &&
-    (ctx.levels.crm ?? 0) >= 2
-  )
-    value = data.price.premium_comfort;
-  if (id === 'large' && ctx.processing === 'batch')
-    value = Math.min(value, data.price.batch_large_max);
-  return value;
+export function acceptedPrice(profile: Profile, _id: SegmentId, ctx: MarketContext): number {
+  return data.price.base_comfort + data.price.fulfilled_comfort * coverage(profile, ctx);
 }
 
 function reasons(
@@ -186,7 +182,8 @@ function reasons(
     price: Math.max(0, price - acceptedPrice(profile, id, ctx)) * s.price_penalty,
     overload: Math.min(65, Math.max(0, utilization - 1) * s.overload_penalty),
     outage: ctx.down ? s.down_penalty : 0,
-    delay: id === 'large' && ctx.processing === 'batch' ? s.batch_large_penalty : 0,
+    delay:
+      id === 'large' ? -PRODUCTION.strategy.batch.large_satisfaction * stacks(ctx, 'batch') : 0,
     debt: Math.min(s.debt_penalty, ctx.debt / 2),
   };
 }
@@ -400,10 +397,7 @@ export function advanceMarket(
       const fit = coverage(p, ctx);
       const eligible = group.id !== 'large' || fit >= 1;
       const conversion = ((data.acquisition.conversion * happy) / 100) * (0.25 + fit * 0.75);
-      const arrived =
-        eligible && !(p.instant && ctx.processing === 'batch')
-          ? Math.min(room, Math.floor(p.leads * Math.min(1, conversion)))
-          : 0;
+      const arrived = eligible ? Math.min(room, Math.floor(p.leads * Math.min(1, conversion))) : 0;
       p.leads -= arrived;
       p.count += arrived;
       group.came += arrived;

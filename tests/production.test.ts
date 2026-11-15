@@ -295,7 +295,7 @@ describe('production queue and sprint choices', () => {
     }
   });
 
-  it('activates strategies and derived effects now while replacing each slot independently', () => {
+  it('stacks all four card effects immediately without replacing cards or queued buildings', () => {
     const run = fresh(['core']);
     place(run, 'landing', 0, 1);
     crunch(run);
@@ -306,20 +306,23 @@ describe('production queue and sprint choices', () => {
     expect(DRAFT_CARDS.every((card) => card.cost === 0 && card.work === 0)).toBe(true);
     select(run, 'mass');
     expect(run.strategy.support).toBe('mass');
-    expect(run.eff.promo).toBe(2);
-    expect(run.eff.seats).toBe(4);
+    expect(run.eff.promo).toBe(1.2);
+    expect(run.eff.seats).toBe(2);
     expect(run.host).toBeCloseTo(host + 1);
     select(run, 'batch');
-    expect(run.eff.tokens).toBeCloseTo(0.475);
+    expect(run.eff.tokens).toBeCloseTo(0.76);
     select(run, 'premium');
     expect(run.strategy).toEqual({ support: 'premium', processing: 'batch' });
-    expect(run.eff.promo).toBe(1);
-    expect(run.eff.corp_pay).toBe(2);
-    expect(run.host).toBeCloseTo(host + 3);
+    expect(run.eff.promo).toBe(1.2);
+    expect(run.eff.corp_pay).toBe(1.5);
+    expect(run.host).toBeCloseTo(host + 4);
     select(run, 'instant');
     expect(run.strategy).toEqual({ support: 'premium', processing: 'instant' });
-    expect(run.eff.tokens).toBeCloseTo(1.14);
-    expect(run.host).toBeCloseTo(host + 4.5);
+    expect(run.eff.tokens).toBeCloseTo(0.836);
+    expect(run.eff.patience).toBe(1);
+    expect(run.eff.promo).toBeCloseTo(1.44);
+    expect(run.cardStacks).toEqual({ mass: 1, premium: 1, batch: 1, instant: 1 });
+    expect(run.host).toBeCloseTo(host + 5.5);
     expect(run.money).toBe(money);
     expect(run.nextTask).toBe(nextTask);
     expect(queueView(run)).toEqual(queued);
@@ -349,15 +352,16 @@ describe('production queue and sprint choices', () => {
     expect(run.mod.tokens).toBe(0.7);
   });
 
-  it('keeps strategy gains through releases and changes only the chosen category, not buildings', () => {
+  it('keeps stacked gains through releases and never removes buildings', () => {
     const run = fresh(['core', 'landing', 'pay']);
     run.market.groups[0].profiles[0].count = 20;
     const blocks = run.blocks.map((block) => ({ ...block }));
-    const initialTokens = tokens(run), initialLeads = leadsPerWork(run);
+    const initialTokens = tokens(run),
+      initialLeads = leadsPerWork(run);
     select(run, 'mass');
     select(run, 'batch');
-    expect(tokens(run)).toBeCloseTo(initialTokens * 0.5);
-    expect(leadsPerWork(run)).toBeCloseTo(initialLeads * 2);
+    expect(tokens(run)).toBeCloseTo(initialTokens * 0.8);
+    expect(leadsPerWork(run)).toBeCloseTo(initialLeads * 1.2);
     for (let sprint = 0; sprint < 2; sprint++) {
       release(run);
       expect(run.strategy).toEqual({ support: 'mass', processing: 'batch' });
@@ -366,8 +370,9 @@ describe('production queue and sprint choices', () => {
     const batchTokens = tokens(run);
     select(run, 'instant');
     expect(run.strategy).toEqual({ support: 'mass', processing: 'instant' });
-    expect(tokens(run)).toBeCloseTo(batchTokens * 2.4);
-    expect(leadsPerWork(run)).toBeCloseTo(initialLeads * 3);
+    expect(tokens(run)).toBeCloseTo(batchTokens * 1.1);
+    expect(leadsPerWork(run)).toBeCloseTo(initialLeads * 1.44);
+    expect(run.cardStacks).toEqual({ mass: 1, batch: 1, instant: 1 });
     expect(run.blocks).toEqual(blocks);
   });
 

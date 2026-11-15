@@ -140,6 +140,17 @@
   font: 400 14px/1.25 var(--mono);
   color: #426581;
 }
+.sc-level {
+  position: absolute;
+  right: 16px;
+  bottom: 12px;
+  padding: 5px 10px;
+  border: 1px solid #426581;
+  border-radius: 6px;
+  background: var(--paper);
+  color: #315779;
+  font: 600 20px/1.25 var(--mono);
+}
 .sc-category,
 .sc-title,
 .sc-impact,
@@ -151,6 +162,37 @@
   display: block;
   margin-left: 24px;
   margin-right: 24px;
+}
+.sc-detail-label {
+  margin: 15px 24px 6px;
+  color: #6b6a60;
+  font: 400 11px/1.3 var(--mono);
+  letter-spacing: 0.05em;
+}
+.sc-badges {
+  display: flex;
+  flex-wrap: wrap;
+  align-content: start;
+  gap: 7px;
+  margin: 0 24px;
+}
+.sc-badge {
+  padding: 5px 9px;
+  border-radius: 5px;
+  font: 400 17px/1.35 var(--mono);
+}
+.sc-good {
+  background: #dce8d9;
+  color: #305c43;
+}
+.sc-cost {
+  background: #eedbc9;
+  color: #884e37;
+}
+.sc-impact.sc-benefit {
+  color: #305c43;
+  font-size: 25px;
+  font-weight: 600;
 }
 .sc-category {
   font: 400 13px/1.3 var(--mono);
@@ -290,6 +332,15 @@
 .sc-album .sc-impact {
   margin-top: 12px;
   font-size: 17px;
+}
+.sc-album .sc-impact.sc-benefit {
+  font-size: 20px;
+}
+.sc-album .sc-level {
+  font-size: 16px;
+}
+.sc-album .sc-badge {
+  font-size: 13px;
 }
 .sc-album .sc-description {
   font-size: 17px;

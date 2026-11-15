@@ -116,7 +116,7 @@ describe('company integration', () => {
     expect(flows(run).hosting - hosting).toBe(companyTotals(run).hosting);
   });
 
-  it('premium permits a higher cohort tariff instead of silently changing it', () => {
+  it('premium raises every large-company bill without changing its tariff setting or usage cost', () => {
     const run = company();
     run.market.groups[2].profiles[0].count = 2;
     const before = segmentView(run.market, companyContext(run), 'large');
@@ -124,10 +124,11 @@ describe('company integration', () => {
     refreshRun(run);
     const ctx = companyContext(run);
     const after = segmentView(run.market, ctx, 'large');
-    expect(after.income).toBe(before.income);
+    expect(after.income).toBeCloseTo(before.income * 1.5);
+    expect(after.tokens).toBe(before.tokens);
     expect(after.price).toBe(1);
     const proposal = priceForecast(run.market, ctx, 'large', 2);
-    expect(proposal.after.reasons.price).toBe(0);
-    expect(proposal.after.income).toBeCloseTo(before.income * 2);
+    expect(proposal.after.reasons.price).toBeGreaterThan(0);
+    expect(proposal.after.income).toBeCloseTo(after.income * 2);
   });
 });

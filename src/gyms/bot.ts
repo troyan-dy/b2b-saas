@@ -218,7 +218,7 @@ function cardValue(run: Run, card: DraftCard | undefined): number {
   }
   if (card.id === 'mass')
     return ((market.utilization < 0.8 && run.strategy.support === null) ||
-      marketCapacity({ ...ctx, support: 'mass' }) > market.capacity) &&
+      marketCapacity({ ...ctx, cardStacks: { ...ctx.cardStacks, mass: (ctx.cardStacks?.mass ?? 0) + 1 } }) > market.capacity) &&
       canFund(run, card.cost, card.work, PRODUCTION.strategy_host.mass)
       ? 25
       : -1;
