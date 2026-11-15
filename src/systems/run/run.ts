@@ -1269,8 +1269,11 @@ export function answerLastChance(run: Run, accept: boolean): void {
 // ---------------------------------------------------------------- time
 
 export function step(run: Run, dt: number): void {
+  if (run.sprint > TUNING.last_sprint) finishAtSprintLimit(run);
   // the bank is on the line: the clock waits for the answer
   if (run.over || run.draft || run.lastChance !== null) return;
+  if (run.sprint === TUNING.last_sprint)
+    dt = Math.min(dt, Math.max(0, TUNING.sprint_s - run.sprintT));
   startWork(run);
   run.t += dt;
   run.money += netPerS(run) * dt;
@@ -1660,7 +1663,7 @@ function release(run: Run): void {
   run.offer = null;
   const V = TUNING.valuation;
   if (income > 0) run.stats.value = valuation(run);
-  if (run.stage >= 3 && run.sprint % V.every === 0 && income > 0) {
+  if (run.stage >= 3 && run.sprint % V.every === 0 && income > 0 && run.sprint < TUNING.last_sprint) {
     run.offer = Math.round((valuation(run) * V.first_bid) / 100) * 100;
     run.events.push({ type: 'offer', price: run.offer });
   }
@@ -1674,6 +1677,10 @@ function release(run: Run): void {
   run.lastReport = report;
   run.events.push({ type: 'release', report });
 
+  if (run.sprint >= TUNING.last_sprint) {
+    finishAtSprintLimit(run);
+    return;
+  }
   run.sprint++;
   run.sprintT = 0;
   run.reviewLocked = false;
@@ -1747,6 +1754,19 @@ function news(run: Run): void {
   const mod = { tokens: 1, price: 1, promo: 1 };
   for (const m of run.mods) mod[m.kind] *= m.mult;
   run.mod = mod;
+}
+
+/** The final release and legacy endless saves use the same result without another draft. */
+export function finishAtSprintLimit(run: Run): void {
+  if (run.over || run.sprint < TUNING.last_sprint) return;
+  run.sprint = TUNING.last_sprint;
+  run.sprintT = TUNING.sprint_s;
+  run.draft = null;
+  run.offer = null;
+  run.call = null;
+  run.dilemma = null;
+  run.lastChance = null;
+  end(run, netPerS(run) >= 0 ? 'profit' : 'late');
 }
 
 function end(run: Run, ending: Ending): void {

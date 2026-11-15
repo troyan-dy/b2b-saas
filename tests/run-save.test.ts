@@ -157,6 +157,33 @@ describe('company save', () => {
     expect(loaded.rng.state()).toBe(run.rng.state());
   });
 
+  it('settles an endless save beyond thirty sprints without rerunning a release or losing the company', () => {
+    const run = marketCompany();
+    run.sprint = 37;
+    run.sprintT = 12;
+    run.t = 36 * TUNING.sprint_s + 12;
+    run.strategy = { support: 'mass', processing: 'instant' };
+    run.draft = ['premium', 'batch', 'leads'];
+    refreshRun(run);
+    expect(saveRun(run)).toBe(true);
+    const loaded = loadRun()!;
+    expect(loaded).not.toBeNull();
+    expect(loaded.over).toBe('late');
+    expect(loaded.sprint).toBe(TUNING.last_sprint);
+    expect(loaded.draft).toBeNull();
+    expect(loaded.money).toBe(run.money);
+    expect(loaded.t).toBe(run.t);
+    expect(loaded.market).toEqual(run.market);
+    expect(loaded.blocks).toEqual(run.blocks);
+    expect(loaded.strategy).toEqual(run.strategy);
+    expect(loaded.rng.state()).toBe(run.rng.state());
+    expect(loaded.events).toEqual([{ type: 'end', ending: 'late' }]);
+    const settled = snapshot(loaded);
+    step(loaded, 32);
+    expect(snapshot(loaded)).toEqual(settled);
+    expect(saveRun(loaded)).toBe(false);
+  });
+
   it('rebuilds a legacy missing market and grants history without consuming saved randomness', () => {
     const run = marketCompany();
     expect(saveRun(run)).toBe(true);

@@ -8,8 +8,8 @@ const STEP = 1 / 4;
 const met = new Map<string, number>();
 let closed = 0;
 
-function play(seed: number, idea: Idea, style: BotStyle | null): Run {
-  const run = createRun(seed, idea);
+function play(seed: number, idea: Idea, style: BotStyle | null, perks: string[] = []): Run {
+  const run = createRun(seed, idea, perks);
   if (!style) {
     run.agents = [];
     run.newsWait = 10_000; // isolate living costs from one-off refunds and other news
@@ -46,7 +46,7 @@ function summary(runs: Run[]): { alive: number; profit: number; peak: number; fi
   const profitRuns = runs.filter((r) => r.stats.profitAt > 0);
   return {
     alive: runs.filter((r) => r.over !== 'broke').length / n,
-    profit: runs.filter((r) => !r.over && netPerS(r) > 0).length / n,
+    profit: runs.filter((r) => r.over === 'profit' && netPerS(r) >= 0).length / n,
     peak: runs.reduce((s, r) => s + r.stats.peakMrr, 0) / n,
     first: runs.reduce((s, r) => s + r.stats.firstClientAt, 0) / n / 60,
     profitAt: profitRuns.reduce((s, r) => s + r.stats.profitAt, 0) / Math.max(1, profitRuns.length) / 60,
@@ -79,6 +79,7 @@ describe('economy', () => {
     expect(s.first).toBeGreaterThan(0.6);
     expect(s.first).toBeLessThan(4);
     expect(s.alive).toBeGreaterThan(0.45);
+    expect(s.profit).toBeGreaterThan(0.45);
     // even an unlucky startup lives long enough to be a story
     expect(s.earliestDeath).toBeGreaterThan(3.6);
   });
@@ -94,17 +95,29 @@ describe('economy', () => {
     console.log('dirty  ', JSON.stringify(dirty));
     // where a block stands matters
     expect(full.peak).toBeGreaterThan(noLinks.peak * 1.05);
-    // Endless growth has multiple viable strategies; maintenance must still prevent real outages.
+    // Maintenance must prevent real outages even when the company can afford the losses.
     expect(dirty.downs).toBeGreaterThan(full.downs);
+    expect(full.profit).toBeGreaterThan(dirty.profit + 0.1);
   }, 30000);
 
-  it('test_run_every_idea_can_be_won_and_lost', () => {
+  it('test_run_template_perk_reaches_the_first_customer_faster_on_the_same_seeds', () => {
+    const seeds = Array.from({ length: 8 }, (_, k) => 1400 + k);
+    const plainRuns = seeds.map((seed, k) => play(seed, ideaOf(k), SENSIBLE));
+    const templateRuns = seeds.map((seed, k) => play(seed, ideaOf(k), SENSIBLE, ['template']));
+    const plainSummary = summary(plainRuns), templateSummary = summary(templateRuns);
+    console.log('template paired', JSON.stringify({ plain: plainSummary, template: templateSummary }));
+    expect(templateSummary.first).toBeLessThan(plainSummary.first * 0.9);
+    expect(templateSummary.profit).toBeGreaterThanOrEqual(plainSummary.profit);
+  }, 30000);
+
+  it('test_run_every_idea_can_reach_a_profitable_finish', () => {
     // sixteen mixes: every card of every deck is in at least one of them
     for (let k = 0; k < 16; k++) {
       const runs = Array.from({ length: 12 }, (_, s) => play(900 + s * 7 + k, ideaOf(k), SENSIBLE));
       const alive = runs.filter((r) => r.over !== 'broke').length;
-      console.log(`idea ${k}: ${ideaOf(k).tech.id}/${ideaOf(k).form.id}/${ideaOf(k).aud.id} alive ${alive}/12 peak ${Math.round(runs.reduce((a, r) => a + r.stats.peakMrr, 0) / 12)}`);
-      expect(alive).toBeGreaterThan(0);
+      const profitable = runs.filter((r) => r.over === 'profit').length;
+      console.log(`idea ${k}: ${ideaOf(k).tech.id}/${ideaOf(k).form.id}/${ideaOf(k).aud.id} alive ${alive}/12 profitable ${profitable}/12 peak ${Math.round(runs.reduce((a, r) => a + r.stats.peakMrr, 0) / 12)}`);
+      expect(profitable).toBeGreaterThan(0);
     }
   }, 30000);
 
@@ -115,11 +128,13 @@ describe('economy', () => {
     expect(closed).toBeGreaterThan(0);
   });
 
-  it('test_run_continues_with_income_after_thirty_sprints', () => {
+  it('test_run_finishes_on_the_thirtieth_release_without_another_draft', () => {
     const run = play(7, plain, SENSIBLE);
     expect(mrr(run)).toBeGreaterThanOrEqual(0);
-    expect(run.sprint).toBe(TUNING.last_sprint + 1);
-    expect(run.over).toBeNull();
+    expect(run.sprint).toBe(TUNING.last_sprint);
+    expect(run.lastReport?.sprint).toBe(TUNING.last_sprint);
+    expect(run.over).toBe('profit');
+    expect(run.draft).toBeNull();
     expect(Number.isFinite(run.money)).toBe(true);
   });
 });

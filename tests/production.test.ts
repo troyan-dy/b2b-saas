@@ -24,6 +24,7 @@ import {
   hire,
   IDEAS,
   isSite,
+  leadsPerWork,
   moveTask,
   place,
   queueView,
@@ -34,6 +35,7 @@ import {
   setLane,
   setReview,
   step,
+  tokens,
   TUNING,
   upgrade,
   workNeed,
@@ -347,6 +349,28 @@ describe('production queue and sprint choices', () => {
     expect(run.mod.tokens).toBe(0.7);
   });
 
+  it('keeps strategy gains through releases and changes only the chosen category, not buildings', () => {
+    const run = fresh(['core', 'landing', 'pay']);
+    run.market.groups[0].profiles[0].count = 20;
+    const blocks = run.blocks.map((block) => ({ ...block }));
+    const initialTokens = tokens(run), initialLeads = leadsPerWork(run);
+    select(run, 'mass');
+    select(run, 'batch');
+    expect(tokens(run)).toBeCloseTo(initialTokens * 0.5);
+    expect(leadsPerWork(run)).toBeCloseTo(initialLeads * 2);
+    for (let sprint = 0; sprint < 2; sprint++) {
+      release(run);
+      expect(run.strategy).toEqual({ support: 'mass', processing: 'batch' });
+      select(run, 'maintenance');
+    }
+    const batchTokens = tokens(run);
+    select(run, 'instant');
+    expect(run.strategy).toEqual({ support: 'mass', processing: 'instant' });
+    expect(tokens(run)).toBeCloseTo(batchTokens * 2.4);
+    expect(leadsPerWork(run)).toBeCloseTo(initialLeads * 3);
+    expect(run.blocks).toEqual(blocks);
+  });
+
   it('reports full and remaining work budgets with review, debt and individual carry', () => {
     const run = fresh();
     expect(buildCapacity(run)).toBe(10);
@@ -392,10 +416,11 @@ describe('production queue and sprint choices', () => {
     expect(second.work).toBeGreaterThan(first.work);
   });
 
-  it('keeps running and receiving offers after sprint thirty and accepts a profitable mature demo', () => {
+  it('ships final work before judging profit at sprint thirty and then freezes the company', () => {
     const run = fresh(['core', 'landing', 'pay']);
     run.stage = 3;
-    run.sprint = 32;
+    run.sprint = TUNING.last_sprint;
+    run.t = (TUNING.last_sprint - 1) * TUNING.sprint_s;
     run.clients = [
       {
         id: 1,
@@ -412,15 +437,33 @@ describe('production queue and sprint choices', () => {
         promised: false,
       },
     ];
+    expect(expandInfrastructure(run)).toBe(true);
+    finishWork(run);
+    // A delayed frame must not charge for time beyond the final release.
+    step(run, TUNING.sprint_s + 10);
+    expect(run.infrastructure).toBe(1);
+    expect(run.sprint).toBe(30);
+    expect(run.t).toBe(TUNING.last_sprint * TUNING.sprint_s);
+    expect(run.lastReport?.sprint).toBe(30);
+    expect(run.lastReport?.projects).toContain('infrastructure');
+    expect(run.over).toBe('profit');
+    expect(run.draft).toBeNull();
+    expect(run.offer).toBeNull();
+    const ended = JSON.stringify(run);
+    step(run, 100);
+    expect(expandInfrastructure(run)).toBe(false);
+    expect(chooseCard(run, 'credits')).toBe(false);
+    expect(JSON.stringify(run)).toBe(ended);
+    expect(run.events.filter((event) => event.type === 'end')).toHaveLength(1);
+  });
+
+  it('ends an unprofitable company at the deadline even with cash still in the bank', () => {
+    const run = fresh();
+    run.sprint = TUNING.last_sprint;
     release(run);
-    expect(run.sprint).toBe(33);
-    expect(run.over).toBeNull();
-    expect(run.offer).not.toBeNull();
-    select(run, 'credits');
-    run.sprint = 36;
-    release(run);
-    expect(run.over).toBeNull();
-    expect(run.events.some((event) => event.type === 'demo' && event.ok)).toBe(true);
+    expect(run.money).toBeGreaterThan(0);
+    expect(run.over).toBe('late');
+    expect(run.draft).toBeNull();
   });
 
   it('cancels every unshipped building state, releases its cell and never refunds spent cash', () => {

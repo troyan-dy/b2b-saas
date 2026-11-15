@@ -3,6 +3,8 @@ import blocks from '../src/data/balance/blocks.json';
 import {
   advanceMarket,
   createMarket,
+  MARKET,
+  marketCapacity,
   marketTotals,
   priceForecast,
   schedulePrice,
@@ -147,5 +149,62 @@ describe('customer cohorts', () => {
     const batch = priceForecast(state, ctx, 'large', 2);
     expect(batch.after.satisfaction).toBeLessThan(instant.after.satisfaction);
     expect(batch.lost).toBeGreaterThan(instant.lost);
+  });
+
+  it('makes expansion recover revenue and customer satisfaction under a real overload', () => {
+    const state = createMarket(toolkit), ctx = product();
+    ctx.infrastructure = 0;
+    state.opened = true;
+    for (const profile of state.groups[0].profiles) {
+      profile.count = 120 * profile.share / 100;
+      profile.leads = 8;
+    }
+    const expanded = { ...ctx, infrastructure: 1 };
+    const before = segmentView(state, ctx, 'small');
+    const after = segmentView(state, expanded, 'small');
+    expect(marketTotals(state, ctx).utilization).toBeGreaterThan(1);
+    expect(marketTotals(state, expanded).utilization).toBeLessThan(1);
+    expect(after.satisfaction - before.satisfaction).toBeGreaterThanOrEqual(15);
+    expect(after.income).toBeGreaterThanOrEqual(before.income * 1.4);
+    expect(marketTotals(state, expanded).hosting).toBeGreaterThan(marketTotals(state, ctx).hosting);
+    const grown = structuredClone(state);
+    const overloadedRelease = advanceMarket(state, ctx, 4);
+    const expandedRelease = advanceMarket(grown, expanded, 4);
+    expect(expandedRelease.came).toBeGreaterThan(overloadedRelease.came);
+    expect(expandedRelease.left).toBeLessThanOrEqual(overloadedRelease.left);
+  });
+
+  it('doubles mass support only with its link and never invents compute capacity', () => {
+    const ctx = product();
+    ctx.infrastructure = 0;
+    ctx.levels = { core: 3, bot: 1, onb: 1 };
+    ctx.links = [['onb', 'bot']];
+    expect(marketCapacity(ctx)).toBe(70);
+    expect(marketCapacity({ ...ctx, support: 'mass' })).toBe(110);
+    expect(marketCapacity({ ...ctx, support: 'mass', links: [] })).toBe(70);
+    ctx.levels = { core: 1, bot: 3, onb: 3 };
+    expect(marketCapacity({ ...ctx, support: 'mass' })).toBe(marketCapacity(ctx));
+  });
+
+  it('makes unaffordable tariffs lose the market instead of granting unlimited income', () => {
+    const initial = createMarket(toolkit), ctx = product();
+    ctx.infrastructure = 8;
+    initial.opened = true;
+    for (const profile of initial.groups[0].profiles) profile.count = 200 * profile.share / 100;
+    const fair = structuredClone(initial), expensive = structuredClone(initial);
+    expect(schedulePrice(expensive, 'small', MARKET.price.max + MARKET.price.step)).toBe(false);
+    expect(schedulePrice(expensive, 'small', Infinity)).toBe(false);
+    expect(schedulePrice(expensive, 'small', MARKET.price.max)).toBe(true);
+    let fairIncome = 0, expensiveIncome = 0;
+    for (let sprint = 0; sprint < 15; sprint++) {
+      advanceMarket(fair, ctx, 0);
+      advanceMarket(expensive, ctx, 0);
+      fairIncome += segmentView(fair, ctx, 'small').income;
+      expensiveIncome += segmentView(expensive, ctx, 'small').income;
+    }
+    const retained = segmentView(fair, ctx, 'small'), lost = segmentView(expensive, ctx, 'small');
+    expect(lost.count).toBeLessThan(retained.count / 3);
+    expect(lost.satisfaction).toBeLessThan(retained.satisfaction / 2);
+    expect(expensiveIncome).toBeLessThan(fairIncome);
   });
 });

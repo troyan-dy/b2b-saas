@@ -5,12 +5,14 @@ import { PRODUCTION } from './product';
 import {
   CLIENT_TYPES,
   createRun,
+  finishAtSprintLimit,
   DILEMMAS,
   IDEAS,
   LANES,
   refreshRun,
   RULES,
   TIERS,
+  TUNING,
   type Idea,
   type Run,
 } from './run';
@@ -448,6 +450,7 @@ export function loadRun(): Run | null {
     run.rng = createRng(run.seed, saved.rngState);
     run.events = [];
     refreshRun(run);
+    if (run.sprint > TUNING.last_sprint) finishAtSprintLimit(run);
     return run;
   } catch {
     return null;
