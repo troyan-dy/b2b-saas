@@ -1,5 +1,6 @@
 import cardsData from '../../data/balance/draft.json';
 import cardsEn from '../../data/balance/draft.en.json';
+import tuning from '../../data/balance/run.json';
 import { worded } from '../../core/lang';
 import { enqueueTask } from './production';
 import type { Run } from './run';
@@ -16,15 +17,20 @@ export interface DraftCard {
   requires: string[];
   leads?: number;
   money?: number;
+  once?: boolean;
+  debt?: number;
+  energy?: number;
 }
 
 export const DRAFT_CARDS: DraftCard[] = worded(cardsData as DraftCard[], cardsEn);
 
 function available(run: Run, card: DraftCard): boolean {
   if (!card.requires.every((kind) => run.live.has(kind))) return false;
+  const pending = run.tasks.some((task) => task.kind === 'card' && task.card === card.id);
+  if (card.once && (run.claimedGrants.includes(card.id) || pending)) return false;
   if (card.slot === 'operation') return true;
   if (run.strategy[card.slot] === card.id) return false;
-  return !run.tasks.some((task) => task.kind === 'card' && task.card === card.id);
+  return !pending;
 }
 
 export function dealDraft(run: Run): void {
@@ -33,7 +39,9 @@ export function dealDraft(run: Run): void {
     const j = run.rng.int(0, i);
     [projects[i], projects[j]] = [projects[j], projects[i]];
   }
-  const operations = DRAFT_CARDS.filter((card) => card.slot === 'operation');
+  const operations = DRAFT_CARDS.filter(
+    (card) => card.slot === 'operation' && available(run, card),
+  );
   const offset = run.sprint % operations.length;
   run.draft = [...projects, ...operations.slice(offset), ...operations.slice(0, offset)]
     .slice(0, 3)
@@ -60,8 +68,15 @@ export function chooseCard(run: Run, id: string): boolean {
 export function releaseCard(run: Run, id: string): void {
   const card = DRAFT_CARDS.find((entry) => entry.id === id);
   if (!card) return;
+  if (card.once) {
+    if (run.claimedGrants.includes(id)) return;
+    run.claimedGrants.push(id);
+  }
   if (id === 'mass' || id === 'premium') run.strategy.support = id;
   if (id === 'batch' || id === 'instant') run.strategy.processing = id;
   run.leads += card.leads ?? 0;
   run.money += card.money ?? 0;
+  if (card.debt !== undefined) run.debt = Math.max(0, run.debt + card.debt);
+  if (card.energy !== undefined)
+    run.energy = Math.min(tuning.crunch.max, Math.max(0, run.energy + card.energy));
 }

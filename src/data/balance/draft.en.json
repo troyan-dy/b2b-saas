@@ -31,14 +31,26 @@
   },
   "consulting": {
     "title": "One tiny consulting job",
-    "description": "A side project pays for the next product improvements.",
+    "description": "A one-time side project pays for the next product improvements. This contract is available once per startup.",
     "impact": "+$1200 after release",
-    "tradeoff": "Six work from the shared queue. A one-time payment."
+    "tradeoff": "Six work from the shared queue. This contract cannot be taken again."
   },
   "credits": {
     "title": "Provider credits",
-    "description": "Apply for an infrastructure grant: the provider pays for the next project.",
+    "description": "Apply for an infrastructure grant: the provider pays for the next project. Available once per startup.",
     "impact": "+$600 after release",
-    "tradeoff": "Three work from the shared queue. A one-time payment."
+    "tradeoff": "Three work from the shared queue. This grant cannot be claimed again."
+  },
+  "maintenance": {
+    "title": "Before anyone complains",
+    "description": "Pay down technical debt before the next outage. The fixes take effect at release.",
+    "impact": "Technical debt −10 after release",
+    "tradeoff": "Six work from the shared queue. Adds no new features."
+  },
+  "rest": {
+    "title": "The founder stepped outside",
+    "description": "The team prepares a quiet release. The founder returns with fresh energy.",
+    "impact": "Energy +4 after release",
+    "tradeoff": "Four work from the shared queue. Energy cannot exceed its maximum."
   }
 }

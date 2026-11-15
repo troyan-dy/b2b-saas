@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { blockEffects } from '../src/systems/run/product';
+import { dealDraft, DRAFT_CARDS, releaseCard } from '../src/systems/run/draft';
 import { playBot } from '../src/gyms/bot';
 import {
   activeWork,
@@ -78,6 +79,79 @@ function select(run: Run, id: string): void {
 }
 
 describe('production queue and sprint choices', () => {
+  it('offers each cash grant once, excludes queued grants and pays only at release', () => {
+    for (const id of ['consulting', 'credits']) {
+      const run = fresh();
+      const initialMoney = run.money;
+      select(run, id);
+      expect(run.money).toBe(initialMoney);
+      expect(run.claimedGrants).toEqual([]);
+      dealDraft(run);
+      expect(run.draft).not.toContain(id);
+      run.draft = null;
+      expect(deferTask(run, run.tasks[0].id)).toBe(true);
+      dealDraft(run);
+      expect(run.draft).not.toContain(id);
+      run.draft = null;
+      expect(resumeTask(run, run.tasks[0].id)).toBe(true);
+      finishWork(run);
+      expect(run.money).toBe(initialMoney);
+      expect(run.claimedGrants).toEqual([]);
+      release(run);
+      const grant = DRAFT_CARDS.find((card) => card.id === id)!;
+      expect(run.money).toBeCloseTo(
+        initialMoney + grant.money! - TUNING.living_per_s * TUNING.sprint_s,
+      );
+      expect(run.claimedGrants).toEqual([id]);
+      expect(run.draft).not.toContain(id);
+      const paidMoney = run.money;
+      releaseCard(run, id);
+      expect(run.money).toBe(paidMoney);
+      expect(run.claimedGrants).toEqual([id]);
+      run.draft = [id, 'leads', 'maintenance'];
+      expect(chooseCard(run, id)).toBe(false);
+    }
+  });
+
+  it('keeps three non-cash fallback choices without a core after both grants are exhausted', () => {
+    const run = fresh();
+    run.claimedGrants = ['consulting', 'credits'];
+    for (let i = 0; i < 6; i++) {
+      release(run);
+      expect([...run.draft!].sort()).toEqual(['leads', 'maintenance', 'rest']);
+      const id = run.draft![0];
+      expect(chooseCard(run, id)).toBe(true);
+      const task = run.tasks.at(-1)!;
+      if (task.status === 'queued') deferTask(run, task.id);
+    }
+    expect(run.blocks).toHaveLength(0);
+    expect(run.tasks.length).toBe(6);
+  });
+
+  it('applies non-cash maintenance and rest effects only at release and caps restored energy', () => {
+    const run = fresh();
+    select(run, 'maintenance');
+    finishWork(run);
+    run.debt = 18;
+    run.sprintT = TUNING.sprint_s - 0.1;
+    expect(run.tasks[0].status).toBe('ready');
+    expect(run.debt).toBe(18);
+    release(run);
+    expect(run.debt).toBe(8);
+    select(run, 'rest');
+    finishWork(run);
+    run.energy = 1;
+    run.sprintT = TUNING.sprint_s - 0.1;
+    release(run);
+    expect(run.energy).toBeCloseTo(5 + 0.1 / TUNING.crunch.regen_s);
+    select(run, 'rest');
+    finishWork(run);
+    run.energy = 7;
+    run.sprintT = TUNING.sprint_s - 0.1;
+    release(run);
+    expect(run.energy).toBe(TUNING.crunch.max);
+  });
+
   it('reserves manual cells, reorders only unstarted work and charges exactly once', () => {
     const run = fresh();
     expect(place(run, 'core', 0, 0)).toBe(true);
