@@ -38,7 +38,7 @@ export async function menu(term: Terminal, meta: Meta, state: MenuState, version
       ...(saved ? [{ title: L('Продолжить компанию', 'Continue company'), note: `${pitch(saved.idea)} · ${L('спринт', 'sprint')} ${saved.sprint}` }] : []),
       {
         title: meta.runs.length > 0 ? NEW_STARTUP : L('Основать стартап', 'Found a startup'),
-        note: meta.lessons.length > 0 ? L(`тот же основатель, уроков: ${meta.lessons.length}`, `same founder, lessons: ${meta.lessons.length}`) : L('бесконечные спринты · компания сохраняется', 'endless sprints · your company is saved'),
+        note: meta.lessons.length > 0 ? L(`30 спринтов · уроков основателя: ${meta.lessons.length}`, `30 sprints · founder lessons: ${meta.lessons.length}`) : L('30 спринтов · компания сохраняется', '30 sprints · your company is saved'),
       },
       { title: RESUME, note: meta.runs.length > 0 ? L(`стартапов: ${meta.runs.length}`, `startups: ${meta.runs.length}`) : L('пока пустое', 'empty so far') },
       { title: L(`Звук: ${state.sound ? 'включён' : 'выключен'}`, `Sound: ${state.sound ? 'on' : 'off'}`) },
@@ -170,7 +170,7 @@ export async function mixIdea(term: Terminal, seed: number, meta: Meta): Promise
     CLAUDE,
     L('Звучит как стартап. Инвесторов у нас нет — есть твои сбережения.', 'Sounds like a startup. We have no investors — we have your savings.'),
     L(`Их хватит минут на ${minutes}, если ничего не продадим.`, `They will last about ${minutes} minutes if we sell nothing.`),
-    L('Цель: вывести компанию в плюс и развивать дальше — или выгодно продать. Ограничения по спринтам нет.', 'The goal: turn profitable and keep growing — or sell at a good price. There is no sprint limit.'),
+    L(`У тебя ${TUNING.last_sprint} спринтов. Выведи компанию в прибыль к последнему релизу — или выгодно продай.`, `You have ${TUNING.last_sprint} sprints. Make the company profitable by the final release — or sell at a good price.`),
   ];
   const last = meta.runs[meta.runs.length - 1];
   // the same founder, a new session of Claude: the past is told to him, not remembered

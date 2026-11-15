@@ -11,7 +11,8 @@ export const ENDING_TITLE: Record<Ending, string> = L(
 
 /** «12:40» */
 export function clock(seconds: number): string {
-  return `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, '0')}`;
+  const whole = Math.floor(seconds + 1e-6);
+  return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, '0')}`;
 }
 
 type Forms = [string, string, string];

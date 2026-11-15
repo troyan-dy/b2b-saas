@@ -2,6 +2,7 @@ import './paper.css';
 import { L } from '../core/lang';
 import { createWorkbench, type WorkbenchAction, type WorkbenchView } from './workbench';
 import { createClientCity, type CityView } from './client-city';
+import { createSprintCards, type SprintCardsView } from './sprint-cards';
 import type { SegmentId } from '../systems/company/market';
 
 export interface ShelfItem {
@@ -59,6 +60,8 @@ export interface Paper {
   setShelf(sections: readonly ShelfSection[]): void;
   setWorkbench(view: WorkbenchView | null): void;
   setCity(view: CityView | null): void;
+  setSprintCards(view: SprintCardsView | null): void;
+  closeCardOverlay(): boolean;
   /** a row of the shelf answers a click */
   flash(section: string, item: string, how: 'bought' | 'denied'): void;
   /** a caption of a node; coordinates are screen pixels of the 1920×1080 layer */
@@ -131,6 +134,7 @@ export function createPaper(under: HTMLElement, over: HTMLElement): Paper {
   let cellSig = '';
   let callSig = '';
   let shelfSections: readonly ShelfSection[] = [];
+  const cards = createSprintCards(top, (id) => paper.onWorkbench({ type: 'choose-card', id }));
   const workbench = createWorkbench(shop, top, (action) => paper.onWorkbench(action));
   const city = createClientCity(top, (segment) => paper.onCity(segment), () => paper.onCity('toggle'));
   const last = { money: '', sub: '', news: '', hint: '', sprint: '', part: -1, zoom: -1, goal: '', ledger: '' };
@@ -143,6 +147,8 @@ export function createPaper(under: HTMLElement, over: HTMLElement): Paper {
     onWorkbench: () => undefined,
     onCity: () => undefined,
     setCity: (view) => city.set(view),
+    setSprintCards: (view) => cards.set(view),
+    closeCardOverlay: () => cards.closeOverlay(),
 
     setMoney(text, sub, broke = false) {
       if (text !== last.money) {

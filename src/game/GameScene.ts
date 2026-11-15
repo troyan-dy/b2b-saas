@@ -32,6 +32,7 @@ import { money, PER_S, plural, rate } from '../ui/format';
 import type { Paper, ShelfKeys, ShelfSection } from '../ui/paper';
 import type { WorkbenchAction } from '../ui/workbench';
 import { projectName, SEGMENT_TITLES, workbenchView, type WorkbenchSelection } from '../ui/workbench-view';
+import { sprintCardsView } from '../ui/sprint-cards-view';
 import { DRAFT_CARDS } from '../systems/run/draft';
 import type { CityView } from '../ui/client-city';
 import { companyContext, companyTotals, customerCount } from '../systems/company/company';
@@ -208,8 +209,9 @@ export class GameScene extends Phaser.Scene {
       if (this.run.draft || this.paused || this.ended) return;
       if (segment === 'toggle') this.cityCollapsed = !this.cityCollapsed;
       else {
+        const same = this.workbenchSelection.panel === 'clients' && this.workbenchSelection.selectedSegment === segment;
         this.workbenchSelection.selectedSegment = segment;
-        this.workbenchSelection.panel = 'clients';
+        this.workbenchSelection.panel = same ? null : 'clients';
       }
       this.workbenchAt = -Infinity;
       playSound('ui');
@@ -320,6 +322,7 @@ export class GameScene extends Phaser.Scene {
       case 'move': changed = moveTask(run, action.task, action.direction); break;
       case 'defer': changed = deferTask(run, action.task); break;
       case 'resume': changed = resumeTask(run, action.task); break;
+      case 'cancel-task': changed = cancelTask(run, action.task); break;
       case 'expand-infrastructure': changed = expandInfrastructure(run); break;
       case 'select-segment':
         this.workbenchSelection.selectedSegment = action.segment;
@@ -486,9 +489,19 @@ export class GameScene extends Phaser.Scene {
 
   private onKeyDown(e: KeyboardEvent): void {
     unlockSound();
-    if (this.ended || this.run.draft) return;
+    if (this.ended || e.defaultPrevented) return;
+    if (this.run.draft) {
+      const digit = /^(?:Digit|Numpad)([1-3])$/.exec(e.code);
+      if (digit && !e.repeat && !e.altKey && !e.ctrlKey && !e.metaKey) {
+        e.preventDefault();
+        const id = this.run.draft[Number(digit[1]) - 1];
+        if (id) this.onWorkbench({ type: 'choose-card', id });
+      }
+      return;
+    }
     if (['Enter', 'NumpadEnter', 'Space'].includes(e.code) && e.target instanceof HTMLElement && e.target.closest('button, input, summary')) return;
     if (e.code === 'Escape') {
+      if (this.paper.closeCardOverlay()) return;
       if (this.workbenchSelection.panel) {
         this.workbenchSelection.panel = null;
         this.workbenchAt = -Infinity;
@@ -835,6 +848,7 @@ export class GameScene extends Phaser.Scene {
         this.ended = true;
         this.paper.call(null);
         this.paper.setWorkbench(null);
+        this.paper.setSprintCards(null);
         this.paper.setCity(null);
         // nobody speaks over the ending
         this.quotes.clear();
@@ -945,7 +959,7 @@ export class GameScene extends Phaser.Scene {
       this.paper.tag(id, x, y - 9, L(`чек +${bonus}% после выпуска`, `bill +${bonus}% after release`), 'small hot');
     }
     this.paper.pruneTags('b:', keep);
-    const offMapTasks = run.tasks.filter((task) => !task.block);
+    const offMapTasks = run.tasks.filter((task) => !task.block && task.kind !== 'infrastructure');
     const keepTasks = new Set<string>();
     offMapTasks.forEach((task, index) => {
       const id = `task:${task.id}`;
@@ -1011,7 +1025,7 @@ export class GameScene extends Phaser.Scene {
     const sprint = run.sprint;
     const demo = isDemo(run) && run.clients.length > 0;
     this.paper.setSprint(
-      run.draft ? L(`СПРИНТ ${sprint} · ПАУЗА: ВЫБОР КАРТЫ`, `SPRINT ${sprint} · PAUSED: CHOOSE A CARD`) : L(`СПРИНТ ${sprint} · ∞ · ${demo ? 'ДЕМО-ДЕНЬ' : 'РЕЛИЗ'} ЧЕРЕЗ ${leftS} С`, `SPRINT ${sprint} · ∞ · ${demo ? 'DEMO DAY' : 'RELEASE'} IN ${leftS} S`),
+      run.draft ? L(`СПРИНТ ${sprint}/${TUNING.last_sprint} · ПАУЗА: ВЫБОР КАРТЫ`, `SPRINT ${sprint}/${TUNING.last_sprint} · PAUSED: CHOOSE A CARD`) : L(`СПРИНТ ${sprint}/${TUNING.last_sprint} · ${demo ? 'ДЕМО-ДЕНЬ' : 'РЕЛИЗ'} ЧЕРЕЗ ${leftS} С`, `SPRINT ${sprint}/${TUNING.last_sprint} · ${demo ? 'DEMO DAY' : 'RELEASE'} IN ${leftS} S`),
       run.sprintT / TUNING.sprint_s,
     );
     // the goal is always on the sheet: three frames taken at random must say what to do
@@ -1025,6 +1039,7 @@ export class GameScene extends Phaser.Scene {
       this.draftShown = Boolean(run.draft);
       this.workbenchSelection.picked = this.picked;
       this.paper.setWorkbench(workbenchView(run, this.workbenchSelection));
+      this.paper.setSprintCards(sprintCardsView(run, this.workbenchSelection.news, this.workbenchSelection.applied));
     }
     if (run.draft) this.paper.call(null);
     else if (this.pauseCard) {
@@ -1158,8 +1173,8 @@ export class GameScene extends Phaser.Scene {
     if (!isLive(run, 'pay')) return L('<b>Платежи ещё не выпущены</b>. Помоги стройке через Enter; готовые проекты включатся на релизе.', '<b>Payments have not shipped yet</b>. Help build with Enter; completed projects activate at release.');
     const totals = companyTotals(run);
     if (totals.utilization > 1) return L(
-      '<strong>Перегруз ' + Math.round(totals.utilization * 100) + '%</strong>: расширь инфраструктуру или увеличь мощность ядра и поддержки. Лишние клиенты снижают удовлетворённость.',
-      '<strong>Load ' + Math.round(totals.utilization * 100) + '%</strong>: expand infrastructure or increase core and support capacity. Excess load lowers satisfaction.',
+      '<strong>Перегруз ' + Math.round(totals.utilization * 100) + '%</strong>: нажми «Инфраструктура» справа в блоках. Расширение заработает на релизе.',
+      '<strong>Load ' + Math.round(totals.utilization * 100) + '%</strong>: choose “Infrastructure” in Blocks on the right. The expansion starts at release.',
     );
     if (task && !task.block) return L('Основатель расширяет компанию. <b>Enter — помочь</b>.', 'The founder is expanding the company. <b>Enter to help</b>.');
     if (customerCount(run) === 0) return L('После выпуска ядра и лендинга придут первые клиенты. <b>Продвижение</b> пополняет воронку, нужные функции помогают им остаться.', 'The first clients arrive after core and landing ship. <b>Promotion</b> fills the funnel; useful features help them stay.');
@@ -1167,9 +1182,9 @@ export class GameScene extends Phaser.Scene {
       'До прибыли не хватает <b>' + rate(-net) + '/с</b>. Открой облако: посмотри потребности и прогноз тарифа перед повышением цены.',
       '<b>' + rate(-net) + '/s</b> short of profit. Open a cloud to inspect needs and forecast the tariff before raising it.',
     );
-    if (run.sprint > TUNING.last_sprint) return L(
-      '<em>Компания продолжает работать</em> · расти без перегруза: улучшай продукт, выбирай специализацию и расширяй рынок.',
-      '<em>The company keeps running</em> · grow without overload: improve the product, choose a specialization and expand the market.',
+    if (run.sprint === TUNING.last_sprint) return L(
+      '<em>Последний спринт</em> · выпусти готовые улучшения. После релиза — итог компании.',
+      '<em>Final sprint</em> · ship your ready upgrades. The company result follows this release.',
     );
     return L(
       '<em>В плюсе</em> · оценка ' + money(valuation(run)) + '. Новый уровень остаётся в своей клетке; новые модули выбирай под потребности клиентов.',
@@ -1209,16 +1224,16 @@ export class GameScene extends Phaser.Scene {
       ['The blueprint is full. Click', 'a building to improve it in place.', 'You can demolish unneeded', 'buildings from their details.'],
     ))) return;
     if (run.clients.some((client) => !client.happy && !run.known.includes(client.want)) && tell('t:ask', L(
-      ['Ключевой договор недоволен.', 'Разведка выяснит его запрос.', 'Открой «Клиенты»: эти договоры', 'идут отдельно от тарифа облака.'],
-      ['A key contract is unhappy.', 'Research reveals its request.', 'Open Clients: those contracts are', 'separate from the cloud tariff.'],
+      ['Ключевой договор недоволен.', 'Разведка выяснит его запрос.', 'Нажми на здание клиента:', 'его договор показан в окне над ним.'],
+      ['A key contract is unhappy.', 'Research reveals its request.', 'Click the customer building:', 'its contract is shown above it.'],
     ))) return;
     if (run.stage >= 2 && run.energy >= TUNING.crunch.max && tell('t:hands', L(
       ['Силы — не только на код.', 'Справа внизу можно самому', 'заняться продвижением или починкой.'],
       ['Energy is not only for code.', 'Bottom right, you can do', 'promotion or fixes yourself.'],
     ))) return;
     if (companyTotals(run).utilization > 0.85) tell('t:capacity', L(
-      ['Клиентов всё больше.', 'Улучши ядро или поддержку.', 'Либо нажми на город', 'и расширь инфраструктуру.'],
-      ['More customers are arriving.', 'Improve the core or support.', 'Or click the city', 'and expand infrastructure.'],
+      ['Клиентов всё больше.', 'Загрузка видна справа в блоках.', 'Нажми «Инфраструктура» —', 'расширение включится на релизе.'],
+      ['More customers are arriving.', 'Load is shown in Blocks on the right.', 'Choose “Infrastructure” —', 'the expansion starts at release.'],
     ));
   }
 
@@ -1427,6 +1442,8 @@ export class GameScene extends Phaser.Scene {
         return {id:node.id,segment:node.segment,title:node.title,x,y,width:150*z,height:node.height*z};
       }),
     };
+    const selected = view.groups.find((group) => group.id === this.workbenchSelection.selectedSegment);
+    this.workbenchSelection.clientAnchor = selected ? { x: selected.x, y: selected.y } : undefined;
     this.paper.setCity(view);
   }
 

@@ -4,6 +4,7 @@ import { companyContext, companyTotals } from '../systems/company/company';
 import {
   MARKET,
   SEGMENTS,
+  marketCapacity,
   priceForecast,
   segmentView,
   type MarketContext,
@@ -44,6 +45,7 @@ export interface WorkbenchSelection {
   news?: WorkbenchNews;
   panel?: 'module' | 'clients' | null;
   selectedModule?: string;
+  clientAnchor?: { x: number; y: number };
   applied?: { title: string; impact: string } | null;
 }
 
@@ -423,6 +425,7 @@ export function workbenchView(run: Run, selection: WorkbenchSelection): Workbenc
   const active = activeWork(run);
   return {
     panel: selection.panel,
+    clientAnchor: selection.clientAnchor,
     selectedModule: selection.selectedModule,
     applied: selection.applied,
     perks: [run.strategy.support, run.strategy.processing].flatMap((id) => {
@@ -444,6 +447,16 @@ export function workbenchView(run: Run, selection: WorkbenchSelection): Workbenc
       : null,
     news: selection.news,
     infrastructure: {
+      level: run.infrastructure,
+      load: totals.load,
+      capacity: totals.capacity,
+      utilization: totals.utilization,
+      nextCapacity: marketCapacity({ ...ctx, infrastructure: run.infrastructure + 1 }),
+      cost: Math.round(infra.cost * infra.cost_growth ** run.infrastructure),
+      work: infra.work + infra.work_growth * run.infrastructure,
+      progress: infraTask ? infraTask.done / Math.max(1, infraTask.work) : 0,
+      status: infraTask?.status,
+      taskId: infraTask?.id,
       label: infraTask
         ? taskLabel(infraTask.status)
         : L(
