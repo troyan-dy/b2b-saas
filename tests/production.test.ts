@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { blockEffects } from '../src/systems/run/product';
 import { dealDraft, DRAFT_CARDS, releaseCard } from '../src/systems/run/draft';
+import { enqueueTask } from '../src/systems/run/production';
 import { playBot } from '../src/gyms/bot';
 import {
   activeWork,
@@ -11,6 +12,8 @@ import {
   blockEffectText,
   buildCapacity,
   chooseCard,
+  cancelTask,
+  freeCells,
   createRun,
   crunch,
   deferTask,
@@ -79,37 +82,54 @@ function select(run: Run, id: string): void {
 }
 
 describe('production queue and sprint choices', () => {
-  it('offers each cash grant once, excludes queued grants and pays only at release', () => {
+  it('grants cash immediately once without creating or charging a production task', () => {
+    for (const id of ['consulting', 'credits']) {
+      const run = fresh();
+      const initialMoney = run.money,
+        nextTask = run.nextTask;
+      select(run, id);
+      const grant = DRAFT_CARDS.find((card) => card.id === id)!;
+      expect(run.money).toBe(initialMoney + grant.money!);
+      expect(run.claimedGrants).toEqual([id]);
+      expect(run.tasks).toHaveLength(0);
+      expect(run.nextTask).toBe(nextTask);
+      expect(run.events.at(-1)).toEqual({ type: 'card-applied', id });
+      dealDraft(run);
+      expect(run.draft).not.toContain(id);
+      run.draft = [id, 'leads', 'maintenance'];
+      expect(chooseCard(run, id)).toBe(false);
+      releaseCard(run, id);
+      expect(run.money).toBe(initialMoney + grant.money!);
+      expect(run.claimedGrants).toEqual([id]);
+    }
+  });
+
+  it('keeps legacy cash projects pending until release and never pays them twice', () => {
     for (const id of ['consulting', 'credits']) {
       const run = fresh();
       const initialMoney = run.money;
-      select(run, id);
-      expect(run.money).toBe(initialMoney);
-      expect(run.claimedGrants).toEqual([]);
+      const task = enqueueTask(run, { kind: 'card', card: id, work: 6, cost: 0 });
+      dealDraft(run);
+      expect(run.draft).not.toContain(id);
+      run.draft = [id, 'leads', 'maintenance'];
+      expect(chooseCard(run, id)).toBe(false);
+      run.draft = null;
+      expect(deferTask(run, task.id)).toBe(true);
       dealDraft(run);
       expect(run.draft).not.toContain(id);
       run.draft = null;
-      expect(deferTask(run, run.tasks[0].id)).toBe(true);
-      dealDraft(run);
-      expect(run.draft).not.toContain(id);
-      run.draft = null;
-      expect(resumeTask(run, run.tasks[0].id)).toBe(true);
+      resumeTask(run, task.id);
       finishWork(run);
       expect(run.money).toBe(initialMoney);
       expect(run.claimedGrants).toEqual([]);
       release(run);
       const grant = DRAFT_CARDS.find((card) => card.id === id)!;
-      expect(run.money).toBeCloseTo(
-        initialMoney + grant.money! - TUNING.living_per_s * TUNING.sprint_s,
-      );
+      const expected = initialMoney + grant.money! - TUNING.living_per_s * TUNING.sprint_s;
+      expect(run.money).toBeCloseTo(expected);
       expect(run.claimedGrants).toEqual([id]);
-      expect(run.draft).not.toContain(id);
-      const paidMoney = run.money;
       releaseCard(run, id);
-      expect(run.money).toBe(paidMoney);
-      expect(run.claimedGrants).toEqual([id]);
-      run.draft = [id, 'leads', 'maintenance'];
-      expect(chooseCard(run, id)).toBe(false);
+      expect(run.money).toBeCloseTo(expected);
+      expect(run.tasks).toHaveLength(0);
     }
   });
 
@@ -121,11 +141,9 @@ describe('production queue and sprint choices', () => {
       expect([...run.draft!].sort()).toEqual(['leads', 'maintenance', 'rest']);
       const id = run.draft![0];
       expect(chooseCard(run, id)).toBe(true);
-      const task = run.tasks.at(-1)!;
-      if (task.status === 'queued') deferTask(run, task.id);
     }
     expect(run.blocks).toHaveLength(0);
-    expect(run.tasks.length).toBe(6);
+    expect(run.tasks).toHaveLength(0);
   });
 
   it('reserves an affordable operation in every draft even with no cash and available projects', () => {
@@ -147,28 +165,28 @@ describe('production queue and sprint choices', () => {
     }
   });
 
-  it('applies non-cash maintenance and rest effects only at release and caps restored energy', () => {
+  it('applies maintenance, rest and leads immediately without advancing time or exceeding caps', () => {
     const run = fresh();
-    select(run, 'maintenance');
-    finishWork(run);
+    const money = run.money,
+      nextTask = run.nextTask;
     run.debt = 18;
-    run.sprintT = TUNING.sprint_s - 0.1;
-    expect(run.tasks[0].status).toBe('ready');
-    expect(run.debt).toBe(18);
-    release(run);
+    select(run, 'maintenance');
     expect(run.debt).toBe(8);
-    select(run, 'rest');
-    finishWork(run);
+    select(run, 'maintenance');
+    expect(run.debt).toBe(0);
     run.energy = 1;
-    run.sprintT = TUNING.sprint_s - 0.1;
-    release(run);
-    expect(run.energy).toBeCloseTo(5 + 0.1 / TUNING.crunch.regen_s);
     select(run, 'rest');
-    finishWork(run);
+    expect(run.energy).toBe(5);
     run.energy = 7;
-    run.sprintT = TUNING.sprint_s - 0.1;
-    release(run);
+    select(run, 'rest');
     expect(run.energy).toBe(TUNING.crunch.max);
+    const leads = run.leads;
+    select(run, 'leads');
+    expect(run.leads).toBe(leads + 4);
+    expect(run.t).toBe(0);
+    expect(run.money).toBe(money);
+    expect(run.nextTask).toBe(nextTask);
+    expect(run.tasks).toHaveLength(0);
   });
 
   it('reserves manual cells, reorders only unstarted work and charges exactly once', () => {
@@ -249,6 +267,7 @@ describe('production queue and sprint choices', () => {
     moveTask(run, run.tasks[1].id, -1);
     deferTask(run, run.tasks[0].id);
     resumeTask(run, run.tasks[0].id);
+    cancelTask(run, run.tasks[0].id);
     expect(chooseCard(run, 'absent')).toBe(false);
     expect(JSON.stringify(run)).toBe(before);
     expect(chooseCard(run, 'consulting')).toBe(true);
@@ -257,7 +276,8 @@ describe('production queue and sprint choices', () => {
 
   it('always offers three distinct usable cards even when all strategy projects are planned', () => {
     const run = fresh(['core']);
-    for (const id of ['mass', 'premium', 'batch', 'instant']) select(run, id);
+    for (const id of ['mass', 'premium', 'batch', 'instant'])
+      enqueueTask(run, { kind: 'card', card: id, work: 12, cost: 600 });
     run.agents = [];
     for (let sprint = 0; sprint < 8; sprint++) {
       release(run);
@@ -273,29 +293,36 @@ describe('production queue and sprint choices', () => {
     }
   });
 
-  it('activates strategy projects only at release and replaces each slot independently', () => {
+  it('activates strategies and derived effects now while replacing each slot independently', () => {
     const run = fresh(['core']);
+    place(run, 'landing', 0, 1);
+    crunch(run);
+    const queued = queueView(run);
+    const money = run.money,
+      nextTask = run.nextTask;
+    const host = run.host;
+    expect(DRAFT_CARDS.every((card) => card.cost === 0 && card.work === 0)).toBe(true);
     select(run, 'mass');
-    finishWork(run);
-    expect(run.strategy.support).toBeNull();
-    release(run);
     expect(run.strategy.support).toBe('mass');
     expect(run.eff.promo).toBe(2);
+    expect(run.eff.seats).toBe(4);
+    expect(run.host).toBeCloseTo(host + 1);
     select(run, 'batch');
-    finishWork(run);
-    release(run);
     expect(run.eff.tokens).toBeCloseTo(0.475);
     select(run, 'premium');
-    finishWork(run);
-    release(run);
     expect(run.strategy).toEqual({ support: 'premium', processing: 'batch' });
     expect(run.eff.promo).toBe(1);
     expect(run.eff.corp_pay).toBe(2);
+    expect(run.host).toBeCloseTo(host + 3);
     select(run, 'instant');
-    finishWork(run);
-    release(run);
     expect(run.strategy).toEqual({ support: 'premium', processing: 'instant' });
     expect(run.eff.tokens).toBeCloseTo(1.14);
+    expect(run.host).toBeCloseTo(host + 4.5);
+    expect(run.money).toBe(money);
+    expect(run.nextTask).toBe(nextTask);
+    expect(queueView(run)).toEqual(queued);
+    expect(run.t).toBe(0);
+    expect(run.events.filter((event) => event.type === 'card-applied')).toHaveLength(4);
   });
 
   it('gives all twenty blocks a growing independent effect and restores derived effects', () => {
@@ -390,11 +417,88 @@ describe('production queue and sprint choices', () => {
     expect(run.over).toBeNull();
     expect(run.offer).not.toBeNull();
     select(run, 'credits');
-    deferTask(run, run.tasks[0].id);
     run.sprint = 36;
     release(run);
     expect(run.over).toBeNull();
     expect(run.events.some((event) => event.type === 'demo' && event.ok)).toBe(true);
+  });
+
+  it('cancels every unshipped building state, releases its cell and never refunds spent cash', () => {
+    for (const status of ['queued', 'backlog', 'active', 'ready'] as const) {
+      const run = fresh();
+      const before = run.money;
+      place(run, 'core', 0, 0);
+      const task = run.tasks[0];
+      if (status === 'backlog') deferTask(run, task.id);
+      if (status === 'active') crunch(run);
+      if (status === 'ready') finishWork(run);
+      expect(task.status).toBe(status);
+      const spent = status === 'active' || status === 'ready' ? task.cost : 0;
+      expect(run.money).toBe(before - spent);
+      expect(cancelTask(run, task.id)).toBe(true);
+      expect(run.money).toBe(before - spent);
+      expect(run.tasks).toHaveLength(0);
+      expect(run.blocks).toHaveLength(0);
+      expect(freeCells(run)).toContainEqual({ i: 0, j: 0 });
+      expect(run.events.at(-1)).toEqual({ type: 'task-cancelled', id: task.id, block: 'core' });
+      release(run);
+      expect(run.live.has('core')).toBe(false);
+      expect(run.lastReport?.shipped).toEqual([]);
+    }
+  });
+
+  it('cancels upgrades without changing the live level or releasing a finished upgrade later', () => {
+    for (const status of ['queued', 'backlog', 'active', 'ready'] as const) {
+      const run = fresh(['core']);
+      const original = { ...run.blocks[0] };
+      upgrade(run, 'core');
+      const task = run.tasks[0];
+      if (status === 'backlog') deferTask(run, task.id);
+      if (status === 'active') crunch(run);
+      if (status === 'ready') finishWork(run);
+      expect(task.status).toBe(status);
+      const money = run.money;
+      expect(cancelTask(run, task.id)).toBe(true);
+      expect(run.money).toBe(money);
+      expect(run.blocks[0].level).toBe(original.level);
+      expect(run.blocks[0].live).toBe(true);
+      expect(run.blocks[0].built).toBe(true);
+      expect(run.blocks[0].up).toBe(false);
+      expect(run.blocks[0].done).toBe(run.blocks[0].need);
+      if (status === 'queued' || status === 'backlog') expect(run.blocks[0]).toEqual(original);
+      release(run);
+      expect(run.blocks[0].level).toBe(original.level);
+      expect(run.eff.tokens).toBeCloseTo(0.95);
+      expect(run.lastReport?.shipped).toEqual([]);
+      expect(run.stats.reworks).toBe(0);
+    }
+  });
+
+  it('cancels ready legacy cards and infrastructure without releasing their effects', () => {
+    for (const kind of ['card', 'infrastructure'] as const) {
+      const run = fresh(['core']);
+      if (kind === 'card') enqueueTask(run, { kind, card: 'batch', work: 10, cost: 500 });
+      else expandInfrastructure(run);
+      finishWork(run);
+      const money = run.money;
+      expect(cancelTask(run, run.tasks[0].id)).toBe(true);
+      expect(run.money).toBe(money);
+      release(run);
+      expect(run.tasks).toHaveLength(0);
+      expect(run.infrastructure).toBe(0);
+      expect(run.strategy.processing).toBeNull();
+      expect(run.lastReport?.projects).toEqual([]);
+    }
+  });
+
+  it('rejects cancellation after the run ends and for missing tasks', () => {
+    const run = fresh();
+    place(run, 'core', 0, 0);
+    expect(cancelTask(run, 'missing')).toBe(false);
+    run.over = 'broke';
+    const before = JSON.stringify(run);
+    expect(cancelTask(run, run.tasks[0].id)).toBe(false);
+    expect(JSON.stringify(run)).toBe(before);
   });
 
   it('lets the bot answer drafts and keep producing through multiple releases', () => {

@@ -1,56 +1,56 @@
 {
   "mass": {
     "title": "The client served itself",
-    "description": "Link onboarding to AI support to double company support capacity. Compute capacity remains a separate limit.",
-    "impact": "Promotion ×2 · +4 seats",
+    "description": "Mass support takes effect now. Linking onboarding to AI support doubles company support capacity; compute capacity remains a separate limit.",
+    "impact": "Now: promotion ×2 · +4 seats",
     "tradeoff": "Replaces personal support. Hosting +$32 per sprint."
   },
   "premium": {
     "title": "Now that is enterprise",
-    "description": "CRM v2 linked to AI support lets large companies accept a price up to ×2 without a price penalty. You set the price yourself.",
-    "impact": "Named corporate contracts ×2 · patience +2",
+    "description": "Personal support takes effect now. CRM v2 linked to AI support lets large companies accept a price up to ×2 without a price penalty. You set the price yourself.",
+    "impact": "Now: named corporate contracts ×2 · patience +2",
     "tradeoff": "Replaces mass support. With batch processing, the penalty-free price limit is ×1.25. Hosting +$96 per sprint."
   },
   "batch": {
     "title": "Your answer was ready yesterday",
-    "description": "Collect requests into batches and run the model once for the whole group.",
-    "impact": "Tokens −50%",
+    "description": "Start batching requests now: the model processes the whole group in one run.",
+    "impact": "Now: tokens −50%",
     "tradeoff": "Large companies: satisfaction −12. Companies needing instant answers become less satisfied and stop joining. Replaces instant answers; contract patience −1."
   },
   "instant": {
     "title": "While you were typing",
-    "description": "Instant answers make clients recommend the product and wait longer for improvements.",
-    "impact": "Promotion ×1.5 · patience +2",
+    "description": "Enable instant answers now. Clients recommend the product and wait longer for improvements.",
+    "impact": "Now: promotion ×1.5 · patience +2",
     "tradeoff": "Replaces batches. Tokens +20%, hosting +$48 per sprint."
   },
   "leads": {
     "title": "Someone noticed us in a chat",
-    "description": "Prepare a demo for four new companies.",
-    "impact": "+4 leads after release",
+    "description": "Four companies are already interested in the product. Their contacts join the lead list immediately.",
+    "impact": "+4 leads now",
     "tradeoff": "Potential clients need free seats and a working product."
   },
   "consulting": {
     "title": "One tiny consulting job",
-    "description": "A one-time side project pays for the next product improvements. This contract is available once per startup.",
-    "impact": "+$1200 after release",
-    "tradeoff": "Six work from the shared queue. This contract cannot be taken again."
+    "description": "The one-time side job has been paid. Its money is available for product development now.",
+    "impact": "+$1200 now",
+    "tradeoff": "Once per startup. There will be no repeat contract."
   },
   "credits": {
     "title": "Provider credits",
-    "description": "Apply for an infrastructure grant: the provider pays for the next project. Available once per startup.",
-    "impact": "+$600 after release",
-    "tradeoff": "Three work from the shared queue. This grant cannot be claimed again."
+    "description": "The provider approved an infrastructure grant. Its money is available for product development now.",
+    "impact": "+$600 now",
+    "tradeoff": "Once per startup. This grant cannot be claimed again."
   },
   "maintenance": {
     "title": "Before anyone complains",
-    "description": "Pay down technical debt before the next outage. The fixes take effect at release.",
-    "impact": "Technical debt −10 after release",
-    "tradeoff": "Six work from the shared queue. Adds no new features."
+    "description": "Apply ready fixes to reduce technical debt immediately.",
+    "impact": "Technical debt −10 now",
+    "tradeoff": "Adds no new features."
   },
   "rest": {
     "title": "The founder stepped outside",
-    "description": "The team prepares a quiet release. The founder returns with fresh energy.",
-    "impact": "Energy +4 after release",
-    "tradeoff": "Four work from the shared queue. Energy cannot exceed its maximum."
+    "description": "A short break restores the founder's energy immediately.",
+    "impact": "Energy +4 now",
+    "tradeoff": "Energy cannot exceed its maximum."
   }
 }

@@ -2,8 +2,7 @@ import cardsData from '../../data/balance/draft.json';
 import cardsEn from '../../data/balance/draft.en.json';
 import tuning from '../../data/balance/run.json';
 import { worded } from '../../core/lang';
-import { enqueueTask } from './production';
-import type { Run } from './run';
+import { refreshRun, type Run } from './run';
 
 export interface DraftCard {
   id: string;
@@ -62,12 +61,14 @@ export function chooseCard(run: Run, id: string): boolean {
   if (run.over || !run.draft?.includes(id)) return false;
   const card = DRAFT_CARDS.find((entry) => entry.id === id);
   if (!card || !available(run, card)) return false;
-  enqueueTask(run, { kind: 'card', card: id, work: card.work, cost: card.cost });
+  releaseCard(run, id);
   run.draft = null;
+  refreshRun(run);
+  run.events.push({ type: 'card-applied', id });
   return true;
 }
 
-/** Only called by the release, so selecting or finishing a card never grants its bonus early. */
+/** Shared by immediate choices and unfinished card projects from older saves. */
 export function releaseCard(run: Run, id: string): void {
   const card = DRAFT_CARDS.find((entry) => entry.id === id);
   if (!card) return;

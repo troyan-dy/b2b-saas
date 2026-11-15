@@ -35,6 +35,7 @@ export {
   moveTask,
   deferTask,
   resumeTask,
+  cancelTask,
   expandInfrastructure,
   type WorkTask,
 } from './production';
@@ -229,6 +230,8 @@ export interface Report {
 }
 
 export type RunEvent =
+  | { type: 'card-applied'; id: string }
+  | { type: 'task-cancelled'; id: string; block?: string }
   | { type: 'work'; agent: number; lane: Lane; i?: number; j?: number; idle?: boolean }
   | { type: 'placed'; kind: string; i: number; j: number }
   | { type: 'built'; kind: string; i: number; j: number }

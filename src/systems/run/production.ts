@@ -1,6 +1,6 @@
 import tuning from '../../data/balance/run.json';
 import { PRODUCTION } from './product';
-import type { Run } from './run';
+import { workNeed, type Run } from './run';
 
 export type TaskStatus = 'queued' | 'active' | 'ready' | 'backlog';
 export interface WorkTask {
@@ -68,6 +68,32 @@ export function resumeTask(run: Run, id: string): boolean {
   task.status = 'queued';
   run.tasks.push(task);
   syncProduction(run);
+  return true;
+}
+
+/** Spent work and money stay spent. Only the unfinished change is removed. */
+export function cancelTask(run: Run, id: string): boolean {
+  if (run.over || run.draft) return false;
+  const task = run.tasks.find((entry) => entry.id === id);
+  if (!task) return false;
+  run.tasks = run.tasks.filter((entry) => entry !== task);
+  if (task.kind === 'build') {
+    run.blocks = run.blocks.filter((block) => block.kind !== task.block);
+  } else if (task.kind === 'upgrade') {
+    const block = run.blocks.find((entry) => entry.kind === task.block);
+    if (block?.up) {
+      block.up = false;
+      block.built = true;
+      block.queued = false;
+      const base = workNeed(run, block.kind);
+      block.need =
+        block.level === 1 ? base : Math.ceil(base * tuning.rework.work_mult * (block.level - 1));
+      block.done = block.need;
+      block.hand = false;
+    }
+  }
+  syncProduction(run);
+  run.events.push({ type: 'task-cancelled', id, block: task.block });
   return true;
 }
 

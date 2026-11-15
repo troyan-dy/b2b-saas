@@ -8,6 +8,8 @@ import {
 } from '../src/systems/company/market';
 import {
   chooseCard,
+  cancelTask,
+  upgrade,
   crunch,
   createRun,
   deferTask,
@@ -22,6 +24,7 @@ import {
   TUNING,
   type Run,
 } from '../src/systems/run/run';
+import { enqueueTask } from '../src/systems/run/production';
 import { clearRunSave, loadRun, RUN_SAVE_KEY, saveRun } from '../src/systems/run/save';
 
 const idea = { tech: IDEAS.tech[0], form: IDEAS.form[3], aud: IDEAS.aud[0] };
@@ -126,8 +129,7 @@ describe('company save', () => {
     const run = marketCompany();
     expect(place(run, 'landing', 1, 0)).toBe(true);
     expect(crunch(run)).toBe(true);
-    run.draft = ['credits', 'batch', 'leads'];
-    expect(chooseCard(run, 'credits')).toBe(true);
+    enqueueTask(run, { kind: 'card', card: 'credits', work: 3, cost: 0 });
     expect(expandInfrastructure(run)).toBe(true);
     expect(deferTask(run, run.tasks[2].id)).toBe(true);
     run.strategy = { support: 'mass', processing: 'instant' };
@@ -222,8 +224,7 @@ describe('company save', () => {
   it('restores a completed grant project and pays it only on its first release', () => {
     const run = marketCompany();
     run.agents = [];
-    run.draft = ['credits', 'consulting', 'leads'];
-    expect(chooseCard(run, 'credits')).toBe(true);
+    enqueueTask(run, { kind: 'card', card: 'credits', work: 3, cost: 0 });
     while (run.tasks[0].status !== 'ready') {
       run.energy = TUNING.crunch.max;
       expect(crunch(run)).toBe(true);
@@ -247,6 +248,76 @@ describe('company save', () => {
     advance(twice, 64);
     expect(snapshot(twice)).toEqual(snapshot(loaded));
     expect(twice.claimedGrants.filter((id) => id === 'credits')).toHaveLength(1);
+  });
+
+  it('roundtrips cancellation and immediate card effects without resurrecting removed work', () => {
+    const run = createRun(73, idea, ['template']);
+    run.money = 50_000;
+    run.newsWait = 99;
+    expect(place(run, 'landing', 1, 0)).toBe(true);
+    expect(crunch(run)).toBe(true);
+    const constructionCash = run.money;
+    expect(cancelTask(run, run.tasks[0].id)).toBe(true);
+    expect(run.money).toBe(constructionCash);
+    expect(upgrade(run, 'core')).toBe(true);
+    while (run.tasks[0].status !== 'ready') {
+      run.energy = TUNING.crunch.max;
+      expect(crunch(run)).toBe(true);
+    }
+    const upgradeCash = run.money;
+    expect(cancelTask(run, run.tasks[0].id)).toBe(true);
+    expect(run.money).toBe(upgradeCash);
+    run.draft = ['mass', 'credits', 'leads'];
+    expect(chooseCard(run, 'mass')).toBe(true);
+    run.draft = ['credits', 'batch', 'leads'];
+    expect(chooseCard(run, 'credits')).toBe(true);
+    expect(run.tasks).toHaveLength(0);
+    expect(saveRun(run)).toBe(true);
+    const loaded = loadRun()!;
+    expect(loaded).not.toBeNull();
+    expect(snapshot(loaded)).toEqual(snapshot(run));
+    expect(loaded.claimedGrants).toEqual(['credits']);
+    expect(loaded.eff.promo).toBe(2);
+    expect(loaded.eff.seats).toBe(4);
+    expect(loaded.host).toBe(run.host);
+    expect(loaded.blocks.map((block) => [block.kind, block.level, block.up])).toEqual([
+      ['core', 1, false],
+    ]);
+    step(run, TUNING.sprint_s);
+    step(loaded, TUNING.sprint_s);
+    expect(snapshot(loaded)).toEqual(snapshot(run));
+    expect(loaded.tasks).toHaveLength(0);
+    expect(loaded.blocks).toHaveLength(1);
+    expect(loaded.blocks[0].level).toBe(1);
+    expect(loaded.claimedGrants).toEqual(['credits']);
+    expect(loaded.lastReport?.shipped).toEqual([]);
+    expect(saveRun(loaded)).toBe(true);
+  });
+
+  it('finishes a previously paid strategy card from an old save without charging again', () => {
+    const run = createRun(74, idea, ['template']);
+    run.money = 50_000;
+    run.newsWait = 99;
+    run.agents = [];
+    enqueueTask(run, { kind: 'card', card: 'batch', work: 10, cost: 500 });
+    expect(crunch(run)).toBe(true);
+    expect(run.money).toBe(49_500);
+    expect(run.strategy.processing).toBeNull();
+    expect(saveRun(run)).toBe(true);
+    const loaded = loadRun()!;
+    const paidCash = loaded.money;
+    while (loaded.tasks[0].status !== 'ready') {
+      loaded.energy = TUNING.crunch.max;
+      expect(crunch(loaded)).toBe(true);
+    }
+    expect(loaded.money).toBe(paidCash);
+    expect(loaded.strategy.processing).toBeNull();
+    step(loaded, TUNING.sprint_s);
+    expect(loaded.strategy.processing).toBe('batch');
+    expect(loaded.eff.tokens).toBeCloseTo(0.475);
+    expect(loaded.tasks).toHaveLength(0);
+    expect(saveRun(loaded)).toBe(true);
+    expect(loadRun()!.strategy.processing).toBe('batch');
   });
 
   const badMarkets: [string, (market: MarketState) => void][] = [
@@ -405,8 +476,7 @@ describe('company save', () => {
 
   it('rejects duplicate queue identities, impossible task progress and repeated cash grants', () => {
     const run = marketCompany();
-    run.draft = ['credits', 'batch', 'leads'];
-    chooseCard(run, 'credits');
+    enqueueTask(run, { kind: 'card', card: 'credits', work: 3, cost: 0 });
     expect(saveRun(run)).toBe(true);
     const valid = savedData();
     const task = run.tasks[0];
