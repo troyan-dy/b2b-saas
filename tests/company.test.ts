@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { companyContext, companyTotals, customerCount } from '../src/systems/company/company';
-import { createMarket, schedulePrice } from '../src/systems/company/market';
+import { createMarket, priceForecast, schedulePrice, segmentView } from '../src/systems/company/market';
 import { clientPay, clientTokens, createRun, flows, IDEAS, mrr, refreshRun, RULES, step, tokens, TUNING } from '../src/systems/run/run';
 
 function company() {
@@ -59,5 +59,20 @@ describe('company integration', () => {
     run.infrastructure = 2;
     expect(companyTotals(run).capacity).toBeGreaterThan(before.capacity * 2);
     expect(flows(run).hosting - hosting).toBe(companyTotals(run).hosting);
+  });
+
+  it('premium permits a higher cohort tariff instead of silently changing it', () => {
+    const run = company();
+    run.market.groups[2].profiles[0].count = 2;
+    const before = segmentView(run.market, companyContext(run), 'large');
+    run.strategy.support = 'premium';
+    refreshRun(run);
+    const ctx = companyContext(run);
+    const after = segmentView(run.market, ctx, 'large');
+    expect(after.income).toBe(before.income);
+    expect(after.price).toBe(1);
+    const proposal = priceForecast(run.market, ctx, 'large', 2);
+    expect(proposal.after.reasons.price).toBe(0);
+    expect(proposal.after.income).toBeCloseTo(before.income * 2);
   });
 });
