@@ -187,6 +187,38 @@ describe('company save', () => {
     expect(loaded.rng.state()).toBe(run.rng.state());
   });
 
+  it('roundtrips an unanswered call with an unseated client and rejects that slot in active clients', () => {
+    const run = createRun(0, { ...idea, form: IDEAS.form[0] });
+    run.stage = 2;
+    run.money = 50_000;
+    run.agents = [];
+    run.newsWait = 100;
+    run.leads = 1;
+    run.blocks = ['core', 'landing', 'pay'].map((kind, i) => ({
+      kind,
+      i,
+      j: 0,
+      done: 10,
+      need: 10,
+      built: true,
+      live: true,
+      level: 1,
+      up: false,
+      hand: false,
+    }));
+    refreshRun(run);
+    step(run, TUNING.sprint_s);
+    expect(run.call?.slot).toBe(-1);
+    expect(saveRun(run)).toBe(true);
+    const loaded = loadRun()!;
+    expect(snapshot(loaded)).toEqual(snapshot(run));
+    expect(loaded.rng.state()).toBe(run.rng.state());
+    const damaged = savedData();
+    damaged.run.clients = [run.call];
+    memory.set(RUN_SAVE_KEY, JSON.stringify(damaged));
+    expect(loadRun()).toBeNull();
+  });
+
   it('restores a completed grant project and pays it only on its first release', () => {
     const run = marketCompany();
     run.agents = [];

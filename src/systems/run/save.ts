@@ -64,7 +64,7 @@ function kinds(value: unknown): value is string[] {
   return Array.isArray(value) && value.every(kind);
 }
 
-function client(value: unknown): boolean {
+function client(value: unknown, allowUnseated = false): boolean {
   if (!record(value)) return false;
   return (
     integer(value.id) &&
@@ -76,7 +76,7 @@ function client(value: unknown): boolean {
     integer(value.wantLevel) &&
     value.wantLevel > 0 &&
     integer(value.patience) &&
-    integer(value.slot) &&
+    (integer(value.slot) || (allowUnseated && value.slot === -1)) &&
     nonnegative(value.pay) &&
     nonnegative(value.deal) &&
     typeof value.happy === 'boolean' &&
@@ -338,10 +338,10 @@ function validRun(value: RecordValue, defaults: Run): boolean {
     !Array.isArray(value.blocks) ||
     !value.blocks.every(block) ||
     !Array.isArray(value.clients) ||
-    !value.clients.every(client)
+    !value.clients.every((entry) => client(entry))
   )
     return false;
-  if (value.call !== null && !client(value.call)) return false;
+  if (value.call !== null && !client(value.call, true)) return false;
   if (
     !Array.isArray(value.agents) ||
     !value.agents.every(
