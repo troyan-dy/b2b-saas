@@ -72,11 +72,13 @@ export function createSprintCards(parent: HTMLElement, onChoose: (id: string) =>
   root.innerHTML =
     `<button type="button" class="sc-open" data-sc-open></button>` +
     '<section class="sc-overlay sc-draft" role="dialog" aria-modal="true" aria-labelledby="sc-draft-title" hidden></section>' +
-    '<section class="sc-overlay sc-album" role="dialog" aria-modal="true" aria-labelledby="sc-album-title" hidden></section>';
+    '<section class="sc-overlay sc-album" role="dialog" aria-modal="true" aria-labelledby="sc-album-title" hidden></section>' +
+    '<div class="sc-applied" role="status" aria-live="polite" hidden></div>';
   parent.append(root);
   const opener = root.querySelector<HTMLButtonElement>('.sc-open')!;
   const draft = root.querySelector<HTMLElement>('.sc-draft')!;
   const album = root.querySelector<HTMLElement>('.sc-album')!;
+  const applied = root.querySelector<HTMLElement>('.sc-applied')!;
   let view: SprintCardsView | null = null;
   let draftKey = '';
   let albumKey = '';
@@ -84,6 +86,25 @@ export function createSprintCards(parent: HTMLElement, onChoose: (id: string) =>
   let albumOpen = false;
   let beforeDraft: HTMLElement | null = null;
   let beforeAlbum: HTMLElement | null = null;
+  let appliedKey = '';
+  let appliedTimer = 0;
+
+  function updateApplied(value: SprintCardsView['applied']): void {
+    const key = value ? `${value.title}\n${value.impact}` : '';
+    if (key === appliedKey) return;
+    appliedKey = key;
+    window.clearTimeout(appliedTimer);
+    applied.hidden = !value;
+    if (!value) return;
+    const card = view?.cards.find((entry) => entry.title === value.title);
+    applied.innerHTML =
+      `<span>${L('КАРТА СРАБОТАЛА', 'CARD APPLIED')} · ${esc(value.title)}</span>` +
+      `<strong>${esc(value.impact)}</strong>` +
+      (card ? `<small>${esc(card.duration)}</small>` : '');
+    appliedTimer = window.setTimeout(() => {
+      applied.hidden = true;
+    }, 4500);
+  }
 
   function renderAlbum(): void {
     if (!view) return;
@@ -185,6 +206,7 @@ export function createSprintCards(parent: HTMLElement, onChoose: (id: string) =>
     set(next: SprintCardsView | null): void {
       view = next;
       root.hidden = !view;
+      updateApplied(view?.applied);
       if (!view) {
         album.hidden = true;
         draft.hidden = true;
@@ -226,6 +248,7 @@ export function createSprintCards(parent: HTMLElement, onChoose: (id: string) =>
       } else if (beforeDraft?.isConnected) beforeDraft.focus({ preventScroll: true });
     },
     destroy(): void {
+      window.clearTimeout(appliedTimer);
       window.removeEventListener('keydown', onKey, true);
       root.remove();
     },

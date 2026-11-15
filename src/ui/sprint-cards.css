@@ -326,6 +326,45 @@
   font-size: 18px;
   color: #64635c;
 }
+.sc-applied {
+  position: absolute;
+  z-index: 40;
+  left: 370px;
+  top: 280px;
+  width: 600px;
+  padding: 15px 22px;
+  border: 1.5px solid #426581;
+  border-left: 7px solid var(--sc-blue);
+  border-radius: 7px;
+  background: var(--sc-tint);
+  color: var(--ink);
+  animation: sc-confirm 0.2s ease-out;
+}
+.sc-applied span {
+  display: block;
+  font: 400 14px/1.4 var(--mono);
+}
+.sc-applied strong {
+  display: block;
+  margin-top: 6px;
+  font: 400 25px/1.25 var(--serif);
+}
+.sc-applied small {
+  display: block;
+  margin-top: 7px;
+  font: 400 15px/1.35 var(--mono);
+  color: #426581;
+}
+@keyframes sc-confirm {
+  from {
+    transform: translateY(12px);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
 @media (prefers-reduced-motion: reduce) {
   .sc-choice {
     animation: none;
