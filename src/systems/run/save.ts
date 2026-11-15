@@ -1,5 +1,7 @@
 import { createRng } from '../../core/rng';
 import draftCards from '../../data/balance/draft.json';
+import { MARKET } from '../company/market';
+import { PRODUCTION } from './product';
 import {
   CLIENT_TYPES,
   createRun,
@@ -29,6 +31,7 @@ function record(value: unknown): value is RecordValue {
 
 function plain(value: unknown, depth = 0): boolean {
   if (depth > 32) return false;
+  if (value === undefined) return true;
   if (value === null || typeof value === 'string' || typeof value === 'boolean') return true;
   if (typeof value === 'number') return Number.isFinite(value);
   if (Array.isArray(value)) return value.every((item) => plain(item, depth + 1));
@@ -61,10 +64,6 @@ function kinds(value: unknown): value is string[] {
   return Array.isArray(value) && value.every(kind);
 }
 
-function card(value: unknown): boolean {
-  return typeof value === 'string' && draftCards.some((entry) => entry.id === value);
-}
-
 function client(value: unknown): boolean {
   if (!record(value)) return false;
   return (
@@ -85,7 +84,7 @@ function client(value: unknown): boolean {
   );
 }
 
-function block(value: unknown): boolean {
+function block(value: unknown): value is Run['blocks'][number] {
   if (!record(value)) return false;
   return (
     kind(value.kind) &&
@@ -95,6 +94,7 @@ function block(value: unknown): boolean {
     nonnegative(value.need) &&
     integer(value.level) &&
     value.level > 0 &&
+    value.level <= PRODUCTION.max_level &&
     ['built', 'live', 'up', 'hand'].every((key) => typeof value[key] === 'boolean') &&
     (value.queued === undefined || typeof value.queued === 'boolean')
   );
@@ -112,16 +112,96 @@ function report(value: unknown): boolean {
   );
 }
 
-function production(value: RecordValue): boolean {
+function tariff(value: unknown): value is number {
+  if (!nonnegative(value) || value < MARKET.price.min || value > MARKET.price.max) return false;
+  return Math.abs(value / MARKET.price.step - Math.round(value / MARKET.price.step)) < 1e-7;
+}
+
+function marketProfile(value: unknown, share: number, capacity: number): boolean {
+  if (!record(value) || value.share !== share || !integer(value.count) || !nonnegative(value.leads))
+    return false;
+  if (!nonnegative(value.churnCarry) || value.churnCarry >= 1) return false;
+  if (value.count + value.leads > Math.floor((capacity * share) / 100) + 1e-7) return false;
   if (
-    value.draft !== undefined &&
-    value.draft !== null &&
-    (!Array.isArray(value.draft) || !value.draft.every(card))
+    !Array.isArray(value.needs) ||
+    value.needs.length === 0 ||
+    !value.needs.every(
+      (need: unknown) =>
+        record(need) &&
+        kind(need.block) &&
+        integer(need.level) &&
+        need.level > 0 &&
+        need.level <= PRODUCTION.max_level,
+    )
   )
     return false;
-  if (value.infrastructure !== undefined && !integer(value.infrastructure)) return false;
-  if (value.nextTask !== undefined && (!integer(value.nextTask) || value.nextTask < 1))
+  if (new Set(value.needs.map((need: RecordValue) => need.block)).size !== value.needs.length)
     return false;
+  if (
+    value.connection !== undefined &&
+    (!kinds(value.connection) ||
+      value.connection.length !== 2 ||
+      new Set(value.connection).size !== 2)
+  )
+    return false;
+  return value.instant === undefined || typeof value.instant === 'boolean';
+}
+
+function market(value: unknown, infrastructure: number): boolean {
+  if (!record(value) || typeof value.opened !== 'boolean' || !Array.isArray(value.groups))
+    return false;
+  if (value.groups.length !== MARKET.segments.length || !value.groups.every(record)) return false;
+  if (new Set(value.groups.map((group: RecordValue) => group.id)).size !== MARKET.segments.length)
+    return false;
+  return value.groups.every((group: RecordValue) => {
+    const segment = MARKET.segments.find((entry) => entry.id === group.id);
+    if (
+      !segment ||
+      !tariff(group.price) ||
+      (group.pendingPrice !== null && !tariff(group.pendingPrice))
+    )
+      return false;
+    if (
+      !integer(group.came) ||
+      !integer(group.left) ||
+      !Array.isArray(group.profiles) ||
+      group.profiles.length !== segment.profiles.length
+    )
+      return false;
+    const capacity = segment.market * MARKET.acquisition.market_expansion_mult ** infrastructure;
+    if (!Number.isFinite(capacity)) return false;
+    return group.profiles.every(
+      (profile: unknown, index: number) =>
+        marketProfile(profile, segment.profiles[index].share, capacity) &&
+        (value.opened ||
+          (record(profile) &&
+            profile.count === 0 &&
+            profile.leads === 0 &&
+            profile.churnCarry === 0)),
+    );
+  });
+}
+
+function production(value: RecordValue, blocks: Run['blocks']): boolean {
+  const infrastructure = value.infrastructure ?? 0;
+  if (
+    !integer(infrastructure) ||
+    !Number.isFinite(
+      PRODUCTION.infrastructure.cost * PRODUCTION.infrastructure.cost_growth ** infrastructure,
+    ) ||
+    !Number.isFinite(MARKET.capacity.expansion_mult ** infrastructure)
+  )
+    return false;
+  if (value.market !== undefined && !market(value.market, infrastructure)) return false;
+  const claimed = value.claimedGrants ?? [];
+  if (
+    !strings(claimed) ||
+    !claimed.every((id) => id === 'credits' || id === 'consulting') ||
+    new Set(claimed).size !== claimed.length
+  )
+    return false;
+  const claimedIds = new Set<string>(claimed);
+  if (value.claimedGrants === null || value.infrastructure === null) return false;
   if (value.strategy !== undefined) {
     if (!record(value.strategy)) return false;
     if (
@@ -130,25 +210,89 @@ function production(value: RecordValue): boolean {
     )
       return false;
   }
-  if (value.tasks === undefined) return true;
-  return (
-    Array.isArray(value.tasks) &&
-    value.tasks.every(
-      (task: unknown) =>
-        record(task) &&
-        typeof task.id === 'string' &&
-        task.id.length > 0 &&
-        ['build', 'upgrade', 'card', 'infrastructure'].includes(task.kind as string) &&
-        ['queued', 'active', 'ready', 'backlog'].includes(task.status as string) &&
-        ['work', 'done', 'cost'].every((key) => nonnegative(task[key])) &&
-        (task.done as number) <= (task.work as number) &&
-        (task.block === undefined || kind(task.block)) &&
-        (task.card === undefined || card(task.card)) &&
-        (task.kind !== 'card' || card(task.card)) &&
-        (!['build', 'upgrade'].includes(task.kind as string) || kind(task.block)) &&
-        (task.level === undefined || (integer(task.level) && task.level > 0)),
+  if (value.tasks !== undefined && !Array.isArray(value.tasks)) return false;
+  const tasks = (value.tasks ?? []) as unknown[];
+  if (value.nextTask !== undefined && (!integer(value.nextTask) || value.nextTask < 1))
+    return false;
+  const ids = new Set<string>();
+  const planned = new Set<string>();
+  const cards = new Set<string>();
+  let active = 0;
+  let expansions = 0;
+  for (const task of tasks) {
+    if (
+      !record(task) ||
+      typeof task.id !== 'string' ||
+      !/^task-[1-9]\d*$/.test(task.id) ||
+      ids.has(task.id)
     )
-  );
+      return false;
+    const id = Number(task.id.slice(5));
+    if (!Number.isSafeInteger(id) || !integer(value.nextTask) || id >= value.nextTask) return false;
+    ids.add(task.id);
+    if (
+      !['queued', 'active', 'ready', 'backlog'].includes(task.status as string) ||
+      !integer(task.work) ||
+      task.work === 0 ||
+      !integer(task.done) ||
+      !integer(task.cost) ||
+      task.done > task.work
+    )
+      return false;
+    if ((task.status === 'queued' || task.status === 'backlog') && task.done !== 0) return false;
+    if ((task.status === 'ready') !== (task.done === task.work)) return false;
+    if (task.status === 'active' && ++active > 1) return false;
+    if (task.kind === 'build' || task.kind === 'upgrade') {
+      const target = blocks.find((entry) => entry.kind === task.block);
+      if (!target || planned.has(target.kind) || task.card !== undefined) return false;
+      planned.add(target.kind);
+      if (
+        task.kind === 'build' &&
+        (target.live || target.level !== 1 || task.level !== 1 || target.up)
+      )
+        return false;
+      if (
+        task.kind === 'upgrade' &&
+        (!target.live ||
+          task.level !== target.level + 1 ||
+          (task.level as number) > PRODUCTION.max_level)
+      )
+        return false;
+    } else if (task.kind === 'card') {
+      const selected = draftCards.find((entry) => entry.id === task.card);
+      if (!selected || task.block !== undefined || task.level !== undefined) return false;
+      const cash = selected.id === 'credits' || selected.id === 'consulting';
+      if ((selected.slot !== 'operation' || cash) && cards.has(selected.id)) return false;
+      if (claimedIds.has(selected.id)) return false;
+      cards.add(selected.id);
+    } else if (task.kind === 'infrastructure') {
+      if (
+        ++expansions > 1 ||
+        task.block !== undefined ||
+        task.card !== undefined ||
+        task.level !== undefined
+      )
+        return false;
+    } else return false;
+  }
+  if (value.draft === undefined || value.draft === null) return true;
+  if (!strings(value.draft) || value.draft.length !== 3 || new Set(value.draft).size !== 3)
+    return false;
+  return value.draft.every((id) => {
+    const entry = draftCards.find((item) => item.id === id);
+    if (
+      !entry ||
+      claimedIds.has(id) ||
+      (entry.slot !== 'operation' && cards.has(id)) ||
+      ((id === 'credits' || id === 'consulting') && cards.has(id))
+    )
+      return false;
+    if (!entry.requires.every((kind) => blocks.some((block) => block.kind === kind && block.live)))
+      return false;
+    return (
+      entry.slot === 'operation' || (value.strategy as RecordValue | undefined)?.[entry.slot] !== id
+    );
+  });
 }
 
 function validRun(value: RecordValue, defaults: Run): boolean {
@@ -252,18 +396,25 @@ function validRun(value: RecordValue, defaults: Run): boolean {
   if (!Number.isSafeInteger(value.newsWait)) return false;
   if (!report(value.lastReport) || !record(value.stats)) return false;
   const stats = value.stats;
-  return Object.keys(defaults.stats).every((key) => nonnegative(stats[key])) && production(value);
+  if (new Set(value.blocks.map((entry) => entry.kind)).size !== value.blocks.length) return false;
+  if (new Set(value.blocks.map((entry) => `${entry.i}:${entry.j}`)).size !== value.blocks.length)
+    return false;
+  if (new Set(value.clients.map((entry) => entry.id)).size !== value.clients.length) return false;
+  return (
+    Object.keys(defaults.stats).every((key) => nonnegative(stats[key])) &&
+    production(value, value.blocks)
+  );
 }
 
 export function saveRun(run: Run): boolean {
   if (run.over) return false;
   try {
     const state: RecordValue = Object.fromEntries(
-      Object.entries(run).filter(([key, value]) => !TRANSIENT.has(key) && plain(value)),
+      Object.entries(run).filter(([key]) => !TRANSIENT.has(key)),
     );
     state.idea = { tech: run.idea.tech.id, form: run.idea.form.id, aud: run.idea.aud.id };
     const saved = { v: SCHEMA_VERSION, rngState: run.rng.state(), run: state };
-    if (!validRun(state, run)) return false;
+    if (!plain(state) || !validRun(state, run)) return false;
     localStorage.setItem(RUN_SAVE_KEY, JSON.stringify(saved));
     return true;
   } catch {

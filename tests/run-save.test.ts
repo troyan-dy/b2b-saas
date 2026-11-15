@@ -1,11 +1,23 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createRng } from '../src/core/rng';
 import {
+  createMarket,
+  MARKET,
+  schedulePrice,
+  type MarketState,
+} from '../src/systems/company/market';
+import {
+  chooseCard,
+  crunch,
   createRun,
+  deferTask,
+  expandInfrastructure,
   IDEAS,
   isLive,
   mrr,
   place,
+  refreshRun,
+  RULES,
   step,
   TUNING,
   type Run,
@@ -38,6 +50,27 @@ function snapshot(run: Run): unknown {
   );
 }
 
+function advance(run: Run, steps: number): void {
+  for (let i = 0; i < steps; i++) {
+    if (run.draft) expect(chooseCard(run, run.draft[0])).toBe(true);
+    step(run, 0.5);
+  }
+}
+
+function marketCompany(): Run {
+  const run = createRun(71, idea, ['template']);
+  run.money = 50_000;
+  run.market = createMarket(Object.keys(RULES));
+  run.market.opened = true;
+  const group = run.market.groups[0];
+  group.profiles[0].count = 20;
+  group.profiles[0].leads = 4.5;
+  group.profiles[0].churnCarry = 0.4;
+  group.price = MARKET.price.min + 10 * MARKET.price.step;
+  expect(schedulePrice(run.market, group.id, group.price + 5 * MARKET.price.step)).toBe(true);
+  return run;
+}
+
 beforeEach(() => {
   memory.clear();
   vi.stubGlobal('localStorage', storage);
@@ -62,7 +95,7 @@ describe('company save', () => {
     run.money = 500_000;
     expect(place(run, 'landing', 1, 0)).toBe(true);
     expect(place(run, 'pay', 0, 1)).toBe(true);
-    for (let i = 0; i < 180; i++) step(run, 0.5);
+    advance(run, 180);
     run.events.push({ type: 'down' });
     expect(saveRun(run)).toBe(true);
     const data = savedData();
@@ -81,49 +114,269 @@ describe('company save', () => {
     expect(loaded.host).toBe(run.host);
     expect(loaded.eff).toEqual(run.eff);
     expect(mrr(loaded)).toBe(mrr(run));
-    for (let i = 0; i < 200; i++) {
-      step(run, 0.5);
-      step(loaded, 0.5);
-    }
+    const stateBefore = run.rng.state();
+    advance(run, 200);
+    advance(loaded, 200);
     expect(snapshot(loaded)).toEqual(snapshot(run));
     expect(loaded.rng.state()).toBe(run.rng.state());
+    expect(loaded.rng.state()).not.toBe(stateBefore);
   });
 
   it('keeps new plain state, a pending card draft, strategies and queued production', () => {
-    const run = createRun(71, idea);
-    const extra = {
-      draft: ['premium', 'batch', 'leads'],
-      strategy: { support: 'premium', processing: 'batch' },
-      infrastructure: 2,
-      tasks: [
-        {
-          id: 'task-1',
-          kind: 'build',
-          block: 'landing',
-          level: 2,
-          work: 20,
-          done: 8,
-          cost: 30,
-          status: 'active',
-        },
-        {
-          id: 'task-2',
-          kind: 'card',
-          card: 'mass',
-          work: 12,
-          done: 0,
-          cost: 600,
-          status: 'queued',
-        },
-        { id: 'task-3', kind: 'infrastructure', work: 25, done: 0, cost: 1000, status: 'backlog' },
-      ],
-      nextTask: 4,
-      market: { phase: 'growth', wait: 7 },
-    };
-    Object.assign(run, extra);
+    const run = marketCompany();
+    expect(place(run, 'landing', 1, 0)).toBe(true);
+    expect(crunch(run)).toBe(true);
+    run.draft = ['credits', 'batch', 'leads'];
+    expect(chooseCard(run, 'credits')).toBe(true);
+    expect(expandInfrastructure(run)).toBe(true);
+    expect(deferTask(run, run.tasks[2].id)).toBe(true);
+    run.strategy = { support: 'mass', processing: 'instant' };
+    run.claimedGrants = ['consulting'];
+    run.infrastructure = 2;
+    run.draft = ['premium', 'batch', 'leads'];
+    run.sprintT = 9.25;
+    run.t = 41.25;
+    Object.assign(run, { futureField: { generation: 2, values: ['a', 'b'] } });
+    refreshRun(run);
     expect(saveRun(run)).toBe(true);
-    expect(loadRun()).toMatchObject(extra);
-    expect(loadRun()!.sprintT).toBe(run.sprintT);
+    const loaded = loadRun()!;
+    expect(snapshot(loaded)).toEqual(snapshot(run));
+    expect(loaded.tasks.map((task) => task.status)).toEqual(['active', 'queued', 'backlog']);
+    const before = snapshot(loaded);
+    step(loaded, 100);
+    expect(snapshot(loaded)).toEqual(before);
+    expect(chooseCard(loaded, 'batch')).toBe(true);
+    expect(chooseCard(run, 'batch')).toBe(true);
+    advance(run, 200);
+    advance(loaded, 200);
+    expect(snapshot(loaded)).toEqual(snapshot(run));
+    expect(loaded.market.groups[0].pendingPrice).toBeNull();
+    expect(loaded.market.groups[0].price).toBeCloseTo(MARKET.price.min + 15 * MARKET.price.step);
+    expect(loaded.rng.state()).toBe(run.rng.state());
+  });
+
+  it('rebuilds a legacy missing market and grants history without consuming saved randomness', () => {
+    const run = marketCompany();
+    expect(saveRun(run)).toBe(true);
+    const data = savedData();
+    delete data.run.market;
+    delete data.run.claimedGrants;
+    memory.set(RUN_SAVE_KEY, JSON.stringify(data));
+    const loaded = loadRun()!;
+    expect(loaded.market).toEqual(createMarket(['core', 'landing', 'pay', ...run.pool]));
+    expect(loaded.claimedGrants).toEqual([]);
+    expect(loaded.rng.state()).toBe(run.rng.state());
+  });
+
+  it('restores a completed grant project and pays it only on its first release', () => {
+    const run = marketCompany();
+    run.agents = [];
+    run.draft = ['credits', 'consulting', 'leads'];
+    expect(chooseCard(run, 'credits')).toBe(true);
+    while (run.tasks[0].status !== 'ready') {
+      run.energy = TUNING.crunch.max;
+      expect(crunch(run)).toBe(true);
+    }
+    const money = run.money;
+    expect(saveRun(run)).toBe(true);
+    const loaded = loadRun()!;
+    expect(loaded.money).toBe(money);
+    expect(loaded.claimedGrants).toEqual([]);
+    step(run, TUNING.sprint_s);
+    step(loaded, TUNING.sprint_s);
+    expect(snapshot(loaded)).toEqual(snapshot(run));
+    expect(loaded.claimedGrants).toEqual(['credits']);
+    expect(loaded.tasks).toHaveLength(0);
+    expect(loaded.money).toBeGreaterThan(money);
+    expect(saveRun(loaded)).toBe(true);
+    const twice = loadRun()!;
+    expect(twice.money).toBe(loaded.money);
+    expect(twice.claimedGrants).toEqual(['credits']);
+    advance(loaded, 64);
+    advance(twice, 64);
+    expect(snapshot(twice)).toEqual(snapshot(loaded));
+    expect(twice.claimedGrants.filter((id) => id === 'credits')).toHaveLength(1);
+  });
+
+  const badMarkets: [string, (market: MarketState) => void][] = [
+    ['missing groups', (market) => Object.assign(market, { groups: null })],
+    [
+      'missing segment',
+      (market) => {
+        market.groups.pop();
+      },
+    ],
+    [
+      'duplicate segment',
+      (market) => {
+        market.groups[1].id = market.groups[0].id;
+      },
+    ],
+    ['unknown segment', (market) => Object.assign(market.groups[0], { id: 'missing' })],
+    ['invalid opened flag', (market) => Object.assign(market, { opened: 1 })],
+    [
+      'extra cohort',
+      (market) => {
+        market.groups[0].profiles.push(market.groups[0].profiles[0]);
+      },
+    ],
+    [
+      'duplicate cohort',
+      (market) => {
+        market.groups[0].profiles[1] = market.groups[0].profiles[0];
+      },
+    ],
+    [
+      'invalid share',
+      (market) => {
+        market.groups[0].profiles[0].share = 200;
+      },
+    ],
+    [
+      'empty needs',
+      (market) => {
+        market.groups[0].profiles[0].needs = [];
+      },
+    ],
+    [
+      'unknown block',
+      (market) => {
+        market.groups[0].profiles[0].needs[0].block = 'missing';
+      },
+    ],
+    [
+      'invalid level',
+      (market) => {
+        market.groups[0].profiles[0].needs[0].level = 0;
+      },
+    ],
+    [
+      'invalid link',
+      (market) => {
+        market.groups[0].profiles[0].connection = ['missing', 'core'];
+      },
+    ],
+    [
+      'invalid instant flag',
+      (market) => Object.assign(market.groups[0].profiles[0], { instant: 'yes' }),
+    ],
+    [
+      'negative population',
+      (market) => {
+        market.groups[0].profiles[0].count = -1;
+      },
+    ],
+    [
+      'fractional population',
+      (market) => {
+        market.groups[0].profiles[0].count = 1.5;
+      },
+    ],
+    [
+      'NaN population',
+      (market) => {
+        market.groups[0].profiles[0].count = NaN;
+      },
+    ],
+    [
+      'negative leads',
+      (market) => {
+        market.groups[0].profiles[0].leads = -1;
+      },
+    ],
+    [
+      'invalid churn remainder',
+      (market) => {
+        market.groups[0].profiles[0].churnCarry = 1;
+      },
+    ],
+    [
+      'negative arrivals',
+      (market) => {
+        market.groups[0].came = -1;
+      },
+    ],
+    [
+      'fractional departures',
+      (market) => {
+        market.groups[0].left = 0.5;
+      },
+    ],
+    [
+      'tariff below minimum',
+      (market) => {
+        market.groups[0].price = MARKET.price.min - MARKET.price.step;
+      },
+    ],
+    [
+      'tariff above maximum',
+      (market) => {
+        market.groups[0].price = MARKET.price.max + MARKET.price.step;
+      },
+    ],
+    [
+      'tariff outside step',
+      (market) => {
+        market.groups[0].price += MARKET.price.step / 2;
+      },
+    ],
+    [
+      'invalid pending tariff',
+      (market) => {
+        market.groups[0].pendingPrice = MARKET.price.max + MARKET.price.step;
+      },
+    ],
+  ];
+
+  it.each(badMarkets)('rejects damaged market data with %s', (_name, damage) => {
+    const run = marketCompany();
+    expect(saveRun(run)).toBe(true);
+    const market = structuredClone(run.market);
+    damage(market);
+    const data = savedData();
+    data.run.market = market;
+    memory.set(RUN_SAVE_KEY, JSON.stringify(data));
+    expect(loadRun() === null).toBe(true);
+  });
+
+  it.each(['count', 'pendingPrice'])(
+    'rejects a live NaN %s instead of replacing a good market save',
+    (field) => {
+      const run = marketCompany();
+      expect(saveRun(run)).toBe(true);
+      const before = memory.get(RUN_SAVE_KEY);
+      if (field === 'count') run.market.groups[0].profiles[0].count = NaN;
+      else run.market.groups[0].pendingPrice = NaN;
+      expect(saveRun(run)).toBe(false);
+      expect(memory.get(RUN_SAVE_KEY)).toBe(before);
+    },
+  );
+
+  it('rejects duplicate queue identities, impossible task progress and repeated cash grants', () => {
+    const run = marketCompany();
+    run.draft = ['credits', 'batch', 'leads'];
+    chooseCard(run, 'credits');
+    expect(saveRun(run)).toBe(true);
+    const valid = savedData();
+    const task = run.tasks[0];
+    const corrupt = [
+      { tasks: [task, task] },
+      { tasks: [task, { ...task, id: 'task-2' }], nextTask: 3 },
+      { tasks: [{ ...task, kind: 'build', block: 'landing', card: undefined, level: 1 }] },
+      { tasks: [{ ...task, status: 'ready', done: 0 }] },
+      { tasks: [{ ...task, done: 0.5 }] },
+      { nextTask: 1 },
+      { claimedGrants: ['credits'] },
+      { claimedGrants: ['consulting', 'consulting'] },
+      { claimedGrants: ['missing'] },
+      { draft: [] },
+      { draft: ['leads', 'leads', 'batch'] },
+      { draft: ['credits', 'batch', 'leads'] },
+    ];
+    for (const change of corrupt) {
+      memory.set(RUN_SAVE_KEY, JSON.stringify({ ...valid, run: { ...valid.run, ...change } }));
+      expect(loadRun() === null, JSON.stringify(change)).toBe(true);
+    }
   });
 
   it('rejects damaged schemas, invalid IDs and nested values without throwing', () => {
