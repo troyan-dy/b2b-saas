@@ -133,7 +133,8 @@ const esc = (value: string): string =>
 const multiplier = (value: number): string => '×' + dec(Number(value.toFixed(2)));
 const signed = (value: number): string =>
   (value > 0 ? '+' : value < 0 ? '−' : '') + whole(Math.abs(value));
-const primary = (value: string): string => value.replace(/^v\d+:\s*/, '').split(' · ')[0];
+const primary = (value: string): string =>
+  value.replace(/^(?:v\d+:|Сразу:|Immediately:)\s*/, '').split(' · ')[0];
 const buildLabel = (action: WorkbenchBuildAction): string =>
   ({
     place: L('Разместить', 'Place'),
@@ -164,32 +165,37 @@ function button(action: string, id: string, label: string, off = false, cls = ''
 }
 
 function moduleCard(module: WorkbenchModule): string {
+  const title = esc(module.title) + (module.level ? ` v${module.level + 1}` : '');
+  const effect = esc(
+    primary(module.next || module.current).replace('мест именных договоров', 'договоры'),
+  );
+  const demand = module.demand
+    ? `<span class="wb-build-wanted">${L('Просят: ', 'Wanted: ')}${esc(module.demand)}</span>`
+    : '';
   return (
-    '<article class="wb-build' +
-    (module.selected ? ' wb-selected' : '') +
-    '">' +
-    '<h3>' +
-    button('inspect-module', module.id, esc(module.title), false, 'wb-build-name') +
-    '</h3>' +
-    '<p class="wb-build-effect">' +
-    esc(primary(module.next || module.current)) +
-    '</p>' +
-    '<p class="wb-build-price"><span>' +
-    money(module.cost) +
-    '</span> · ' +
-    whole(module.work) +
-    ' ' +
-    L('работы', 'work') +
-    '</p>' +
-    '<div class="wb-build-actions">' +
+    `<article class="wb-build${module.selected ? ' wb-selected' : ''}">` +
     button(
-      'place',
+      module.action,
       module.id,
-      module.selected ? L('Выбери клетку', 'Pick a cell') : L('Поставить', 'Build'),
+      `<strong>${title}</strong><span class="wb-build-effect">${effect}</span>${demand}` +
+        `<span class="wb-build-price"><span>${money(module.cost)}</span> · ${whole(module.work)} ${L('работы', 'work')}</span>` +
+        (module.selected
+          ? `<span class="wb-picked-hint">${L('Теперь клетка ↙', 'Pick a cell ↙')}</span>`
+          : ''),
       module.disabled,
-      'wb-primary',
+      'wb-build-main',
     ) +
-    '</div></article>'
+    button(
+      'inspect-module',
+      module.id,
+      '<span aria-hidden="true">i</span><span class="wb-sr-only">' +
+        L('Подробности: ', 'Details: ') +
+        title +
+        '</span>',
+      false,
+      'wb-build-info',
+    ) +
+    '</article>'
   );
 }
 
@@ -302,9 +308,11 @@ function draftHtml(draft: WorkbenchDraft): string {
       'Спринт ' + draft.sprint + '. Выбери усиление',
       'Sprint ' + draft.sprint + '. Choose a boost',
     ) +
-    '</h2><p>' +
+    '</h2></header><details class="wb-release"><summary>' +
+    L('Как прошёл спринт', 'Sprint recap') +
+    '</summary><p>' +
     esc(draft.summary) +
-    '</p></header>' +
+    '</p>' +
     (draft.news
       ? '<div class="wb-draft-news"><strong>' +
         esc(draft.news.title) +
@@ -312,7 +320,7 @@ function draftHtml(draft: WorkbenchDraft): string {
         esc(draft.news.text) +
         '</span></div>'
       : '') +
-    '<div class="wb-draft-cards">' +
+    '</details><div class="wb-draft-cards">' +
     draft.cards
       .slice(0, 3)
       .map(
@@ -366,7 +374,7 @@ export function createWorkbench(
     L('Усиления продукта', 'Product boosts') +
     '" hidden></ul>' +
     '<section class="wb-catalog"><header><h2 tabindex="-1">' +
-    L('Построить', 'Build') +
+    L('Постройки', 'Buildings') +
     '</h2></header>' +
     '<p class="wb-catalog-hint"></p><div class="wb-builds"></div></section>' +
     '<section class="wb-detail wb-module-panel" aria-label="' +
@@ -533,7 +541,7 @@ export function createWorkbench(
         }
       } else if (event.code === 'Tab') {
         event.preventDefault();
-        const buttons = [...draft.querySelectorAll<HTMLButtonElement>('button:not(:disabled)')];
+        const buttons = [...draft.querySelectorAll<HTMLElement>('button:not(:disabled), summary')];
         const at = buttons.indexOf(document.activeElement as HTMLButtonElement);
         buttons[(at + (event.shiftKey ? -1 : 1) + buttons.length) % buttons.length]?.focus();
       } else if (event.code === 'Escape') event.preventDefault();
@@ -684,9 +692,17 @@ export function createWorkbench(
       modulePanel.hidden = panel !== 'module';
       clientPanel.hidden = panel !== 'clients';
       if (!view.draft) {
-        const available = view.modules.filter(
-          (module) => module.level === 0 && module.action === 'place' && !module.disabled,
+        const builds = view.modules
+          .filter((module) => module.action === 'place' && !module.disabled)
+          .sort((a, b) => Number(Boolean(b.demand)) - Number(Boolean(a.demand)));
+        const upgrades = view.modules.filter(
+          (module) => module.action === 'upgrade' && !module.disabled,
         );
+        const requested = upgrades.filter((module) => module.demand);
+        const available = [
+          ...(requested.length ? requested : builds.length ? [] : upgrades),
+          ...builds,
+        ];
         html(
           find('.wb-builds'),
           available.length

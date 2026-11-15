@@ -153,30 +153,66 @@
   padding: 2px 5px 14px 2px;
 }
 .wb-build {
+  position: relative;
   min-width: 0;
-  padding: 15px 13px 13px;
   border: 1.5px solid var(--rule);
   border-radius: 6px;
   background: var(--card);
+}
+.wb-main .wb-build-main {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-}
-.wb-build h3 {
-  min-height: 54px;
-}
-.wb-main .wb-build-name {
+  gap: 6px;
+  align-items: stretch;
   width: 100%;
-  font: 600 24px/1.12 var(--serif);
+  height: 100%;
+  min-height: 139px;
+  padding: 11px 12px 10px;
+  text-align: left;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+}
+.wb-build-main strong {
+  padding-right: 20px;
+  font: 600 24px/1.1 var(--serif);
 }
 .wb-build-effect {
-  font-size: 19px;
-  min-height: 54px;
+  font: 19px/1.25 var(--serif);
 }
 .wb-main .wb-build-price {
   margin-top: auto;
-  font-size: 18px;
+  font-size: 17px;
   white-space: nowrap;
+}
+.wb-main .wb-build-info {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  border: 0;
+  padding: 0;
+  width: 24px;
+  height: 24px;
+  color: var(--dim);
+  background: transparent;
+  font: italic 18px var(--serif);
+}
+.wb-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.wb-build-wanted {
+  color: var(--money);
+  font: 16px/1.3 var(--serif);
+}
+.wb-picked-hint {
+  color: var(--coral);
+  font-size: 17px;
 }
 .wb-build-price span,
 .wb-cash {
@@ -436,6 +472,18 @@
 .wb-draft-news strong {
   flex-shrink: 0;
   max-width: 28%;
+}
+.wb-release {
+  margin-top: 12px;
+  color: var(--term-text);
+}
+.wb-release summary {
+  width: fit-content;
+  cursor: pointer;
+  font: 18px var(--serif);
+}
+.wb-release > p {
+  padding-top: 12px;
 }
 .wb-draft-cards {
   display: grid;

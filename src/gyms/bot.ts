@@ -203,7 +203,7 @@ function canFund(run: Run, cost: number, work: number, hosting = 0): boolean {
 function cardValue(run: Run, card: DraftCard | undefined): number {
   if (!card) return -1;
   if (card.money)
-    return run.money < burnPerS(run) * TUNING.sprint_s * 6 ? card.money / card.work : 1;
+    return run.money < burnPerS(run) * TUNING.sprint_s * 6 ? card.money / Math.max(1, card.work) : 1;
   if (!canFund(run, card.cost, card.work)) return -1;
   const ctx = companyContext(run),
     market = marketTotals(run.market, ctx);

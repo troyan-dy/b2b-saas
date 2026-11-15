@@ -1,0 +1,118 @@
+.client-city {
+  position: absolute;
+  left: 1000px;
+  top: 304px;
+  width: 304px;
+  pointer-events: auto;
+  color: var(--ink);
+}
+.client-city[hidden] {
+  display: none;
+}
+.client-city header {
+  background: var(--paper);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--rule);
+}
+.client-city header span {
+  display: block;
+  font: 14px var(--mono);
+  letter-spacing: 0.12em;
+  color: var(--dim);
+}
+.client-city header strong {
+  display: block;
+  font: 600 44px/1.12 var(--serif);
+}
+.client-city button {
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+.client-city header button {
+  border: 0;
+  background: none;
+  padding: 10px 0 10px 10px;
+  font: 16px var(--serif);
+}
+.city-district {
+  display: block;
+  width: 100%;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  padding: 12px 8px 10px;
+  text-align: left;
+}
+.city-district:hover,
+.city-district:focus-visible {
+  background: var(--card);
+  outline: 1px solid var(--rule);
+}
+.city-roofline {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  height: 102px;
+  padding-bottom: 8px;
+}
+.city-roofline img {
+  width: 100px;
+  height: 102px;
+  object-fit: contain;
+  object-position: bottom;
+}
+.city-roofline img + img {
+  margin-left: -12px;
+}
+.city-roofline img:nth-child(2) {
+  transform: translateY(-10px);
+}
+.empty .city-roofline {
+  opacity: 0.3;
+}
+.city-name {
+  background: var(--paper);
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font: 24px var(--serif);
+}
+.city-name b {
+  font-size: 28px;
+  font-weight: 600;
+}
+.city-mood {
+  background: var(--paper);
+  display: flex;
+  justify-content: space-between;
+  margin-top: 2px;
+  font: 18px var(--mono);
+  color: var(--ink-soft);
+}
+.city-mood.low {
+  color: var(--coral);
+}
+.city-mood em {
+  font-style: normal;
+  color: var(--money);
+}
+.city-hint {
+  background: var(--paper);
+  margin: 10px 8px 0;
+  font: 16px/1.4 var(--serif);
+  color: var(--dim);
+}
+.city-hint.warning {
+  color: var(--coral);
+}
+.client-city.collapsed .city-roofline {
+  display: none;
+}
+.client-city.collapsed .city-district {
+  padding: 14px 8px;
+  border-bottom: 1px solid var(--rule);
+}

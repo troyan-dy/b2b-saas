@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { playBot, SENSIBLE, type BotStyle } from '../src/gyms/bot';
-import { answerLastChance, chooseCard, CLIENT_TYPES, createRun, IDEAS, mrr, netPerS, step, TUNING, type Idea, type Run } from '../src/systems/run/run';
+import { answerLastChance, chooseCard, draftCards, CLIENT_TYPES, createRun, IDEAS, mrr, netPerS, step, TUNING, type Idea, type Run } from '../src/systems/run/run';
 
 const STEP = 1 / 4;
 
@@ -10,13 +10,16 @@ let closed = 0;
 
 function play(seed: number, idea: Idea, style: BotStyle | null): Run {
   const run = createRun(seed, idea);
-  if (!style) run.agents = [];
+  if (!style) {
+    run.agents = [];
+    run.newsWait = 10_000; // isolate living costs from one-off refunds and other news
+  }
   let read = 0;
   for (let k = 0; k < TUNING.last_sprint * TUNING.sprint_s / STEP && !run.over; k++) {
     if (style) playBot(run, style);
     // nobody at the desk: the bank's call goes unanswered, the startup closes
     else {
-      if (run.draft) chooseCard(run, run.draft[0]);
+      if (run.draft) chooseCard(run, draftCards(run).find((card) => !card.money)!.id);
       if (run.lastChance !== null) answerLastChance(run, false);
     }
     if (run.offer !== null) run.offer = null; // the bot never sells: we want to see the whole run
@@ -57,8 +60,8 @@ describe('economy', () => {
   it('test_run_doing_nothing_goes_broke_on_the_cost_of_living_alone', () => {
     // an agent with nothing to build is free: an idle founder is eaten by rent and food only
     const run = play(1, plain, null);
-    // …and never ends well: broke, or out of time and still in the red if a windfall kept it afloat
-    expect(['broke', 'late']).toContain(run.over);
+    // Skip card pauses without taking grants: no income can offset rent and food.
+    expect(run.over).toBe('broke');
     expect(run.t / 60).toBeGreaterThan(12);
     expect(run.stats.clients).toBe(0);
   });

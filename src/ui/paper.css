@@ -11,10 +11,9 @@
 }
 .bl {
   background-color: var(--paper);
-  /* the faint dot grid of drafting paper */
-  background-image: radial-gradient(#d6d2c4 1.3px, transparent 1.4px);
-  background-size: 32px 32px;
 }
+.bl-hud { pointer-events: none; }
+.bl-goal, .bl-sprint, .bl-ledger { background: var(--paper); }
 
 /* money: the biggest text on the screen; squares fly over it */
 .bl-money {
@@ -226,7 +225,7 @@
   padding: 0;
   border: none;
   background: none;
-  font-size: max(11px, calc(15px * var(--z, 1)));
+  font-size: 17px;
   font-weight: 700;
   letter-spacing: 0.03em;
   line-height: 1;
@@ -235,11 +234,53 @@
 .bl-tag.face.hot {
   color: var(--coral);
 }
+.bl-tag.face sup { font-size: 11px; margin-left: 1px; }
+.map-inspect { padding: 0; }
+.map-upgrade {
+  position: absolute;
+  right: -29px;
+  top: -3px;
+  width: 25px;
+  height: 25px;
+  border: 1px solid var(--rule);
+  border-radius: 50%;
+  background: var(--card);
+  color: var(--money);
+  font: 700 20px/1 var(--mono);
+  cursor: pointer;
+  transform: skewY(-26.565deg);
+}
+.map-upgrade:hover { background: var(--sage); }
 /* a caption that is a button: the cell of the sheet under it too */
 .bl-tag.act {
   pointer-events: auto;
   cursor: pointer;
 }
+.bl-tag.map-task {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 4px;
+  border: 1px solid var(--rule);
+  border-radius: 5px;
+  background: var(--card);
+  font-size: 22px;
+  pointer-events: auto;
+}
+.map-task button, .map-inspect {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  padding: 2px 4px;
+  cursor: pointer;
+}
+.map-task .task-cancel { font-size: 22px; }
+.bl-tag.face .map-inspect { padding: 0; }
+.map-task button:hover, .map-inspect:hover { background: var(--paper); color: var(--coral); }
+.map-task .task-progress { font-weight: 700; color: var(--coral); }
+.map-task .task-cancel { border-left: 1px solid var(--rule); min-width: 23px; }
+.bl-tag.face.act:hover { color: var(--coral); }
 
 /* a free cell of the product: an invisible rhombus that takes the click */
 .bl-cell {

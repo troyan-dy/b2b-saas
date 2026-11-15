@@ -42,6 +42,9 @@ export interface WorkbenchSelection {
   selectedSegment: SegmentId;
   previewPrices: Partial<Record<SegmentId, number>>;
   news?: WorkbenchNews;
+  panel?: 'module' | 'clients' | null;
+  selectedModule?: string;
+  applied?: { title: string; impact: string } | null;
 }
 
 export const SEGMENT_TITLES: Record<SegmentId, string> = {
@@ -106,10 +109,13 @@ export function productEffects(kind: string, level: number): string {
 }
 
 function demand(run: Run, kind: string): string {
+  const level = run.blocks.find((block) => block.kind === kind && block.live)?.level ?? 0;
   const demand = run.market.groups
     .map((group) => {
       const count = group.profiles
-        .filter((profile) => profile.needs.some((need) => need.block === kind))
+        .filter((profile) =>
+          profile.needs.some((need) => need.block === kind && need.level > level),
+        )
         .reduce((sum, profile) => sum + profile.count, 0);
       return count ? `${SEGMENT_TITLES[group.id]} ${whole(count)}` : '';
     })
@@ -118,6 +124,7 @@ function demand(run: Run, kind: string): string {
     (client) =>
       !client.happy &&
       client.want === kind &&
+      client.wantLevel > level &&
       (client.promised || client.wantLevel > 1 || run.known.includes(kind)),
   ).length;
   if (contracts) demand.push(L(`договоры ${contracts}`, `contracts ${contracts}`));
@@ -354,7 +361,7 @@ function segmentPanel(
   return {
     id,
     title: SEGMENT_TITLES[id],
-    count: segment.count,
+    count: segment.count + contracts.length,
     happiness: segment.satisfaction,
     delta: segment.delta,
     leads: segment.leads,
@@ -365,8 +372,8 @@ function segmentPanel(
     priceDisabled: Boolean(run.draft || run.over),
     priceLabel: `${rate(segment.unitPrice / TUNING.sprint_s)}${PER_S}`,
     forecast: L(
-      `На текущем продукте: ${rate(forecast.before.income / TUNING.sprint_s)} → ${rate(forecast.income / TUNING.sprint_s)}/с. Ожидаемый уход ≈${forecast.lost}, удовлетворённость ${segment.satisfaction} → ${forecast.after.satisfaction}%. Без новых клиентов; токены от цены не дорожают.`,
-      `Current product: ${rate(forecast.before.income / TUNING.sprint_s)} → ${rate(forecast.income / TUNING.sprint_s)}/s. Expected departures ≈${forecast.lost}, satisfaction ${segment.satisfaction} → ${forecast.after.satisfaction}%. Excludes new clients; price does not raise token costs.`,
+      `Ожидаемый доход ${rate(forecast.before.income / TUNING.sprint_s)} → ${rate(forecast.income / TUNING.sprint_s)}/с; могут уйти ≈${forecast.lost}. Без учёта новых клиентов.`,
+      `Expected income ${rate(forecast.before.income / TUNING.sprint_s)} → ${rate(forecast.income / TUNING.sprint_s)}/s; ≈${forecast.lost} may leave. Excludes new customers.`,
     ),
     needs: segmentNeeds(run, ctx, id, modules),
     reasons: Object.entries(segment.reasons)
@@ -404,13 +411,20 @@ export function workbenchView(run: Run, selection: WorkbenchSelection): Workbenc
         `Release ${report.sprint}: ${shipped || 'work continues'}. Clients +${report.came} / −${report.left}. Subscriptions ${rate(report.mrr / TUNING.sprint_s)}/s.`,
       )
     : L(
-        'Выберите развитие продукта. Эффект проекта включится после выпуска.',
-        'Choose how the product develops. A project takes effect after release.',
+        'Выбери одну карту. Усиление сработает сразу.',
+        'Pick one card. Its effect starts immediately.',
       );
   const infra = PRODUCTION.infrastructure;
   const infraTask = run.tasks.find((task) => task.kind === 'infrastructure');
   const active = activeWork(run);
   return {
+    panel: selection.panel,
+    selectedModule: selection.selectedModule,
+    applied: selection.applied,
+    perks: [run.strategy.support, run.strategy.processing].flatMap((id) => {
+      const card = DRAFT_CARDS.find((entry) => entry.id === id);
+      return card ? [{ id: card.id, title: card.title, impact: card.impact }] : [];
+    }),
     tasks,
     modules,
     budget: {

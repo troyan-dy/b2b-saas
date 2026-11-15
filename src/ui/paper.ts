@@ -1,6 +1,8 @@
 import './paper.css';
 import { L } from '../core/lang';
 import { createWorkbench, type WorkbenchAction, type WorkbenchView } from './workbench';
+import { createClientCity, type CityView } from './client-city';
+import type { SegmentId } from '../systems/company/market';
 
 export interface ShelfItem {
   id: string;
@@ -56,6 +58,7 @@ export interface Paper {
   setNews(text: string, hint?: string): void;
   setShelf(sections: readonly ShelfSection[]): void;
   setWorkbench(view: WorkbenchView | null): void;
+  setCity(view: CityView | null): void;
   /** a row of the shelf answers a click */
   flash(section: string, item: string, how: 'bought' | 'denied'): void;
   /** a caption of a node; coordinates are screen pixels of the 1920×1080 layer */
@@ -80,6 +83,7 @@ export interface Paper {
   onCell: (id: string) => void;
   onAnswer: (index: number) => void;
   onWorkbench: (action: WorkbenchAction) => void;
+  onCity: (segment: SegmentId | 'toggle') => void;
 }
 
 /**
@@ -102,13 +106,15 @@ export function createPaper(under: HTMLElement, over: HTMLElement): Paper {
   over.append(top);
 
   const hud = sheet.querySelector('.bl-hud') as HTMLElement;
-  const money = sheet.querySelector('.bl-money') as HTMLElement;
+  // Labels stay above the animated canvas; money can fly behind them.
+  top.prepend(hud);
+  const money = hud.querySelector('.bl-money') as HTMLElement;
   const moneyBig = money.querySelector('b') as HTMLElement;
   const moneySub = money.querySelector('span') as HTMLElement;
-  const sprintLabel = sheet.querySelector('.bl-sprint i') as HTMLElement;
-  const sprintBar = sheet.querySelector('.bl-sprint s') as HTMLElement;
-  const goal = sheet.querySelector('.bl-goal') as HTMLElement;
-  const ledger = sheet.querySelector('.bl-ledger') as HTMLElement;
+  const sprintLabel = hud.querySelector('.bl-sprint i') as HTMLElement;
+  const sprintBar = hud.querySelector('.bl-sprint s') as HTMLElement;
+  const goal = hud.querySelector('.bl-goal') as HTMLElement;
+  const ledger = hud.querySelector('.bl-ledger') as HTMLElement;
   const shop = top.querySelector('.bl-shop') as HTMLElement;
   const shelfBody = shop.querySelector('.bl-shelf-body') as HTMLElement;
   const newsText = top.querySelector('.bl-news span') as HTMLElement;
@@ -126,6 +132,7 @@ export function createPaper(under: HTMLElement, over: HTMLElement): Paper {
   let callSig = '';
   let shelfSections: readonly ShelfSection[] = [];
   const workbench = createWorkbench(shop, top, (action) => paper.onWorkbench(action));
+  const city = createClientCity(top, (segment) => paper.onCity(segment), () => paper.onCity('toggle'));
   const last = { money: '', sub: '', news: '', hint: '', sprint: '', part: -1, zoom: -1, goal: '', ledger: '' };
 
   const paper: Paper = {
@@ -134,6 +141,8 @@ export function createPaper(under: HTMLElement, over: HTMLElement): Paper {
     onCell: () => undefined,
     onAnswer: () => undefined,
     onWorkbench: () => undefined,
+    onCity: () => undefined,
+    setCity: (view) => city.set(view),
 
     setMoney(text, sub, broke = false) {
       if (text !== last.money) {
@@ -335,6 +344,10 @@ export function createPaper(under: HTMLElement, over: HTMLElement): Paper {
   cellLayer.addEventListener('click', (e) => {
     const cell = (e.target as HTMLElement).closest('.bl-cell') as HTMLElement | null;
     if (cell) paper.onCell(cell.dataset.c ?? '');
+  });
+  tagLayer.addEventListener('click', (event) => {
+    const button = (event.target as HTMLElement).closest<HTMLElement>('[data-map]');
+    if (button) paper.onCell(button.dataset.map ?? '');
   });
   callCard.addEventListener('click', (e) => {
     const a = (e.target as HTMLElement).closest('[data-a]') as HTMLElement | null;
