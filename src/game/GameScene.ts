@@ -3,7 +3,6 @@ import { BLOCK_BY_ID } from '../content/blocks';
 import {
   BANK_ANSWERS,
   BANK_TEXT,
-  benefits,
   callAnswers,
   CALL_ASK,
   CLIENT_SAYS,
@@ -29,21 +28,28 @@ import { logEvent, metrics } from '../core/metrics';
 import type { Rng } from '../core/rng';
 import { playSound, unlockSound } from '../core/sound';
 import { PALETTE } from '../data/palette';
-import { dec, money, PER_S, plural, rate } from '../ui/format';
-import type { Paper, ShelfItem, ShelfKeys, ShelfSection } from '../ui/paper';
+import { money, PER_S, plural, rate } from '../ui/format';
+import type { Paper, ShelfKeys, ShelfSection } from '../ui/paper';
+import type { WorkbenchAction } from '../ui/workbench';
+import { projectName, workbenchView, type WorkbenchSelection } from '../ui/workbench-view';
+import { companyContext, companyTotals, customerCount } from '../systems/company/company';
+import { SEGMENTS, schedulePrice, segmentView } from '../systems/company/market';
 import {
   answerCall,
   answerDilemma,
   answerLastChance,
   answerOffer,
+  activeWork,
   busy,
   canHire,
   cellsMax,
   clientPay,
-  clientsMax,
   crunch,
+  chooseCard,
+  deferTask,
   demolish,
   dilemmaOf,
+  expandInfrastructure,
   fire,
   flows,
   freeCells,
@@ -52,35 +58,28 @@ import {
   handy,
   hire,
   honestMult,
-  IDEAS,
   isDemo,
   isLive,
-  isSite,
   LANES,
   links,
+  linkBonus,
   logos,
   mortgageSeconds,
+  moveTask,
   netPerS,
   pitch,
   place,
   promiseSprints,
-  researchNeed,
-  reworkNeed,
-  reworks,
+  resumeTask,
   RULES,
   setLane,
   setReview,
   shelf,
-  signing,
-  sites,
   step,
   TIERS,
   TUNING,
-  unknownAsks,
   upgrade,
   valuation,
-  valueMult,
-  workNeed,
   type ClientType,
   type Lane,
   type Run,
@@ -90,7 +89,7 @@ import {
 import { Board, type BlockOnSheet, type SlotOnSheet } from '../view/board';
 import type { Pt } from '../view/iso';
 import { Squares } from '../view/squares';
-import { AGENT_SLOTS, BUS_GAP, BUS_Y, CLIENT_SLOTS, DESK, MARKET, MONEY_RECT, STAGE_VIEW, TRUNK_X, VIEW_AT } from './layout';
+import { AGENT_SLOTS, BUS_GAP, BUS_Y, DESK, MARKET, MONEY_RECT, STAGE_VIEW, VIEW_AT } from './layout';
 
 const STEP = 1 / 60;
 
@@ -115,6 +114,8 @@ export const CLIENT_LOOK: Record<ClientType, { height: number; squares: number }
 };
 
 export interface GameHooks {
+  /** Resuming a save does not replay the first-run tutorial. */
+  restored?: boolean;
   /** called every simulated step, before it: a bot plays here */
   beforeStep?: (run: Run) => void;
   onEnd: (run: Run) => void;
@@ -142,7 +143,7 @@ export class GameScene extends Phaser.Scene {
   /** the block picked on the shelf and waiting for a cell */
   private picked: string | null = null;
   /** «снести блок» is on: the next click on a shipped block takes it off the sheet */
-  private razing = false;
+  private razing: string | null = null;
   /** squares that have arrived at each block: the sheet shows work when it lands, not when it is sent */
   private readonly landed = new Map<string, number>();
   private readonly faces = new Map<string, Phaser.GameObjects.Rectangle>();
@@ -162,10 +163,11 @@ export class GameScene extends Phaser.Scene {
   private hands = 0;
   /** Esc: the game stands still and asks what next */
   private pauseCard = false;
-  /** when Claude may next repeat what stops the money */
-  private nagAt = 0;
   /** what clients say aloud: a line over the building of client `id` until the clock reaches `until` */
   private readonly quotes = new Map<number, { text: string; until: number }>();
+  private readonly workbenchSelection: WorkbenchSelection = { picked: null, selectedSegment: 'small', previewPrices: {} };
+  private workbenchAt = -Infinity;
+  private draftShown = false;
 
   constructor(run: Run, rng: Rng, paper: Paper, hooks: GameHooks) {
     super('game');
@@ -176,9 +178,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   preload(): void {
-    const others = [...IDEAS.corp, ...IDEAS.startup, ...IDEAS.gov].map((c) => c.texture);
-    const keys = new Set(['desk', 'laptop', this.run.idea.aud.texture, ...others]);
-    for (const key of keys) this.load.image(`node_${key}`, `assets/img/nodes/${key}.webp`);
+    for (const key of ['desk', 'laptop']) this.load.image(`node_${key}`, `assets/img/nodes/${key}.webp`);
   }
 
   create(): void {
@@ -193,6 +193,7 @@ export class GameScene extends Phaser.Scene {
     this.paper.onLane = (owner, key) => this.onKey(owner, key);
     this.paper.onCell = (id) => this.onCell(id);
     this.paper.onAnswer = (k) => this.onAnswer(k);
+    this.paper.onWorkbench = (action) => this.onWorkbench(action);
     this.input.keyboard?.on('keydown', (e: KeyboardEvent) => this.onKeyDown(e));
     // the tab is hidden: the startup waits — money must not burn while nobody is looking
     document.addEventListener('visibilitychange', () => {
@@ -204,8 +205,8 @@ export class GameScene extends Phaser.Scene {
 
     for (const b of this.run.blocks) this.landed.set(b.kind, b.done);
     this.newsAt = 6;
-    this.paper.setNews(`${pitch(this.run.idea)}. ${L('Пока что это три слова и один человек', 'So far it is three words and one person')}`, this.newsHint());
-    this.say(
+    this.paper.setNews(`${pitch(this.run.idea)}. ${this.hooks.restored ? L('Стартап вернулся к работе', 'The startup is back at work') : L('Пока что это три слова и один человек', 'So far it is three words and one person')}`, this.newsHint());
+    if (!this.hooks.restored) this.say(
       [
         CLAUDE,
         ...L(
@@ -227,37 +228,94 @@ export class GameScene extends Phaser.Scene {
       return;
     }
     const dt = Math.min(deltaMs / 1000, 0.25);
-    if (!this.paused) {
+    // The bot must still be able to make its draft choice while simulation time stands still.
+    if (this.run.draft) {
+      this.acc = 0;
+      if (!this.paused) this.hooks.beforeStep?.(this.run);
+      if (this.run.events.length > 0) this.drain();
+    }
+    if (!this.paused && !this.run.draft) {
       this.acc += dt * this.speed;
       while (this.acc >= STEP) {
         this.hooks.beforeStep?.(this.run);
+        if (this.run.draft) { this.acc = 0; break; }
         step(this.run, STEP);
         this.acc -= STEP;
         if (this.run.events.length > 0) this.drain();
-        if (this.run.over) break;
+        if (this.run.over || this.run.draft || this.run.lastChance !== null) { this.acc = 0; break; }
       }
-      this.clock += dt;
-      this.flowMoney(dt);
-      this.tickNews(dt);
+      if (!this.run.draft && !this.run.over) {
+        this.clock += dt;
+        this.flowMoney(dt);
+        this.tickNews(dt);
+      }
     }
-    this.board.step(dt * Math.min(this.speed, 3));
-    this.squares.step(dt * Math.min(this.speed, 3));
+    const visualDt = this.paused || this.run.draft ? 0 : dt * Math.min(this.speed, 3);
+    this.board.step(visualDt);
+    this.squares.step(visualDt);
     this.show();
   }
 
   // ---------------------------------------------------------------- the player's clicks
 
+  private onWorkbench(action: WorkbenchAction): void {
+    const run = this.run;
+    if (this.ended || run.over) return;
+    if (action.type === 'choose-card') {
+      if (chooseCard(run, action.id)) {
+        this.acc = 0;
+        this.pauseCard = false;
+        this.paused = false;
+        playSound('buy', 2);
+        this.workbenchAt = -Infinity;
+        this.show();
+      }
+      return;
+    }
+    if (run.draft || this.paused) return;
+    unlockSound();
+    let changed = true;
+    switch (action.type) {
+      case 'place': this.onShelf('blocks', action.block); break;
+      case 'upgrade': changed = upgrade(run, action.block); break;
+      case 'demolish':
+        this.picked = null;
+        this.razing = action.block;
+        break;
+      case 'move': changed = moveTask(run, action.task, action.direction); break;
+      case 'defer': changed = deferTask(run, action.task); break;
+      case 'resume': changed = resumeTask(run, action.task); break;
+      case 'expand-infrastructure': changed = expandInfrastructure(run); break;
+      case 'select-segment': this.workbenchSelection.selectedSegment = action.segment; break;
+      case 'preview-price':
+        this.workbenchSelection.previewPrices[action.segment] = action.value;
+        break;
+      case 'confirm-price': {
+        const price = this.workbenchSelection.previewPrices[action.segment];
+        changed = price !== undefined && schedulePrice(run.market, action.segment, price);
+        if (changed) delete this.workbenchSelection.previewPrices[action.segment];
+        break;
+      }
+    }
+    if (action.type !== 'preview-price' && action.type !== 'place') playSound(changed ? 'ui' : 'waste');
+    this.workbenchAt = -Infinity;
+    if (run.events.length > 0) this.drain();
+    this.show();
+  }
+
   private onShelf(section: string, item: string): void {
+    if (this.paused || this.run.draft || this.ended) return;
+    this.workbenchAt = -Infinity;
     unlockSound();
     if (section !== 'blocks') return;
     if (item === 'x') {
       // the wrecking tool: on, then a click on the block that has to go
-      this.razing = !this.razing;
+      this.razing = this.razing ? null : '*';
       this.picked = null;
       playSound('ui');
       return;
     }
-    this.razing = false;
+    this.razing = null;
     if (item.startsWith('up:')) {
       // a rework: no cell to choose — it is built on the block the client named
       if (upgrade(this.run, item.slice(3))) playSound('buy', 0);
@@ -267,7 +325,7 @@ export class GameScene extends Phaser.Scene {
       }
       return;
     }
-    if (sites(this.run).length >= TUNING.sites_max || this.run.blocks.length >= cellsMax(this.run)) {
+    if (!shelf(this.run).includes(item) || this.run.blocks.length >= cellsMax(this.run)) {
       this.paper.flash('blocks', item, 'denied');
       playSound('waste');
       return;
@@ -277,12 +335,15 @@ export class GameScene extends Phaser.Scene {
   }
 
   private onCell(id: string): void {
+    if (this.paused || this.run.draft || this.ended) return;
+    this.workbenchAt = -Infinity;
     if (id === 'site') {
       this.byHand();
       return;
     }
     if (id.startsWith('x:')) {
-      if (demolish(this.run, id.slice(2))) this.razing = false;
+      if (!this.razing || (this.razing !== '*' && this.razing !== id.slice(2))) return;
+      if (demolish(this.run, id.slice(2))) this.razing = null;
       else playSound('waste');
       return;
     }
@@ -293,9 +354,12 @@ export class GameScene extends Phaser.Scene {
 
   /** The founder's own square of work on a lane: thrown from the desk to where that work goes. */
   private byHand(lane: Lane = 'build'): void {
+    if (this.paused || this.run.draft || this.ended) return;
+    this.workbenchAt = -Infinity;
     unlockSound();
     const run = this.run;
-    const site = run.blocks.find(isSite);
+    const task = activeWork(run) ?? run.tasks.find((entry) => entry.status === 'queued');
+    const site = task?.block ? run.blocks.find((block) => block.kind === task.block) : undefined;
     const can = handy(run, lane);
     if (!can || !crunch(run, lane)) {
       playSound('waste');
@@ -307,7 +371,7 @@ export class GameScene extends Phaser.Scene {
     this.hands++;
     playSound('yes', this.hands % 6);
     const [fx, fy] = this.board.onScreen(DESK[0] - 40, DESK[1] - 130);
-    const to: Pt = lane === 'build' && site ? this.board.top(site) : lane === 'fix' ? this.board.cell(0, 0) : MARKET;
+    const to: Pt = lane === 'build' ? site ? this.board.top(site) : [DESK[0] + 100, DESK[1] - 150] : lane === 'fix' ? this.board.cell(0, 0) : MARKET;
     const [tx, ty] = this.board.onScreen(...to);
     // code is Claude's colour; a post, a call and a fix are the human's own ink
     this.squares.fly({ x: fx - 10, y: fy - 10, w: 20, h: 20 }, { x: tx - 20, y: ty - 10, w: 40, h: 20 }, 1, lane === 'build' ? PALETTE.coral : PALETTE.ink, 160, [0.35, 0.45]);
@@ -315,6 +379,8 @@ export class GameScene extends Phaser.Scene {
   }
 
   private onKey(owner: string, key: string): void {
+    if (this.paused || this.run.draft || this.ended) return;
+    this.workbenchAt = -Infinity;
     unlockSound();
     if (owner === 'hand') {
       this.byHand(key as Lane);
@@ -337,6 +403,8 @@ export class GameScene extends Phaser.Scene {
   }
 
   private onAnswer(k: number): void {
+    if (this.run.draft || this.ended) return;
+    this.workbenchAt = -Infinity;
     playSound('ui');
     if (this.pauseCard) {
       const audio = this.hooks.audio;
@@ -364,12 +432,12 @@ export class GameScene extends Phaser.Scene {
 
   private onKeyDown(e: KeyboardEvent): void {
     unlockSound();
-    if (this.ended) return;
+    if (this.ended || this.run.draft) return;
     if (e.code === 'Escape') {
       // first Esc drops the picked block or the wrecking tool, the next one stops the clock
       if (this.picked || this.razing) {
         this.picked = null;
-        this.razing = false;
+        this.razing = null;
       }
       else {
         this.pauseCard = !this.pauseCard;
@@ -403,6 +471,7 @@ export class GameScene extends Phaser.Scene {
   // ---------------------------------------------------------------- what happened in the simulation
 
   private drain(): void {
+    if (this.run.events.some((event) => event.type !== 'work')) this.workbenchAt = -Infinity;
     for (const e of this.run.events) this.onEvent(e);
     this.run.events.length = 0;
   }
@@ -414,7 +483,7 @@ export class GameScene extends Phaser.Scene {
         this.landed.set(e.kind, 0);
         playSound('buy', 0);
         logEvent(`placed:${e.kind}`);
-        if (run.blocks.length === 2) {
+        if (run.blocks.length === 2 && !this.hooks.restored) {
           this.say(
             [
               CLAUDE,
@@ -438,13 +507,22 @@ export class GameScene extends Phaser.Scene {
         const land = (): void => {
           if (block) this.landed.set(block.kind, (this.landed.get(block.kind) ?? 0) + 1);
         };
-        if (e.agent === 0 || this.speed > 2 || !this.board.hasRoute(key)) land();
-        else this.board.flow(key, PALETTE.coral, 620, land);
+        if (e.agent === 0 || this.speed > 2) land();
+        else if (e.lane === 'build' && !block) {
+          // A card or infrastructure project is work at the founder's desk, not at a phantom cell.
+          const agent = this.board.node(key);
+          if (agent) {
+            const [sx, sy] = this.board.onScreen(agent.x, agent.y - 100);
+            const [tx, ty] = this.board.onScreen(DESK[0] + 100, DESK[1] - 150);
+            this.squares.fly({ x: sx, y: sy, w: 10, h: 10 }, { x: tx, y: ty, w: 20, h: 16 }, 1, PALETTE.coral, 60, [0.4, 0.65]);
+          }
+        } else if (this.board.hasRoute(key)) this.board.flow(key, PALETTE.coral, 620, land);
+        else land();
         if (this.speed <= 2 && e.agent !== 0) playSound('auto');
         // the founder checks this lane: for every square of work an ink square leaves his desk
-        if (e.agent !== 0 && e.lane === run.review && this.speed <= 2 && this.board.hasRoute('me')) {
+        if (e.agent !== 0 && e.lane === run.review && this.speed <= 2 && this.board.hasRoute('me') && (e.lane !== 'build' || block)) {
           this.board.flow('me', PALETTE.ink, 600);
-          if (!this.said.has('t:review') && (this.termUntil === 0 || this.clock > this.termUntil - 4)) {
+          if (!this.hooks.restored && !this.said.has('t:review') && (this.termUntil === 0 || this.clock > this.termUntil - 4)) {
             this.said.add('t:review');
             this.say(
               [
@@ -472,9 +550,12 @@ export class GameScene extends Phaser.Scene {
         if (e.kind === 'core') this.news(NEWS_EVENT.firstBlock);
         break;
       case 'release': {
+        this.picked = null;
+        this.razing = null;
+        this.syncStage(1100);
         metrics.completed = true;
         logEvent(`release:${e.report.sprint}`);
-        const names = e.report.shipped.map((k) => q(BLOCK_BY_ID[k]?.short ?? k));
+        const names = [...e.report.shipped.map((k) => BLOCK_BY_ID[k]?.short ?? k), ...(e.report.projects ?? []).map(projectName)].map(q);
         const reasons = e.report.reasons.map((k) => BLOCK_BY_ID[k]?.short ?? '');
         const perS = { mrr: e.report.mrr / TUNING.sprint_s, tokens: e.report.tokens / TUNING.sprint_s };
         this.say(releaseLines({ ...e.report, ...perS, shipped: names, reasons, unpaid: isLive(run, 'pay') ? 0 : run.clients.length }), 16);
@@ -484,6 +565,7 @@ export class GameScene extends Phaser.Scene {
           const b = run.blocks.find((x) => x.kind === kind);
           if (b) this.burst(...this.board.onScreen(...this.board.top(b)), 10);
         }
+        if (e.report.projects?.length) this.burst(...this.board.onScreen(DESK[0] + 100, DESK[1] - 150), 10);
         this.board.pulse();
         if (e.report.mrr > 0) this.paper.popMoney();
         if (links(run).length > 0 && !this.said.has('link')) {
@@ -499,21 +581,8 @@ export class GameScene extends Phaser.Scene {
       case 'client': {
         const c = run.clients.find((x) => x.id === e.id);
         if (!c) return;
-        const [x, y] = CLIENT_SLOTS[c.slot % CLIENT_SLOTS.length];
-        const h = CLIENT_LOOK[c.type].height;
-        // a chain is seen at once: a second branch stands behind the first
-        if (c.type === 'mid') this.place(`c${c.id}b`, c.texture, x - 46, y - 20, h * 0.82, true);
-        const img = this.place(`c${c.id}`, c.texture, x, y, h, true);
-        this.board.route(`c${c.id}`, [
-          [TRUNK_X - 80, 0],
-          [TRUNK_X, 0],
-          [TRUNK_X, y - 56],
-          // the picture is still popping in: its final width is what counts
-          [x - (img.width * (h / img.height)) / 2 - 10, y - 56],
-        ]);
         this.syncStage(1100);
-        const [sx, sy] = this.board.onScreen(x, y - 150);
-        this.paper.pop(sx, sy, L('+ клиент', '+ client'), 'good');
+        this.paper.pop(1178, 740, `${c.name}: ${L('+ ключевой договор', '+ key contract')}`, 'good');
         playSound('all');
         logEvent(`client:${c.type}`);
         if (run.stats.clients === 1) {
@@ -528,13 +597,8 @@ export class GameScene extends Phaser.Scene {
         break;
       }
       case 'left': {
-        const [x, y] = this.board.onScreen(...this.nodePos(`c${e.id}`));
         const pool = e.demo ? LEFT_DEMO : e.closed ? LEFT_CLOSED : e.reason ? LEFT_KNOWN : LEFT_UNKNOWN;
-        this.paper.pop(x, y - 150 * this.board.zoom, e.say ?? pool[e.id % pool.length].replace('%s', BLOCK_BY_ID[e.reason]?.short ?? ''), 'bad');
-        this.board.dropNode(`c${e.id}`);
-        this.board.dropNode(`c${e.id}b`);
-        this.board.dropRoute(`c${e.id}`);
-        this.paper.dropTag(`c${e.id}`);
+        this.paper.pop(1178, 740, e.say ?? pool[e.id % pool.length].replace('%s', BLOCK_BY_ID[e.reason]?.short ?? ''), 'bad');
         playSound('waste');
         logEvent(e.closed ? 'closed' : 'left');
         if (!e.closed && !this.said.has('left')) {
@@ -570,8 +634,8 @@ export class GameScene extends Phaser.Scene {
             [
               CLAUDE,
               ...L(
-                ['Клиент просит доработку блока.', 'Она вверху полки, с пометкой', '«доработка». Сделаем — заплатит', 'больше. Не сделаем — уйдёт.'],
-                ['A client asks to upgrade a block.', 'It is at the top of the shelf, marked', '“upgrade”. Do it — the client pays', 'more. Don’t — the client leaves.'],
+                ['Ключевой клиент просит доработку.', 'В таблице продукта поставь новый', 'уровень в очередь. Сделаем — платит', 'больше. Не сделаем — уйдёт.'],
+                ['A key client asks for an upgrade.', 'Queue the next level in the product', 'table. Ship it — the client pays more.', 'Don’t — the client leaves.'],
               ),
             ],
             14,
@@ -615,15 +679,13 @@ export class GameScene extends Phaser.Scene {
         break;
       }
       case 'kept': {
-        const [x, y] = this.board.onScreen(...this.nodePos(`c${e.id}`));
-        this.paper.pop(x, y - 170 * this.board.zoom, L('обещание выполнено', 'promise kept'), 'good');
+        this.paper.pop(1178, 740, L('обещание выполнено', 'promise kept'), 'good');
         playSound('buy', 9);
         logEvent('kept');
         break;
       }
       case 'refund': {
-        const [x, y] = this.board.onScreen(...this.nodePos(`c${e.id}`));
-        this.paper.pop(x, y - 190 * this.board.zoom, `${L('возврат', 'refund')} ${money(-e.sum)}`, 'bad');
+        this.paper.pop(1178, 740, `${L('возврат', 'refund')} ${money(-e.sum)}`, 'bad');
         this.cameras.main.shake(140, 0.003);
         playSound('waste');
         logEvent('refund');
@@ -638,15 +700,14 @@ export class GameScene extends Phaser.Scene {
         logEvent(`news:${e.id}`);
         break;
       case 'demo':
-        this.news((e.ok ? NEWS_EVENT.demoOk : NEWS_EVENT.demoFail).replace('%s', e.ok ? (BLOCK_BY_ID[e.name]?.short ?? e.name) : e.name));
+        this.news((e.ok ? NEWS_EVENT.demoOk : NEWS_EVENT.demoFail).replace('%s', e.ok ? projectName(e.name) : e.name));
         this.newsHold = 16;
         this.newsAt = 16;
         playSound(e.ok ? 'finale' : 'waste');
         logEvent(`demo:${e.ok ? 'ok' : 'fail'}`);
         break;
       case 'hero': {
-        const [x, y] = this.board.onScreen(...this.nodePos(`c${e.id}`));
-        this.paper.pop(x, y - 190 * this.board.zoom, L('героический релиз: платит ×1,5', 'heroic release: pays ×1.5'), 'good');
+        this.paper.pop(1178, 740, L('героический релиз: платит ×1,5', 'heroic release: pays ×1.5'), 'good');
         this.news(NEWS_EVENT.hero);
         playSound('finale');
         logEvent('hero');
@@ -688,6 +749,7 @@ export class GameScene extends Phaser.Scene {
         logEvent(`end:${e.ending}`);
         this.ended = true;
         this.paper.call(null);
+        this.paper.setWorkbench(null);
         // nobody speaks over the ending
         this.quotes.clear();
         if (e.ending === 'sold' || e.ending === 'profit') playSound('finale');
@@ -731,7 +793,7 @@ export class GameScene extends Phaser.Scene {
       b.debt = Math.min(15, debt);
       debt -= b.debt;
     }
-    const free = this.picked ? freeCells(run) : [];
+    const free = this.picked && !run.draft && !this.paused ? freeCells(run) : [];
     const slots: SlotOnSheet[] = free.map((c) => ({ i: c.i, j: c.j, hot: this.picked !== null && friendsAt(run, this.picked, c.i, c.j) > 0 }));
     board.sync(blocks, slots);
     // a player who has not clicked yet does not know that things are clicked: what waits for a click breathes
@@ -741,15 +803,17 @@ export class GameScene extends Phaser.Scene {
       return { id: `${c.i},${c.j}`, x, y, pulse: run.blocks.length < 2 };
     });
     // the wrecking tool: every shipped block but the base three can be clicked off the sheet
-    if (this.razing) {
+    if (this.razing && !run.draft && !this.paused) {
       for (const b of run.blocks) {
-        if (!b.live || b.up || RULES[b.kind].role === 'base') continue;
+        if (!b.live || b.up || run.tasks.some((task) => task.block === b.kind) || RULES[b.kind].role === 'base' || (this.razing !== '*' && b.kind !== this.razing)) continue;
         const [x, y] = board.onScreen(...board.top(b));
         cells.push({ id: `x:${b.kind}`, x, y, pulse: true });
       }
     }
-    const site = run.blocks.find(isSite);
-    if (!this.picked && !this.razing && site) {
+    const next = run.tasks.find((task) => task.status === 'queued');
+    const active = activeWork(run) ?? (next && run.money >= next.cost ? next : undefined);
+    const site = active?.block ? run.blocks.find((block) => block.kind === active.block) : undefined;
+    if (!run.draft && !this.paused && !this.picked && !this.razing && site) {
       // the site itself takes clicks: the founder finishes the work by hand
       const [x, y] = board.onScreen(...board.top(site));
       cells.push({ id: 'site', x, y, pulse: novice && run.energy >= 1 });
@@ -764,17 +828,15 @@ export class GameScene extends Phaser.Scene {
       keep.add(id);
       const level = run.blocks.find((r) => r.kind === b.kind)?.level ?? 1;
       this.paper.tag(id, x, y, level > 1 ? `${kind.short} v${level}` : kind.short, b.built ? 'face' : 'face hot');
-      if (!b.built || b.up) {
+      const task = run.tasks.find((entry) => entry.block === b.kind);
+      if (task) {
         // how much of the site is done: a number above it
         const [tx, ty] = board.onScreen(...board.top(b));
         keep.add(`b:n${b.kind}`);
         // the first site of the run says in words that it can be clicked
-        const call = b.up
-          ? L('<i>доработка</i>', '<i>upgrade</i>')
-          : novice && b === blocks.find((x) => !x.built)
-            ? L('<i>кликай по блоку: помогай руками</i>', '<i>click the block: help with your hands</i>')
-            : '';
-        this.paper.tag(`b:n${b.kind}`, tx, ty - (call ? 82 : 64) * z, `<b>${b.done}/${b.need}</b>${call}`, 'small hot');
+        const status = task.status === 'backlog' ? L('в бэклоге', 'in backlog') : task.status === 'queued' ? L('в очереди', 'queued') : task.status === 'ready' ? L('к релизу', 'for release') : task.kind === 'upgrade' ? L('доработка', 'upgrade') : L('строится', 'building');
+        const hint = novice && task.status === 'active' ? L('<i>клик: помочь руками</i>', '<i>click: help by hand</i>') : '';
+        this.paper.tag(`b:n${b.kind}`, tx, ty - (hint ? 82 : 64) * z, `<b>${Math.min(task.done, task.work)}/${task.work}</b> · ${status}${hint}`, 'small hot');
       }
     }
     // the very first placement: the free cell says «click here»
@@ -790,7 +852,8 @@ export class GameScene extends Phaser.Scene {
       const [x, y] = board.onScreen(...board.cell(s.i, s.j));
       const id = `b:slot${s.i},${s.j}`;
       keep.add(id);
-      this.paper.tag(id, x, y - 9, L('связка', 'combo'), 'small hot');
+      const bonus = Math.round(friendsAt(run, this.picked!, s.i, s.j) * linkBonus(run) * 100);
+      this.paper.tag(id, x, y - 9, L(`чек +${bonus}% после выпуска`, `bill +${bonus}% after release`), 'small hot');
     }
     this.paper.pruneTags('b:', keep);
 
@@ -817,31 +880,12 @@ export class GameScene extends Phaser.Scene {
     });
     this.paper.pruneTags('a', keepA);
 
-    // the market: leads and interviews gather where the trunk to the clients starts
-    const promo = run.agents.some((a) => a.lane === 'promo');
-    const research = run.agents.some((a) => a.lane === 'research');
-    if (promo || research || run.clients.length > 0 || run.leads > 0) {
-      // the caption stands in the free corner of the sheet: left of the trunk, above the lines of the agents
-      const [x, y] = board.onScreen(MARKET[0], MARKET[1]);
-      const places = clientsMax(run);
-      // promotion is a funnel with one number: how much of the next client is already there
-      const whole = Math.floor(run.leads);
-      const part = Math.round((run.leads - whole) * 100);
-      const coming =
-        whole > 0
-          ? L(`<b>${whole}</b> ${plural(whole, ['клиент придёт', 'клиента придут', 'клиентов придут'])} на релизе`, `<b>${whole}</b> ${plural(whole, ['client comes', 'clients come', 'clients come'])} at the release`)
-          : L(`до нового клиента <b>${part}%</b>`, `next client <b>${part}%</b>`);
-      const full = run.clients.length >= places ? L(' · <b>мест нет</b>: их добавляют блоки «+ места»', ' · <b>no seats</b>: “+ seats” blocks add them') : '';
-      const ask =
-        unknownAsks(run).length > 0
-          ? L(`разведка: до ответа <b>${run.insight} из ${researchNeed(run)}</b>`, `research: <b>${run.insight} of ${researchNeed(run)}</b> to an answer`)
-          : L('разведка: все запросы известны', 'research: every request is known');
-      // big clients that are happy put their logos on the landing page: promotion works better with every one
-      const boost = dec(1 + TUNING.logos.promo * logos(run));
-      const trust = logos(run) > 0 ? L(`<i>логотипы на лендинге: ${logos(run)} · продвижение ×${boost}</i>`, `<i>logos on the landing page: ${logos(run)} · promotion ×${boost}</i>`) : '';
-      const head = L(`<b>рынок</b> · клиентов ${run.clients.length} из ${places}`, `<b>market</b> · clients ${run.clients.length} of ${places}`);
-      this.paper.tag('market', x - 12, y - 16, `${head}<i>${L('продвижение', 'promotion')}: ${coming}${full}</i>${trust}<i>${ask}</i>`, 'small corner');
-    }
+    // A cloud is a cohort, not a seat cap. Infrastructure limits service quality under load.
+    const company = companyTotals(run);
+    this.paper.tag('market', 1308, 810, L(
+      `<b>нагрузка ${Math.round(company.load)} / ${Math.round(company.capacity)}</b><i>ключевых договоров отдельно: ${run.clients.length}</i><i>спрос и тарифы — клик по облаку</i>`,
+      `<b>load ${Math.round(company.load)} / ${Math.round(company.capacity)}</b><i>separate key contracts: ${run.clients.length}</i><i>needs and prices — click a cloud</i>`,
+    ), 'small corner');
     // the product is down: it is written across the product itself, with the reason
     if (run.down) {
       const [x, y] = board.onScreen(...board.cell(0, 0));
@@ -849,39 +893,7 @@ export class GameScene extends Phaser.Scene {
       this.paper.tag('down', x, y - 150 * z, L(`<b>ПРОДУКТ ЛЕЖИТ</b><i>${why} · клиенты не платят до релиза</i>`, `<b>THE PRODUCT IS DOWN</b><i>${why} · clients don’t pay until the release</i>`), 'hot');
     } else this.paper.dropTag('down');
 
-    // clients
-    for (const c of run.clients) {
-      const [sx, sy] = CLIENT_SLOTS[c.slot % CLIENT_SLOTS.length];
-      const [x, y] = board.onScreen(sx, sy + 6);
-      const pay = clientPay(run, c);
-      // two short lines: the name, then the money and the mood — twelve of them must fit side by side
-      const paid = pay > 0 ? `<em>${rate(pay / TUNING.sprint_s)}${PER_S}</em>` : L('бесплатно', 'free');
-      // twelve buildings stand close on the wide sheet: their captions are set tighter
-      const cls = z < 0.7 ? 'small tight' : 'small';
-      let mood: string;
-      // nothing to charge with: this is said on every client, in coral — «free and happy» reads as «all is well»
-      if (!isLive(run, 'pay')) {
-        this.paper.tag(`c${c.id}`, x, y, `<b>${c.name}</b><i class="bad">${L('не платит: нет «оплаты»', 'doesn’t pay: no “payments”')}</i>`, cls);
-        continue;
-      }
-      // the product is down: said on every client, so that «paid last sprint, not this one» has a reason on the sheet
-      if (run.down) {
-        this.paper.tag(`c${c.id}`, x, y, `<b>${c.name}</b><i class="bad">${L('не платит: продукт лежит', 'doesn’t pay: product is down')}</i>`, cls);
-        continue;
-      }
-      const short = BLOCK_BY_ID[c.want]?.short;
-      // on the wide sheet a caption has the width of one building: what is awaited and for how long, no verbs
-      const tight = z < 0.7;
-      const what = q(short ?? '');
-      const wait = `${c.patience} ${SPR}`;
-      if (c.happy) mood = `<i>${paid} · ${L('доволен', 'happy')}</i>`;
-      else if (c.wantLevel > 1) mood = `<i class="bad">${tight ? '' : L('просит доработать ', 'wants an upgrade of ')}${what}${tight ? ` v${c.wantLevel}` : ''} · ${wait}</i>`;
-      else if (c.promised) mood = `<i class="bad">${L('обещан', 'promised')} ${what} · ${wait}</i>`;
-      else if (run.known.includes(c.want)) mood = `<i class="bad">${tight ? '' : L('ждёт ', 'waits for ')}${what} · ${wait}</i>`;
-      else mood = `<i class="bad">${L('ждёт молча', 'waits silently')} · ${wait}</i>`;
-      // a waiting client says what it waits for; the one that pays nothing until then says that too
-      this.paper.tag(`c${c.id}`, x, y, `<b>${c.name}</b>${signing(c) ? ' · <u>$0</u>' : ''}${mood}`, cls);
-    }
+    this.paper.pruneTags('c', new Set());
     // what a client says aloud stands by its building for a few seconds
     // one line at a time, in the free strip above the news: on the sheet itself it would lie over the product
     let said: { name: string; text: string; until: number } | null = null;
@@ -903,10 +915,10 @@ export class GameScene extends Phaser.Scene {
     }
     this.paper.setMoney(money(run.money), sub, run.money <= 0);
     const leftS = Math.ceil(TUNING.sprint_s - run.sprintT);
-    const sprint = Math.min(run.sprint, TUNING.last_sprint);
+    const sprint = run.sprint;
     const demo = isDemo(run) && run.clients.length > 0;
     this.paper.setSprint(
-      L(`СПРИНТ ${sprint} ИЗ ${TUNING.last_sprint} · ${demo ? 'ДЕМО-ДЕНЬ' : 'РЕЛИЗ'} ЧЕРЕЗ ${leftS} С`, `SPRINT ${sprint} OF ${TUNING.last_sprint} · ${demo ? 'DEMO DAY' : 'RELEASE'} IN ${leftS} S`),
+      run.draft ? L(`СПРИНТ ${sprint} · ПАУЗА: ВЫБОР КАРТЫ`, `SPRINT ${sprint} · PAUSED: CHOOSE A CARD`) : L(`СПРИНТ ${sprint} · ∞ · ${demo ? 'ДЕМО-ДЕНЬ' : 'РЕЛИЗ'} ЧЕРЕЗ ${leftS} С`, `SPRINT ${sprint} · ∞ · ${demo ? 'DEMO DAY' : 'RELEASE'} IN ${leftS} S`),
       run.sprintT / TUNING.sprint_s,
     );
     // the goal is always on the sheet: three frames taken at random must say what to do
@@ -915,7 +927,14 @@ export class GameScene extends Phaser.Scene {
     if (!this.ended) this.teach();
 
     this.paper.setShelf(this.shelfView());
-    if (this.pauseCard) {
+    if (!this.ended && (run.t - this.workbenchAt >= 0.2 || this.draftShown !== Boolean(run.draft))) {
+      this.workbenchAt = run.t;
+      this.draftShown = Boolean(run.draft);
+      this.workbenchSelection.picked = this.picked;
+      this.paper.setWorkbench(workbenchView(run, this.workbenchSelection));
+    }
+    if (run.draft) this.paper.call(null);
+    else if (this.pauseCard) {
       this.paper.call({
         who: L('ПАУЗА', 'PAUSE'),
         text: L('Деньги не горят, пока ты думаешь. В жизни так не бывает.', 'Money doesn’t burn while you think. Real life doesn’t work that way.'),
@@ -987,9 +1006,10 @@ export class GameScene extends Phaser.Scene {
     const part = Math.min(1, run.debt / limit);
     let income: string;
     const subs = L('подписки', 'subscriptions');
-    const clients = `${run.clients.length} ${plural(run.clients.length, L(['клиент', 'клиента', 'клиентов'], ['client', 'clients', 'clients']))}`;
+    const count = customerCount(run);
+    const clients = `${count} ${plural(count, L(['клиент', 'клиента', 'клиентов'], ['client', 'clients', 'clients']))}`;
     if (run.down) income = `<p class="bad"><span>${subs}: ${L('продукт лежит', 'product is down')}</span><b>$0</b></p>`;
-    else if (run.clients.length > 0 && !isLive(run, 'pay')) income = `<p class="bad"><span>${subs}: ${L('нет «оплаты»', 'no “payments”')}</span><b>$0</b></p>`;
+    else if (count > 0 && !isLive(run, 'pay')) income = `<p class="bad"><span>${subs}: ${L('нет «оплаты»', 'no “payments”')}</span><b>$0</b></p>`;
     else income = `<p class="in"><span>${subs} · ${clients}</span><b>+${rate(f.income)}</b></p>`;
     const note =
       part >= 0.66
@@ -1015,91 +1035,40 @@ export class GameScene extends Phaser.Scene {
    */
   private nextStep(net: number): string {
     const run = this.run;
-    const has = (kind: string): boolean => run.blocks.some((b) => b.kind === kind);
-    const pay = run.blocks.find((b) => b.kind === 'pay');
-    const todo = L('что делать: ', 'what to do: ');
-    const unpaid = L('<strong>клиенты не платят</strong> — ', '<strong>clients don’t pay</strong> — ');
-    if (run.blocks.length === 0) {
-      return this.picked
-        ? todo + L('теперь <b>кликни клетку</b> на чертеже — блок встанет туда', 'now <b>click a cell</b> on the blueprint — the block goes there')
-        : todo + L('<b>кликни</b> справа <b>«Обёртку над Клодом»</b>, потом клетку на чертеже', '<b>click “Claude Wrapper”</b> on the right, then a cell on the blueprint');
-    }
-    if (run.blocks.length === 1 && !run.blocks[0].built && this.hands < 3) {
-      return todo + L('<b>кликай по блоку</b> на чертеже (или жми Enter) — помогай Клоду строить', '<b>click the block</b> on the blueprint (or press Enter) — help Claude build');
-    }
-    if (!has('landing')) return todo + L('поставь <b>«Лендинг»</b> — без него клиенты не найдут продукт', 'place the <b>“Landing Page”</b> — without it clients won’t find the product');
-    if (!pay) {
-      return run.clients.length > 0
-        ? unpaid + L('поставь <b>«Приём оплаты»</b>: выбери его справа', 'place <b>“Payments”</b>: pick it on the right')
-        : todo + L('поставь <b>«Приём оплаты»</b> — без него клиенты будут пользоваться бесплатно', 'place <b>“Payments”</b> — without it clients will use the product for free');
-    }
-    if (!isLive(run, 'pay')) {
-      if (!pay.built) {
-        return (run.clients.length > 0 ? unpaid : todo) + L('дострой <b>«Приём оплаты»</b>: клик по стройке или Enter — помочь руками', 'finish <b>“Payments”</b>: click the site or press Enter to help');
-      }
-      return L('«Приём оплаты» готов: клиенты начнут платить с ближайшего релиза', '“Payments” is ready: clients start paying from the next release');
-    }
-    if (run.down) {
-      return run.downWhy === 'supplier'
-        ? L(
-            '<strong>продукт лежит</strong> до релиза: сбой у поставщика модели — клиенты не платят, от тебя это не зависит',
-            '<strong>the product is down</strong> until the release: model provider outage — clients don’t pay; not your fault',
-          )
-        : L(
-            '<strong>продукт лежит</strong> до релиза: слишком много техдолга — клиенты не платят; поставь агента на <b>починку</b>',
-            '<strong>the product is down</strong> until the release: too much tech debt — nobody pays; put an agent on <b>fixes</b>',
-          );
-    }
-    if (run.stats.clients === 0) {
-      return L('жди релиза: первый клиент придёт сам, когда выйдут <b>ядро</b> и <b>лендинг</b>', 'wait for the release: the first client comes by itself once the <b>core</b> and the <b>landing page</b> ship');
-    }
-    // the demo day: the release of this sprint is watched — it must ship something
-    if (isDemo(run) && run.clients.length > 0) {
-      const ready = run.blocks.some((b) => (b.built && !b.live) || (b.up && b.done >= b.need));
-      return ready
-        ? L('<em>демо-день</em>: есть что показать — на релизе придут новые клиенты', '<em>demo day</em>: there is something to show — new clients come at the release')
-        : L(
-            '<strong>демо-день</strong>: дострой к релизу блок или доработку — придут 3 клиента; покажешь пустоту — один уйдёт',
-            '<strong>demo day</strong>: finish a block or an upgrade by the release — 3 clients come; show nothing — one leaves',
-          );
-    }
-    // the sheet is full and a client waits for what is not on it: something has to go
-    if (run.blocks.length >= cellsMax(run)) {
-      const want = run.clients.find((c) => !c.happy && run.known.includes(c.want) && shelf(run).includes(c.want));
-      if (want) {
-        const name = BLOCK_BY_ID[want.want]?.name;
-        return L(
-          `<strong>чертёж полон</strong>, а клиент ждёт <b>«${name}»</b> — освободи клетку: <b>«Снести блок»</b> в конце полки`,
-          `<strong>blueprint full</strong>, a client waits for <b>“${name}”</b> — free a cell: <b>“Demolish a block”</b>, end of the shelf`,
-        );
-      }
-    }
-    // no room for one more client: the way to grow is written out
-    if (run.clients.length >= clientsMax(run) && run.clients.length < TUNING.clients.slots) {
-      return L(
-        `<strong>мест для клиентов нет</strong> (${run.clients.length} из ${clientsMax(run)}) — построй блок с пометкой <b>«+ места»</b>: поддержку, обучение, пуши`,
-        `<strong>no seats for clients</strong> (${run.clients.length} of ${clientsMax(run)}) — build a block marked <b>“+ seats”</b>: support, tutorial, push`,
-      );
-    }
-    if (net < 0) {
-      return L(
-        `цель: выйти в плюс — не хватает <b>${money(-net)}</b> в секунду; клиентов приводит <b>продвижение</b>, удерживает <b>разведка</b>`,
-        `goal: get into the black — <b>${money(-net)}</b> per second short; <b>promotion</b> brings clients, <b>research</b> keeps them`,
-      );
-    }
-    if (run.stage < 3) {
-      const target = `${rate(TUNING.stage3_mrr / TUNING.sprint_s)}${PER_S}`;
-      return L(
-        `<em>в плюсе</em> · расти до подписок <b>${target}</b>: тогда у компании появится оценка и покупатель`,
-        `<em>in the black</em> · grow subscriptions to <b>${target}</b>: then the company gets a valuation and a buyer`,
-      );
-    }
-    // the third stage is played for the price tag of the company
-    const worth = money(valuation(run));
-    const mult = Math.round(valueMult(run));
+    const has = (kind: string): boolean => run.blocks.some((block) => block.kind === kind);
+    if (run.draft) return L('Выбери <b>одну из трёх карт</b>: время и деньги стоят до решения.', 'Choose <b>one of three cards</b>: time and money wait for your decision.');
+    if (this.razing) return L('<b>Кликни блок на карте</b>, который разобрать. Его клиенты снова начнут ждать; Esc — отмена.', '<b>Click a block on the map</b> to demolish it. Its clients will wait again; Esc cancels.');
+    if (this.picked) return L('<b>Кликни свободную клетку</b>: новый модуль займёт её и попадёт в очередь. Подсвеченное соседство увеличивает чек после выпуска.', '<b>Click a free cell</b>: the new module reserves it and joins the queue. Highlighted adjacency increases bills after release.');
+    if (!has('core')) return L('Начни с <b>«Обёртки над Клодом»</b> в таблице справа, затем выбери клетку на чертеже.', 'Start with <b>“Claude Wrapper”</b> in the table on the right, then choose a cell on the blueprint.');
+    if (!has('landing')) return L('Поставь <b>«Лендинг»</b>: без него клиенты не найдут продукт. Следующий проект можно планировать заранее.', 'Place the <b>“Landing Page”</b>: clients need it to find the product. You can queue the next project in advance.');
+    if (!has('pay')) return L('Поставь <b>«Приём оплаты»</b>: он включает подписки после выпуска.', 'Place <b>“Payments”</b>: it enables subscriptions after release.');
+    if (run.down) return run.downWhy === 'supplier'
+      ? L('<strong>Сбой поставщика</strong> до релиза: клиенты не платят. Время заняться потребностями и очередью.', '<strong>Provider outage</strong> until release: clients do not pay. Time to work on needs and the queue.')
+      : L('<strong>Продукт лежит</strong>: назначь агента на починку, снизь техдолг к следующему релизу.', '<strong>The product is down</strong>: assign an agent to fixes and reduce tech debt before release.');
+    const task = activeWork(run) ?? run.tasks.find((entry) => entry.status === 'queued');
+    if (task?.status === 'queued' && run.money < task.cost) return L(
+      'Первый проект ждёт <b>' + money(task.cost - run.money) + '</b> для старта. Подними более дешёвый или отложи этот в бэклог.',
+      'The first project needs <b>' + money(task.cost - run.money) + '</b> to start. Move up a cheaper one or defer this one to backlog.',
+    );
+    if (!isLive(run, 'pay')) return L('<b>Платежи ещё не выпущены</b>. Помоги стройке через Enter; готовые проекты включатся на релизе.', '<b>Payments have not shipped yet</b>. Help build with Enter; completed projects activate at release.');
+    const totals = companyTotals(run);
+    if (totals.utilization > 1) return L(
+      '<strong>Перегруз ' + Math.round(totals.utilization * 100) + '%</strong>: расширь инфраструктуру или увеличь мощность ядра и поддержки. Лишние клиенты снижают удовлетворённость.',
+      '<strong>Load ' + Math.round(totals.utilization * 100) + '%</strong>: expand infrastructure or increase core and support capacity. Excess load lowers satisfaction.',
+    );
+    if (task && !task.block) return L('Проект карты или инфраструктуры — <b>в очереди у основателя</b>. Агенты строят его без новой клетки; Enter помогает.', 'The card or infrastructure project is <b>on the founder’s desk</b>. Agents build it without a new cell; Enter helps.');
+    if (customerCount(run) === 0) return L('После выпуска ядра и лендинга придут первые клиенты. <b>Продвижение</b> пополняет воронку, нужные функции помогают им остаться.', 'The first clients arrive after core and landing ship. <b>Promotion</b> fills the funnel; useful features help them stay.');
+    if (net < 0) return L(
+      'До прибыли не хватает <b>' + rate(-net) + '/с</b>. Открой облако: посмотри потребности и прогноз тарифа перед повышением цены.',
+      '<b>' + rate(-net) + '/s</b> short of profit. Open a cloud to inspect needs and forecast the tariff before raising it.',
+    );
+    if (run.sprint > TUNING.last_sprint) return L(
+      '<em>Компания продолжает работать</em> · расти без перегруза: улучшай продукт, выбирай специализацию и расширяй рынок.',
+      '<em>The company keeps running</em> · grow without overload: improve the product, choose a specialization and expand the market.',
+    );
     return L(
-      `оценка компании <em>${worth}</em> · подписки ×${mult}: множитель растят <b>связки</b> и <b>доработки</b>, роняет <b>техдолг</b>`,
-      `valuation <em>${worth}</em> · subscriptions ×${mult}: <b>combos</b> and <b>upgrades</b> raise the multiplier, <b>tech debt</b> drops it`,
+      '<em>В плюсе</em> · оценка ' + money(valuation(run)) + '. Новый уровень остаётся в своей клетке; новые модули выбирай под потребности клиентов.',
+      '<em>In the black</em> · valuation ' + money(valuation(run)) + '. Upgrades stay in their cells; choose new modules around client needs.',
     );
   }
 
@@ -1109,7 +1078,7 @@ export class GameScene extends Phaser.Scene {
    * is busy with a release.
    */
   private teach(): void {
-    if (this.termUntil > 0 && this.clock < this.termUntil - 4) return;
+    if (this.hooks.restored || this.paused || this.run.draft || (this.termUntil > 0 && this.clock < this.termUntil - 4)) return;
     const run = this.run;
     const tell = (key: string, lines: string[]): boolean => {
       if (this.said.has(key)) return false;
@@ -1118,94 +1087,34 @@ export class GameScene extends Phaser.Scene {
       playSound('quip');
       return true;
     };
-    if (run.clients.length > 0 && !isLive(run, 'pay') && this.clock >= this.nagAt) {
-      const pay = run.blocks.find((b) => b.kind === 'pay');
-      const lines = !pay
-        ? L(
-            ['Клиенты пользуются бесплатно:', 'нам нечем брать с них деньги.', 'Выбери справа «Приём оплаты»', 'и поставь его на чертёж.'],
-            ['Clients use the product for free:', 'we have nothing to charge them with.', 'Pick “Payments” on the right', 'and put it on the blueprint.'],
-          )
-        : !pay.built
-          ? L(
-              ['«Приём оплаты» ещё строится —', 'до него клиенты не платят.', 'Клик по стройке или Enter: помоги.'],
-              ['“Payments” is still being built —', 'until then clients don’t pay.', 'Click the site or press Enter: help.'],
-            )
-          : L(['«Приём оплаты» готов. Клиенты', 'начнут платить с ближайшего релиза.'], ['“Payments” is ready. Clients start', 'paying from the next release.']);
-      this.say([CLAUDE, ...lines], 16);
-      playSound('quip');
-      this.nagAt = this.clock + 34;
-      return;
-    }
-    if (run.blocks.length >= cellsMax(run) && run.stage >= 2) {
-      const lines = L(
-        ['Чертёж полон: всё построить нельзя.', 'Лишний блок можно снести — «Снести', 'блок» в конце полки. Клиенты, которым', 'он был нужен, начнут ждать снова.'],
-        ['The blueprint is full: you can’t build', 'everything. A spare block can go —', '“Demolish a block” ends the shelf.', 'Clients who needed it will wait again.'],
-      );
-      if (tell('t:full', lines)) return;
-    }
-    if (run.stage >= 2 && run.sprintT > 3) {
-      const lines = L(
-        ['Как расти. Больше клиентов —', 'продвижение и блоки «+ места».', 'Дороже клиент — блоки «чек ×»,', 'связки соседних блоков и доработки.'],
-        ['How to grow. More clients —', 'promotion and “+ seats” blocks.', 'Bigger bills — “bill ×” blocks,', 'combos of neighbours and upgrades.'],
-      );
-      if (tell('t:grow', lines)) return;
-    }
-    if (run.stage >= 2 && run.agents.length === 1 && run.sprintT > 6) {
-      const lines = L(
-        ['Можно нанять второго агента.', 'Он стоит денег каждую секунду —', 'смотри на «денег на…» под счётчиком.'],
-        ['You can hire a second agent.', 'An agent costs money every second —', 'watch “money for…” under the counter.'],
-      );
-      if (tell('t:hire', lines)) return;
-    }
-    if (run.stage >= 2 && run.clients.some((c) => !c.happy && !run.known.includes(c.want)) && !run.agents.some((a) => a.lane === 'research')) {
-      const lines = L(
-        ['Клиент чего-то ждёт и молчит.', 'Переведи агента на разведку —', 'он выяснит, какой блок им нужен.'],
-        ['A client waits for something and', 'says nothing. Move an agent to', 'research to find out which block.'],
-      );
-      if (tell('t:ask', lines)) return;
-    }
-    if (run.debt >= 10) {
-      const lines = L(
-        ['Техдолг растёт: счётчик справа от', 'денег, серые квадраты на блоках.', `Дойдёт до ${TUNING.debt.down_at} — продукт упадёт, и спринт`, 'никто не платит. Починка его снимает.'],
-        ['Tech debt is growing: the counter is', 'right of the money, grey squares on', `the blocks. At ${TUNING.debt.down_at} the product goes down`, 'and nobody pays for a sprint.', 'Fixes remove it.'],
-      );
-      if (tell('t:debt', lines)) return;
-    }
-    if (run.agents.some((a) => a.lane === 'promo') && run.stats.clients > 0) {
-      const lines = L(
-        ['Продвижение копит нового клиента:', 'смотри «до нового клиента» у рынка.', 'Набралось 100% — он придёт на релизе,', 'если есть место.'],
-        ['Promotion builds up the next client:', 'see “next client” at the market.', 'At 100% the client comes at the', 'release, if there is a seat.'],
-      );
-      if (tell('t:promo', lines)) return;
-    }
-    if (run.stage >= 2 && run.energy >= TUNING.crunch.max && run.sprintT > 10) {
-      const lines = L(
-        ['Силы — не только на код. Справа внизу,', 'в строке «руками»: напиши пост', 'или позвони клиенту сам.'],
-        ['Energy is not only for code. Bottom', 'right, in the “by hand” row: write', 'a post or call a client yourself.'],
-      );
-      if (tell('t:hands', lines)) return;
-    }
-    if (run.agents.some((a) => a.lane === 'build' && !busy(run, a)) && shelf(run).length > 0 && run.blocks.length > 0) {
-      const lines = L(
-        ['Агенту на стройке нечего делать.', 'Без дела он денег не берёт, но и', 'пользы нет: выбери блок справа.'],
-        ['The agent on the build has nothing', 'to do. An idle agent costs nothing,', 'but is no use: pick a block.'],
-      );
-      if (tell('t:idle', lines)) return;
-    }
-    if (netPerS(run) >= 0 && run.clients.length > 0) {
-      const lines = L(
-        ['Мы в плюсе. Дальше — расти:', 'на третьем этапе у компании появится', 'оценка, и покупатель начнёт звонить.', 'Чем она выше к концу — тем лучше.'],
-        ['We are in the black. Next — grow:', 'at stage three the company gets a', 'valuation, and a buyer starts calling.', 'The higher it is by the end, the better.'],
-      );
-      if (tell('t:profit', lines)) return;
-    }
-    if (run.clients.length > 0 && isDemo(run, run.sprint + 1)) {
-      const lines = L(
-        ['Следующий релиз после этого —', 'демо-день: его смотрят все.', 'Выйдет блок или доработка — придут', 'три клиента. Не выйдет — один уйдёт.'],
-        ['The release after this one is demo', 'day: everybody watches it. Ship a', 'block or an upgrade — three clients', 'come. Ship nothing — one leaves.'],
-      );
-      tell('t:demo', lines);
-    }
+    if (run.tasks.length > 1 && tell('t:queue', L(
+      ['План можно набрать заранее.', 'Верхняя задача строится первой.', 'На потом — в бэклог. Готовое', 'включится только на релизе.'],
+      ['You can plan ahead.', 'The first task gets built first.', 'Defer the rest to backlog. Finished', 'work takes effect at release.'],
+    ))) return;
+    if (run.stage >= 2 && tell('t:clouds', L(
+      ['Клиенты теперь живут облаками.', 'Кликни по облаку: там запросы,', 'удовлетворённость и тариф.', 'Масштаб большой. Счёт тоже.'],
+      ['Clients now live in clouds.', 'Click a cloud for needs,', 'satisfaction and tariff.', 'Big scale. Big bill, too.'],
+    ))) return;
+    if (run.debt >= 10 && tell('t:debt', L(
+      ['Техдолг растёт. Починка снимает его.', 'Без твоей проверки агенты оставляют', 'долг: сначала замедление, потом сбой.'],
+      ['Tech debt is rising. Fixes remove it.', 'Agents leave debt without your review:', 'first a slowdown, then an outage.'],
+    ))) return;
+    if (run.blocks.length >= cellsMax(run) && tell('t:full', L(
+      ['Чертёж полон. Улучшения остаются', 'в своих зданиях. Ненужное можно', 'разобрать из строки модуля, затем', 'подтвердить кликом по карте.'],
+      ['The blueprint is full. Upgrades stay', 'inside their buildings. Demolish an', 'unneeded module from its table row,', 'then confirm it on the map.'],
+    ))) return;
+    if (run.clients.some((client) => !client.happy && !run.known.includes(client.want)) && tell('t:ask', L(
+      ['Ключевой договор недоволен.', 'Разведка выяснит его запрос.', 'Открой «Клиенты»: эти договоры', 'идут отдельно от тарифа облака.'],
+      ['A key contract is unhappy.', 'Research reveals its request.', 'Open Clients: those contracts are', 'separate from the cloud tariff.'],
+    ))) return;
+    if (run.stage >= 2 && run.energy >= TUNING.crunch.max && tell('t:hands', L(
+      ['Силы — не только на код.', 'Справа внизу можно самому', 'заняться продвижением или починкой.'],
+      ['Energy is not only for code.', 'Bottom right, you can do', 'promotion or fixes yourself.'],
+    ))) return;
+    if (companyTotals(run).utilization > 0.85) tell('t:capacity', L(
+      ['Мощность почти занята.', 'Сверь ядро и поддержку в таблице.', 'Расширение ускоряет рост рынка,', 'но за серверы платим каждый тик.'],
+      ['Capacity is almost full.', 'Check core and support in the table.', 'Expansion opens a larger market,', 'but the servers charge every tick.'],
+    ));
   }
 
   /** A handful of coral squares thrown out of a point: something is finished here. */
@@ -1220,61 +1129,6 @@ export class GameScene extends Phaser.Scene {
 
   private shelfView(): ShelfSection[] {
     const run = this.run;
-    const full = sites(run).length >= TUNING.sites_max;
-    // a founder who has seen an architecture reads on the shelf which blocks go side by side
-    const arch = run.perks.includes('arch');
-    // a tile is two short lines: the name with why to build it, then what else it gives and what it costs to run
-    const note = (kind: string): string => {
-      // what it gives stands first, in coral: more clients or a bigger cheque is why a block is built
-      const [main, ...rest] = benefits(kind);
-      const friends = arch ? `${L('дружит', 'friends')}: ${RULES[kind].friends.map((f) => BLOCK_BY_ID[f]?.short ?? f).join(', ')}` : '';
-      // every shipped block is paid for every second: the shelf says how much before it is built
-      const host = `${L('хост', 'host')} ${rate(RULES[kind].host)}${PER_S}`;
-      return [main ? `<i>${main}</i>` : '', ...rest, host, friends].filter((x) => x !== '').join(' · ');
-    };
-    const items: ShelfItem[] = shelf(run).map((kind) => ({
-      id: kind,
-      title: BLOCK_BY_ID[kind].name,
-      // clients are here and there is nothing to charge them with: the shelf says so on the block itself
-      // next to the name — why to build it: someone asks for it, or what it gives (more clients, a bigger cheque)
-      mark: kind === 'pay' && run.clients.length > 0 ? L('нужен сейчас', 'needed now') : run.known.includes(kind) ? L('просят', 'wanted') : '',
-      note: note(kind),
-      // the joke of the block is said when the pointer rests on its tile
-      tip: BLOCK_BY_ID[kind].note,
-      price: `<u></u>${workNeed(run, kind)}`,
-      state: this.picked === kind ? 'on' : full ? 'off' : 'can',
-      // nothing is built and nothing is picked: the first card of the shelf asks to be clicked
-      pulse: run.blocks.length === 0 && this.picked === null,
-    }));
-    // what clients are known to ask for goes to the top of the shelf
-    items.sort((a, b) => Number(b.mark !== '') - Number(a.mark !== ''));
-    // and above everything — the reworks clients asked for by name
-    const more = Math.round((TUNING.rework.pay_mult - 1) * 100);
-    const ups: ShelfItem[] = reworks(run).map((r) => ({
-      id: `up:${r.kind}`,
-      // a short name: the tile must say «rework» and of what, in one line
-      title: `${L('Доработка', 'Upgrade')}: ${BLOCK_BY_ID[r.kind].short} v${r.level}`,
-      mark: '',
-      note:
-        `${r.who[0]}${r.who.length > 1 ? L(` и ещё ${r.who.length - 1}`, ` and ${r.who.length - 1} more`) : ''}: ` +
-        `${L(`+${more}% к чеку · хостинг`, `+${more}% to the bill · hosting`)} +${rate(RULES[r.kind].host * TUNING.rework.host_mult)}${PER_S}`,
-      price: `<u></u>${reworkNeed(run, run.blocks.find((b) => b.kind === r.kind)!)}`,
-      state: full ? 'off' : 'can',
-    }));
-    items.unshift(...ups);
-    // the sheet holds fewer blocks than the startup can build: at the end of the shelf — the tool that makes room
-    const cap = cellsMax(run);
-    const packed = run.blocks.length >= cap;
-    if (packed) for (const it of items) if (!it.id.startsWith('up:')) it.state = 'off';
-    if (run.blocks.some((b) => b.live && RULES[b.kind].role !== 'base')) {
-      items.push({
-        id: 'x',
-        title: L('Снести блок', 'Demolish a block'),
-        note: this.razing ? L('<i>кликни блок на чертеже</i> · Esc — отмена', '<i>click a block on the blueprint</i> · Esc — cancel') : L('освободить клетку под другой блок', 'free a cell for another block'),
-        price: '',
-        state: this.razing ? 'on' : 'can',
-      });
-    }
     const rule = TUNING.stages[run.stage - 1];
     // what opens the stronger agents and more desks is written out: it is a goal, not a secret
     const stage3 = `${rate(TUNING.stage3_mrr / TUNING.sprint_s)}${PER_S}`;
@@ -1297,23 +1151,6 @@ export class GameScene extends Phaser.Scene {
       })),
     ];
     return [
-      {
-        id: 'blocks',
-        title: L(`БЛОКИ · НА ЧЕРТЕЖЕ ${run.blocks.length} ИЗ ${cap}`, `BLOCKS · PLACED ${run.blocks.length} OF ${cap}`),
-        hint: this.razing
-          ? L('кликни блок, который снести', 'click the block to demolish')
-          : this.picked
-            ? L('теперь клетка на чертеже', 'now a cell on the blueprint')
-            : packed
-              ? L('чертёж полон', 'the blueprint is full')
-              : full
-                ? L(`стройка занята: ${TUNING.sites_max} из ${TUNING.sites_max}`, `sites are busy: ${TUNING.sites_max} of ${TUNING.sites_max}`)
-                : '',
-        items,
-        grid: true,
-        // the list takes all the height the agents leave: at best every block is seen without scrolling
-        scroll: 733 - 39 * run.agents.length - (unlock ? 22 : 0),
-      },
       {
         id: 'agents',
         title: L(`АГЕНТЫ · ${run.agents.length} ИЗ ${rule.agents_max}`, `AGENTS · ${run.agents.length} OF ${rule.agents_max}`),
@@ -1345,15 +1182,16 @@ export class GameScene extends Phaser.Scene {
   private syncAgents(): void {
     const run = this.run;
     const board = this.board;
-    const site = run.blocks.find(isSite);
-    const sig = JSON.stringify([run.agents.map((a) => [a.id, a.lane]), site ? [site.i, site.j] : null, run.review]);
+    const task = activeWork(run) ?? run.tasks.find((entry) => entry.status === 'queued');
+    const site = task?.block ? run.blocks.find((block) => block.kind === task.block) : undefined;
+    const sig = JSON.stringify([run.agents.map((a) => [a.id, a.lane]), task?.id, site ? [site.i, site.j] : null, run.review]);
     if (sig === this.routeSig) return;
     this.routeSig = sig;
 
     // where the work of a lane goes on the sheet
     const targetOf = (lane: Lane): Pt | null => {
       if (lane === 'build') {
-        if (!site) return null;
+        if (!site) return task ? [DESK[0] + 100, DESK[1] - 150] : null;
         const [cx, cy] = board.cell(site.i, site.j);
         return [cx, cy + 56];
       }
@@ -1368,7 +1206,7 @@ export class GameScene extends Phaser.Scene {
     // every square of work on that lane is looked at by a human
     const mine = targetOf(run.review);
     const from: Pt = [DESK[0] + 118, DESK[1] - 64];
-    if (mine) board.route('me', [from, [from[0] + 40, from[1]], [from[0] + 40, BUS_Y - 9], [mine[0], BUS_Y - 9], mine]);
+    if (mine && !(run.review === 'build' && task && !site)) board.route('me', [from, [from[0] + 40, from[1]], [from[0] + 40, BUS_Y - 9], [mine[0], BUS_Y - 9], mine]);
     else board.dropRoute('me');
 
     const ids = new Set(run.agents.map((a) => `a${a.id}`));
@@ -1406,9 +1244,8 @@ export class GameScene extends Phaser.Scene {
 
   /** A new stage: the camera pulls back and shows more of the sheet. */
   private syncStage(ms: number): void {
-    // the first client is already a reason to look wider: it stands to the right of the product
-    // more than four clients need the second column of buildings: the widest view, whatever the stage
-    const want = this.run.stage >= 3 || this.run.clients.length > 4 ? 3 : this.run.stage === 2 || this.run.stats.clients > 0 ? 2 : 1;
+    // Client counts live in three fixed clouds; only product progression widens the blueprint.
+    const want = this.run.stage >= 3 ? 3 : this.run.stage === 2 || customerCount(this.run) > 0 ? 2 : 1;
     if (this.stageShown === want) return;
     this.stageShown = want;
     const v = STAGE_VIEW[want - 1];
@@ -1419,16 +1256,21 @@ export class GameScene extends Phaser.Scene {
   private flowMoney(dt: number): void {
     this.payAt -= dt * Math.min(this.speed, 3);
     if (this.payAt > 0) return;
-    const paying = this.run.clients.filter((c) => clientPay(this.run, c) > 0);
+    const run = this.run;
+    const ctx = companyContext(run);
+    const paying = SEGMENTS.map((id, index) => ({
+      index,
+      income: (segmentView(run.market, ctx, id).income + run.clients.filter((client) => (client.type === 'corp' || client.type === 'gov' ? 'large' : client.type === 'mid' ? 'medium' : 'small') === id).reduce((sum, client) => sum + clientPay(run, client), 0)) / TUNING.sprint_s,
+    })).filter((group) => group.income > 0);
     if (paying.length === 0) {
       this.payAt = 0.5;
       return;
     }
-    this.payAt = Math.max(0.12, 1.4 / paying.length);
-    const c = paying[this.payTurn++ % paying.length];
-    const [sx, sy] = CLIENT_SLOTS[c.slot % CLIENT_SLOTS.length];
-    const [x, y] = this.board.onScreen(sx, sy - 70);
-    this.squares.fly({ x: x - 20, y: y - 14, w: 40, h: 28 }, MONEY_RECT, CLIENT_LOOK[c.type].squares, PALETTE.money, 200, [0.9, 1.3], PALETTE.money);
+    this.payAt = Math.max(0.18, 1.4 / (1 + Math.sqrt(paying.reduce((sum, group) => sum + group.income, 0) / 10)));
+    const group = paying[this.payTurn++ % paying.length];
+    const x = 1182, y = 350 + group.index * 134;
+    const count = Math.min(4, Math.max(1, Math.ceil(Math.log10(1 + group.income))));
+    this.squares.fly({ x: x - 20, y: y - 14, w: 40, h: 28 }, MONEY_RECT, count, PALETTE.money, 200, [0.9, 1.3], PALETTE.money);
     if (this.payTurn % 6 === 0) this.paper.popMoney();
   }
 
@@ -1449,6 +1291,8 @@ export class GameScene extends Phaser.Scene {
   /** an event of the run takes the news line and holds it for a while */
   private news(text: string): void {
     this.paper.setNews(text, this.newsHint());
+    this.workbenchSelection.news = { title: L('Новости стартапа', 'Startup news'), text };
+    this.workbenchAt = -Infinity;
     this.newsHold = 12;
     this.newsAt = 12;
   }
@@ -1457,11 +1301,6 @@ export class GameScene extends Phaser.Scene {
   private say(lines: string[], seconds: number): void {
     this.paper.term(lines);
     this.termUntil = this.clock + seconds;
-  }
-
-  private nodePos(id: string): Pt {
-    const img = this.board.node(id);
-    return img ? [img.x, img.y] : [0, 0];
   }
 
   private place(id: string, texture: string, x: number, y: number, height: number, pop = false): Phaser.GameObjects.Image {

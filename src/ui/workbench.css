@@ -472,6 +472,29 @@
   margin: 8px 0;
 }
 
+.wb-contracts {
+  margin-top: 18px;
+  font-size: 14px;
+  line-height: 1.35;
+}
+.wb-contracts summary {
+  cursor: pointer;
+}
+.wb-main .wb-contracts ul {
+  padding: 0;
+  list-style: none;
+}
+.wb-contracts li {
+  margin: 10px 0;
+}
+.wb-contracts li strong,
+.wb-contracts li span {
+  display: block;
+}
+.wb-buy button + button {
+  margin-top: 5px;
+  opacity: 0.7;
+}
 .wb-price button {
   width: 100%;
   border-color: var(--ink);

@@ -29,12 +29,15 @@ export interface WorkbenchModule {
   readonly cost: number;
   /** Hosting in dollars per second, matching the game's ledger. */
   readonly hosting: number;
+  readonly nextHosting?: number;
   readonly demand: string;
   readonly action: WorkbenchBuildAction;
+  readonly actionLabel?: string;
   readonly disabled: boolean;
   readonly selected: boolean;
   readonly specialization?: string;
   readonly links?: readonly string[];
+  readonly canDemolish?: boolean;
 }
 
 export interface WorkbenchNeed {
@@ -44,6 +47,7 @@ export interface WorkbenchNeed {
   readonly share: number;
   readonly effect: string;
   readonly action: WorkbenchBuildAction;
+  readonly actionLabel?: string;
   readonly disabled: boolean;
 }
 
@@ -64,6 +68,7 @@ export interface WorkbenchSegment {
   readonly pricePending?: boolean;
   readonly priceDisabled?: boolean;
   readonly priceLabel?: string;
+  readonly contracts?: readonly { readonly title: string; readonly detail: string }[];
 }
 
 export interface WorkbenchNews {
@@ -102,7 +107,7 @@ export interface WorkbenchView {
 }
 
 export type WorkbenchAction =
-  | { type: 'place' | 'upgrade'; block: string }
+  | { type: 'place' | 'upgrade' | 'demolish'; block: string }
   | { type: 'move'; task: string; direction: -1 | 1 }
   | { type: 'defer' | 'resume'; task: string }
   | { type: 'choose-card'; id: string }
@@ -153,12 +158,12 @@ function moduleHtml(module: WorkbenchModule): string {
   return (
     `<tr class="${module.selected ? 'wb-selected' : ''}"><th scope="row"><strong>${esc(module.title)}</strong><small>${module.level > 0 ? `v${module.level}` : L('Новый блок', 'New block')}${module.demand ? ` · ${esc(module.demand)}` : ''}</small>${module.specialization ? `<small class="wb-specialization">${esc(module.specialization)}</small>` : ''}</th>` +
     `<td><span>${esc(module.current)}</span>${module.next ? `<small class="wb-next">→ ${esc(module.next)}</small>` : ''}${module.links?.length ? `<small class="wb-links">${L('Связи', 'Links')}: ${module.links.map(esc).join(' · ')}</small>` : ''}</td>` +
-    `<td class="wb-host">${rate(module.hosting)}${PER_S}</td><td class="wb-buy">${module.action !== 'none' ? `<small>${whole(module.work)} ${L('раб.', 'work')}<br><span class="wb-cash">${money(module.cost)}</span></small>` : ''}${button(module.action, module.id, module.selected ? L('Выберите клетку', 'Pick a cell') : buildLabel(module.action), module.disabled || module.action === 'none')}</td></tr>`
+    `<td class="wb-host">${rate(module.hosting)}${PER_S}${module.nextHosting !== undefined ? `<small>→ ${rate(module.nextHosting)}${PER_S}</small>` : ''}</td><td class="wb-buy">${module.action !== 'none' ? `<small>${whole(module.work)} ${L('раб.', 'work')}<br><span class="wb-cash">${money(module.cost)}</span></small>` : ''}${button(module.action, module.id, esc(module.selected ? L('Выберите клетку', 'Pick a cell') : (module.actionLabel ?? buildLabel(module.action))), module.disabled || module.action === 'none')}${module.canDemolish ? button('demolish', module.id, L('Разобрать…', 'Demolish…')) : ''}</td></tr>`
   );
 }
 
 function needHtml(need: WorkbenchNeed): string {
-  return `<li><div class="wb-need-title"><strong>${esc(need.title)}</strong><span>${whole(need.share)}% · ${whole(need.count)}</span></div><p>${esc(need.effect)}</p>${need.action === 'none' ? `<small>${L('Запрос выполнен', 'Request fulfilled')}</small>` : button(need.action, need.block, buildLabel(need.action), need.disabled)}</li>`;
+  return `<li><div class="wb-need-title"><strong>${esc(need.title)}</strong><span>${whole(need.share)}% · ${whole(need.count)}</span></div><p>${esc(need.effect)}</p>${need.action === 'none' ? `<small>${esc(need.actionLabel ?? L('Нужный уровень выпущен', 'Required level shipped'))}</small>` : button(need.action, need.block, esc(need.actionLabel ?? buildLabel(need.action)), need.disabled)}</li>`;
 }
 
 function draftHtml(draft: WorkbenchDraft): string {
@@ -289,6 +294,7 @@ export function createWorkbench(
     switch (target.dataset.wbAction) {
       case 'place':
       case 'upgrade':
+      case 'demolish':
         send({ type: target.dataset.wbAction, block: id });
         break;
       case 'move':
@@ -368,7 +374,7 @@ export function createWorkbench(
       page = document.createElement('article');
       page.dataset.wbPage = segment.id;
       page.className = 'wb-segment';
-      page.innerHTML = `<h3></h3><p class="wb-segment-numbers"></p><div class="wb-happiness"><span></span><meter min="0" max="100"></meter></div><p class="wb-reasons"></p><ul class="wb-needs"></ul><section class="wb-price"><label for="wb-price-${segment.id}">${L('Тариф сегмента', 'Segment tariff')}<output for="wb-price-${segment.id}"></output></label><input id="wb-price-${segment.id}" type="range" min="0.75" max="2.5" step="0.05" data-wb-price="${segment.id}"><small class="wb-current-price"></small><p class="wb-forecast" role="status"></p>${button('confirm-price', segment.id, L('На следующий релиз', 'Apply next release'))}</section>`;
+      page.innerHTML = `<h3></h3><p class="wb-segment-numbers"></p><div class="wb-happiness"><span></span><meter min="0" max="100"></meter></div><p class="wb-reasons"></p><ul class="wb-needs"></ul><section class="wb-price"><label for="wb-price-${segment.id}">${L('Тариф сегмента', 'Segment tariff')}<output for="wb-price-${segment.id}"></output></label><input id="wb-price-${segment.id}" type="range" min="0.75" max="2.5" step="0.05" data-wb-price="${segment.id}"><small class="wb-current-price"></small><p class="wb-forecast" role="status"></p>${button('confirm-price', segment.id, L('На следующий релиз', 'Apply next release'))}</section><details class="wb-contracts"><summary>${L('Ключевые договоры · отдельный тариф', 'Key contracts · separate tariff')}</summary><p>${L('Эти компании учитываются отдельно от облака. Ползунок сегмента не меняет их фиксированный тариф.', 'These companies are counted separately from the cloud. The segment slider does not change their fixed tariff.')}</p><ul></ul></details>`;
       segments.append(page);
     }
     text(page.querySelector('h3')!, segment.title);
@@ -390,6 +396,17 @@ export function createWorkbench(
     meter.value = segment.happiness;
     meter.setAttribute('aria-label', L('Удовлетворённость', 'Satisfaction'));
     text(page.querySelector('.wb-reasons')!, segment.reasons.join(' · '));
+    const contracts = page.querySelector<HTMLElement>('.wb-contracts')!;
+    contracts.hidden = !segment.contracts?.length;
+    html(
+      contracts.querySelector('ul')!,
+      (segment.contracts ?? [])
+        .map(
+          (contract) =>
+            `<li><strong>${esc(contract.title)}</strong><span>${esc(contract.detail)}</span></li>`,
+        )
+        .join(''),
+    );
     html(
       page.querySelector('.wb-needs')!,
       segment.needs.length
@@ -441,7 +458,14 @@ export function createWorkbench(
       if (view.selectedSegment) selected = view.selectedSegment;
       text(
         find('.wb-budget'),
-        `${L('План', 'Planned')} ${whole(view.budget.planned)} / ${whole(view.budget.capacity)}`,
+        L(
+          `План ${whole(view.budget.planned)} · успеем ≈${whole(view.budget.capacity)}`,
+          `Planned ${whole(view.budget.planned)} · can finish ≈${whole(view.budget.capacity)}`,
+        ),
+      );
+      find('.wb-budget').title = L(
+        'Остаток работы / прогноз агентов до релиза; ручная помощь не учтена.',
+        'Remaining work / agents’ forecast until release; manual help is not included.',
       );
       const queued = view.tasks.filter((task) => task.status !== 'backlog');
       const deferred = view.tasks.filter((task) => task.status === 'backlog');
