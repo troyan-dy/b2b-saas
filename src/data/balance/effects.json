@@ -18,5 +18,11 @@
   "ref": { "word_of_mouth": 1.5 },
   "api": { "promo": 1.5 },
   "wait": { "promo": 1.15 },
-  "cheap": { "tokens": 0.5 }
+  "cheap": { "tokens": 0.5 },
+  "cache": { "tokens": 0.85 },
+  "monitor": { "patience": 1, "tokens": 0.95 },
+  "webhook": { "promo": 1.15, "corp_pay": 1.1 },
+  "help": { "seats": 2, "patience": 1 },
+  "ab": { "small_pay": 1.15, "promo": 1.1 },
+  "portal": { "corp_pay": 1.2, "seats": 1 }
 }

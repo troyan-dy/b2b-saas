@@ -30,6 +30,12 @@
     "sso": { "corp_pay": 0.2 },
     "shield": { "patience": 1 },
     "c1": { "corp_pay": 0.15 },
-    "audit": { "tokens": -0.1 }
+    "audit": { "tokens": -0.1 },
+    "cache": { "tokens": -0.1 },
+    "monitor": { "tokens": -0.03 },
+    "webhook": { "promo": 0.1, "corp_pay": 0.1 },
+    "help": { "seats": 1 },
+    "ab": { "small_pay": 0.1, "promo": 0.1 },
+    "portal": { "corp_pay": 0.15, "seats": 1 }
   }
 }

@@ -18,7 +18,7 @@
   "mortgage_s": 50,
   "mortgage_s_perk": 75,
   "corp_asks": 3,
-  "pool_size": 11,
+  "pool_size": 14,
   "trends": { "at": [7, 13, 19] },
   "rework": { "from_stage": 2, "chance": 0.15, "patience": 3, "work_mult": 0.6, "pay_mult": 1.15, "host_mult": 0.5, "max_level": 3, "max_pending": 2 },
   "news": { "from_sprint": 4, "chance": 0.3, "chance_stage3": 0.5, "cooldown": 2 },
