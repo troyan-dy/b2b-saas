@@ -263,6 +263,14 @@
 .map-task button:hover, .map-inspect:hover { background: var(--paper); color: var(--coral); }
 .map-task .task-progress { font-weight: 700; color: var(--coral); }
 .map-task .task-cancel { border-left: 1px solid var(--rule); min-width: 23px; }
+.map-task .task-api { color: #527088; border-left: 1px solid var(--rule); font: 13px var(--mono); }
+.map-task button:disabled { opacity: .5; cursor: default; }
+.bl-lanes span.hire-stat { font-size: 13px; }
+.hire-stat small { display: block; margin: 4px 0; font-size: 11px; }
+.agent-speed-bar { display: block; height: 3px; margin: 0 10px; background: #ddd9ce; }
+.agent-speed-bar i { display: block; height: 100%; background: #6a9bcc; }
+.bl-lanes .agent-inspect { padding: 0; border: 0; background: none; color: inherit; font: 12px var(--mono); cursor: pointer; }
+.bl-lanes .agent-inspect:hover { color: var(--ink); text-decoration: underline; }
 .bl-tag.face.act:hover { color: var(--coral); }
 .bl-tag.map-reason { pointer-events: auto; background: var(--paper); }
 .map-reason button { border: 0; border-bottom: 1px dotted #8da890; padding: 2px 4px; font: 13px var(--mono); color: #496e57; background: #e8eee3; cursor: pointer; }

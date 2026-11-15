@@ -1,5 +1,6 @@
 import { BLOCK_BY_ID } from '../content/blocks';
 import { buildCategory } from '../content/build-categories';
+import { LANE_NAME, TIER_TITLE, TIER_NOTE } from '../content/texts';
 import { buildReason } from './build-reasons';
 import { L } from '../core/lang';
 import { companyContext, companyTotals } from '../systems/company/company';
@@ -13,9 +14,13 @@ import {
 } from '../systems/company/market';
 import { DRAFT_CARDS, draftCards } from '../systems/run/draft';
 import { blockEffects, PRODUCTION } from '../systems/run/product';
-import { activeWork, remainingBuildCapacity } from '../systems/run/production';
+import { activeWork, apiWorkQuote, remainingBuildCapacity } from '../systems/run/production';
 import {
   cellsMax,
+  agentWorkRate,
+  agentDebtPerWork,
+  agentFixPerWork,
+  busy,
   clientPay,
   flows,
   linkBonus,
@@ -45,7 +50,8 @@ export interface WorkbenchSelection {
   selectedSegment: SegmentId;
   previewPrices: Partial<Record<SegmentId, number>>;
   news?: WorkbenchNews;
-  panel?: 'module' | 'clients' | null;
+  panel?: 'module' | 'clients' | 'agent' | null;
+  selectedAgent?: number;
   selectedModule?: string;
   clientAnchor?: { x: number; y: number };
   applied?: { title: string; impact: string } | null;
@@ -246,6 +252,8 @@ function moduleView(
     specialization: specializations,
     links: moduleLinks(run, kind),
     canDemolish: Boolean(block?.live && !block.up && !planned && RULES[kind].role !== 'base'),
+    taskId: planned?.id,
+    api: planned ? apiWorkQuote(run, planned.id) ?? undefined : undefined,
   };
 }
 
@@ -427,8 +435,23 @@ export function workbenchView(run: Run, selection: WorkbenchSelection): Workbenc
   const infra = PRODUCTION.infrastructure;
   const infraTask = run.tasks.find((task) => task.kind === 'infrastructure');
   const active = activeWork(run);
+  const agent = run.agents.find((item) => item.id === selection.selectedAgent);
   return {
     panel: selection.panel,
+    agent: agent ? {
+      id: agent.id,
+      title: TIER_TITLE[agent.tier],
+      description: TIER_NOTE[agent.tier],
+      lane: LANE_NAME[agent.lane],
+      rate: agentWorkRate(run, agent),
+      topRate: TUNING.tiers.think.work_per_s * TUNING.review_boost,
+      fixRate: agentWorkRate(run, {...agent, lane: 'fix'}) * agentFixPerWork(agent.tier),
+      debt: agentDebtPerWork(run, {...agent, lane: 'build'}),
+      salary: busy(run, agent) ? TUNING.tiers[agent.tier].cost_per_s : 0,
+      tariff: TUNING.tiers[agent.tier].cost_per_s,
+      working: busy(run, agent),
+      reviewed: run.review === agent.lane,
+    } : undefined,
     clientAnchor: selection.clientAnchor,
     selectedModule: selection.selectedModule,
     applied: selection.applied,
@@ -461,6 +484,7 @@ export function workbenchView(run: Run, selection: WorkbenchSelection): Workbenc
       progress: infraTask ? infraTask.done / Math.max(1, infraTask.work) : 0,
       status: infraTask?.status,
       taskId: infraTask?.id,
+      api: infraTask ? apiWorkQuote(run, infraTask.id) ?? undefined : undefined,
       label: infraTask
         ? taskLabel(infraTask.status)
         : L(

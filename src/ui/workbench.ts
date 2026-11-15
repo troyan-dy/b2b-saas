@@ -43,6 +43,8 @@ export interface WorkbenchModule {
   readonly specialization?: string;
   readonly links?: readonly string[];
   readonly canDemolish?: boolean;
+  readonly taskId?: string;
+  readonly api?: { cost: number; affordable: boolean };
 }
 
 export interface WorkbenchNeed {
@@ -117,10 +119,12 @@ export interface WorkbenchView {
     readonly level?: number;
     readonly status?: 'queued' | 'active' | 'ready' | 'backlog';
     readonly taskId?: string;
+    readonly api?: { cost: number; affordable: boolean };
   };
   readonly clientAnchor?: { readonly x: number; readonly y: number };
   readonly selectedSegment?: SegmentId;
-  readonly panel?: 'module' | 'clients' | null;
+  readonly panel?: 'module' | 'clients' | 'agent' | null;
+  readonly agent?: { id: number; title: string; description: string; lane: string; rate: number; topRate: number; fixRate: number; debt: number; salary: number; tariff: number; working: boolean; reviewed: boolean };
   readonly selectedModule?: string;
   readonly perks?: readonly {
     readonly id: string;
@@ -139,7 +143,7 @@ export type WorkbenchAction =
   | { type: 'preview-price'; segment: SegmentId; value: number }
   | { type: 'confirm-price'; segment: SegmentId }
   | { type: 'expand-infrastructure' }
-  | { type: 'cancel-task'; task: string }
+  | { type: 'cancel-task' | 'rush-task'; task: string }
   | { type: 'select-segment'; segment: SegmentId };
 
 const esc = (value: string): string =>
@@ -274,6 +278,9 @@ function moduleDetail(module: WorkbenchModule): string {
         '</p></section>'
       : '') +
     action +
+    (module.taskId && module.api ? '<div class="wb-api-option">' +
+      button('rush-task', module.taskId, L('Выпустить сейчас', 'Ship now') + ' · ' + money(module.api.cost), !module.api.affordable, 'wb-api-button', L('Дорогой API: завершит и включит только эту задачу прямо сейчас. Остальные ждут своего релиза.', 'Paid API: completes and activates only this task right now. Other tasks wait for their release.')) +
+      '<small>' + L('Через API · сразу работает, дороже агентов', 'Via API · active immediately, costs more than agents') + '</small></div>' : '') +
     (module.demand
       ? '<p class="wb-demand">' + L('Нужно клиентам: ', 'Wanted by: ') + esc(module.demand) + '</p>'
       : '') +
@@ -300,6 +307,18 @@ function moduleDetail(module: WorkbenchModule): string {
         )
       : '')
   );
+}
+
+function agentDetail(agent: NonNullable<WorkbenchView['agent']>): string {
+  const speed = dec(Number(agent.rate.toFixed(2)));
+  const bar = (value: number, max: number) => `<div class="wb-agent-meter"><i style="width:${Math.max(0, Math.min(100, value / max * 100))}%"></i></div>`;
+  return `<h2>${esc(agent.title)} · №${agent.id}</h2><p>${esc(agent.description)}</p>` +
+    `<section class="wb-agent-stat"><h3>${L('Скорость сейчас', 'Current speed')} <b>${speed} ${L('работы/с', 'work/s')}</b></h3>${bar(agent.rate, agent.topRate)}<small>${agent.working ? esc(agent.lane) : L('Простой · ждёт задачу', 'Idle · waiting for work')} · ${L(`1 работа за ${dec(Number((1 / agent.rate).toFixed(1)))} с`, `1 work every ${dec(Number((1 / agent.rate).toFixed(1)))} s`)}</small></section>` +
+    `<section class="wb-agent-stat"><h3>${L('Починка', 'Fixes')} <b>−${dec(Number(agent.fixRate.toFixed(2)))} ${L('долга/с', 'debt/s')}</b></h3>${bar(agent.fixRate, agent.topRate * 3)}<small>${L('Если назначить на починку', 'When assigned to fixes')}</small></section>` +
+    `<section class="wb-agent-stat"><h3>${L('Баги при стройке', 'Construction debt')} <b>${agent.debt ? '+' + dec(Number(agent.debt.toFixed(2))) : '0'}</b></h3><small>${L('долга за единицу работы · с учётом проверки и перков', 'debt per work · includes review and perks')}</small></section>` +
+    `<p class="wb-agent-pay">${L('Сейчас', 'Now')}: ${rate(agent.salary)}${PER_S} · ${L('тариф', 'rate')}: ${rate(agent.tariff)}${PER_S}</p>` +
+    `<p class="wb-muted">${agent.reviewed ? L('Ты проверяешь это направление: скорость +25%, новый долг −50%.', 'You review this lane: +25% speed, −50% new debt.') : L('Проверка этого направления даст +25% скорости и −50% нового долга.', 'Reviewing this lane gives +25% speed and −50% new debt.')}</p>` +
+    `<p class="wb-muted">${L('Техдолг замедляет стройку. На простое зарплата не списывается.', 'Debt slows construction. Idle agents cost nothing.')}</p>`;
 }
 
 function infrastructureCard(infra: NonNullable<WorkbenchView['infrastructure']>): string {
@@ -371,6 +390,7 @@ function infrastructureCard(infra: NonNullable<WorkbenchView['infrastructure']>)
       ? '<div class="wb-infrastructure-progress">' +
         `<progress max="1" value="${infra.progress ?? 0}" aria-label="${esc(status)}"></progress>` +
         button('cancel-task', infra.taskId, L('Отменить', 'Cancel'), false, 'wb-text-button') +
+        (infra.api ? button('rush-task', infra.taskId, L('API: сейчас', 'API: now') + ' · ' + money(infra.api.cost), !infra.api.affordable, 'wb-api-button', L('Сразу достроить и включить мощность за токены. Цена уже включает неоплаченную стройку.', 'Build and activate capacity now with paid tokens. Price includes any unpaid construction.')) : '') +
         '</div>'
       : '') +
     '</article>'
@@ -530,7 +550,8 @@ export function createWorkbench(
         send({ type: 'expand-infrastructure' });
         break;
       case 'cancel-task':
-        send({ type: 'cancel-task', task: id });
+      case 'rush-task':
+        send({ type: action, task: id });
         break;
     }
   };
@@ -694,9 +715,10 @@ export function createWorkbench(
         return;
       }
       const panel = view.panel ?? null;
-      root.classList.toggle('wb-context', panel === 'module');
-      catalog.hidden = panel === 'module';
-      modulePanel.hidden = panel !== 'module';
+      const detail = panel === 'module' || panel === 'agent';
+      root.classList.toggle('wb-context', detail);
+      catalog.hidden = detail;
+      modulePanel.hidden = !detail;
       clientPanel.hidden = panel !== 'clients' || Boolean(view.draft);
       if (!view.draft) {
         renderCatalog();
@@ -712,6 +734,7 @@ export function createWorkbench(
                 '</p>',
         );
       }
+      if (panel === 'agent' && view.agent) html(find('.wb-module-content'), agentDetail(view.agent));
       const segment =
         view.segments.find((entry) => entry.id === view?.selectedSegment) ?? view.segments[0];
       if (panel === 'clients' && segment) {
@@ -721,6 +744,8 @@ export function createWorkbench(
       const nextPanelKey =
         panel === 'module'
           ? 'module:' + (view.selectedModule ?? '')
+          : panel === 'agent'
+            ? 'agent:' + view.agent?.id
           : panel === 'clients'
             ? 'clients:' + (segment?.id ?? '')
             : '';
@@ -728,7 +753,7 @@ export function createWorkbench(
         if (nextPanelKey && !panelKey) beforePanel = document.activeElement as HTMLElement | null;
         if (!view.draft) {
           if (nextPanelKey)
-            (panel === 'module' ? modulePanel : clientPanel)
+            (detail ? modulePanel : clientPanel)
               .querySelector<HTMLButtonElement>('.wb-back')
               ?.focus({ preventScroll: true });
           else if (beforePanel?.isConnected) beforePanel.focus({ preventScroll: true });

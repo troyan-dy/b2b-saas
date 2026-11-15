@@ -22,13 +22,15 @@ import {
   releaseLines,
   REWORK_SAYS,
   TIER_NAME,
+  TIER_NOTE,
 } from '../content/texts';
 import { L } from '../core/lang';
 import { logEvent, metrics } from '../core/metrics';
 import type { Rng } from '../core/rng';
 import { playSound, unlockSound } from '../core/sound';
 import { PALETTE } from '../data/palette';
-import { money, PER_S, plural, rate } from '../ui/format';
+import { dec, money, PER_S, plural, rate } from '../ui/format';
+import { apiWorkQuote, rushTask } from '../systems/run/run';
 import type { Paper, ShelfKeys, ShelfSection } from '../ui/paper';
 import type { WorkbenchAction } from '../ui/workbench';
 import { projectName, SEGMENT_TITLES, workbenchView, type WorkbenchSelection } from '../ui/workbench-view';
@@ -325,6 +327,10 @@ export class GameScene extends Phaser.Scene {
       case 'defer': changed = deferTask(run, action.task); break;
       case 'resume': changed = resumeTask(run, action.task); break;
       case 'cancel-task': changed = cancelTask(run, action.task); break;
+      case 'rush-task':
+        changed = rushTask(run, action.task);
+        if (changed) this.paper.pop(1120, 360, L('API: выпущено и работает', 'API: shipped and active'), 'good');
+        break;
       case 'expand-infrastructure': changed = expandInfrastructure(run); break;
       case 'select-segment':
         this.workbenchSelection.selectedSegment = action.segment;
@@ -388,6 +394,10 @@ export class GameScene extends Phaser.Scene {
       this.onWorkbench({ type: 'upgrade', block: id.slice(8) });
       return;
     }
+    if (id.startsWith('rush:')) {
+      this.onWorkbench({ type: 'rush-task', task: id.slice(5) });
+      return;
+    }
     if (id.startsWith('cancel:') || id.startsWith('first:') || id.startsWith('resume:')) {
       const [command, task] = id.split(':');
       const changed = command === 'cancel' ? cancelTask(this.run, task) : command === 'first' ? moveTask(this.run, task, -1) : resumeTask(this.run, task);
@@ -441,6 +451,12 @@ export class GameScene extends Phaser.Scene {
     if (this.paused || this.run.draft || this.ended) return;
     this.workbenchAt = -Infinity;
     unlockSound();
+    if (owner === 'info') {
+      this.workbenchSelection.selectedAgent = Number(key);
+      this.workbenchSelection.panel = 'agent';
+      this.show();
+      return;
+    }
     if (owner === 'hand') {
       this.byHand(key as Lane);
       return;
@@ -628,8 +644,8 @@ export class GameScene extends Phaser.Scene {
               [
                 CLAUDE,
                 ...L(
-                  ['Тёмные квадраты от стола — это ты:', 'ты проверяешь одно направление.', 'Там работа идёт быстрее и без долга.', 'Сменить его — клавиши справа внизу.'],
-                  ['The dark squares from the desk are', 'you: you review one lane. Work there', 'goes faster and leaves no debt.', 'Change it with the keys bottom right.'],
+                  ['Тёмные квадраты от стола — это ты:', 'ты проверяешь одно направление.', 'Скорость +25%, новые баги −50%.', 'Сменить его — клавиши справа внизу.'],
+                  ['The dark squares from the desk are', 'you: you review one lane.', '+25% speed, −50% new bugs.', 'Change it with the keys bottom right.'],
                 ),
               ],
               14,
@@ -640,7 +656,8 @@ export class GameScene extends Phaser.Scene {
       }
       case 'built': {
         const [x, y] = this.board.onScreen(...this.board.top(e));
-        this.paper.pop(x, y - 30, L('готово — ждёт релиза', 'done — waiting for the release'), '');
+        const live = run.blocks.find((block) => block.kind === e.kind)?.live && !run.blocks.find((block) => block.kind === e.kind)?.up;
+        this.paper.pop(x, y - 30, live ? L('выпущено — работает', 'shipped — active') : L('готово — ждёт релиза', 'done — waiting for the release'), live ? 'good' : '');
         this.burst(x, y, 6);
         playSound('buy', 7);
         break;
@@ -947,7 +964,7 @@ export class GameScene extends Phaser.Scene {
         if (reason) {
           const [tx, ty] = board.onScreen(...board.top(b));
           keep.add(`b:why${b.kind}`);
-          this.paper.tag(`b:why${b.kind}`, tx, ty - 38 * z, `<button data-map="inspect:${b.kind}" title="${reason.detail}">${reason.label}</button>`, 'map-reason');
+          this.paper.tag(`b:why${b.kind}`, tx, ty - 38 * z, `<button data-map="inspect:${b.kind}" title="${reason.detail.replace(/&/g, '&amp;').replace(/"/g, '&quot;')}">${reason.label}</button>`, 'map-reason');
         }
       }
     }
@@ -1108,9 +1125,11 @@ export class GameScene extends Phaser.Scene {
     const label = task.status === 'ready' ? L('✓ к релизу', '✓ for release') : task.status === 'backlog' ? L('отложено', 'on hold') : `${task.status === 'active' ? '▶' : `№${order}`} ${Math.min(task.done, task.work)}/${task.work}`;
     const action = task.status === 'active' ? 'site' : task.block ? `inspect:${task.block}` : 'site';
     const refund = task.status === 'active' || task.status === 'ready' ? L(` Уже потраченные ${money(task.cost)} не возвращаются.`, ` The ${money(task.cost)} already spent is not refunded.`) : '';
+    const api = apiWorkQuote(this.run, task.id);
     return `<button class="task-progress" data-map="${action}" title="${task.status === 'active' ? L('Помочь стройке', 'Help build') : L('Порядок и прогресс работы', 'Work order and progress')}">${label}</button>` +
       (task.status === 'queued' && this.run.tasks.filter((entry) => entry.status === 'queued').indexOf(task) > 0 ? `<button data-map="first:${task.id}" title="${L('Делать раньше', 'Do sooner')}">↑</button>` : '') +
       (task.status === 'backlog' ? `<button data-map="resume:${task.id}" title="${L('Продолжить', 'Resume')}">▶</button>` : '') +
+      (api ? `<button class="task-api" data-map="rush:${task.id}" ${api.affordable ? '' : 'disabled'} title="${L('Дорогой API: выпустить и включить эту задачу немедленно', 'Paid API: ship and activate this task immediately')}">⚡ ${money(api.cost)}</button>` : '') +
       `<button class="task-cancel" data-map="cancel:${task.id}" title="${L('Отменить.', 'Cancel.')}${refund}" aria-label="${L('Отменить работу', 'Cancel work')}">×</button>`;
   }
 
@@ -1144,7 +1163,7 @@ export class GameScene extends Phaser.Scene {
       part >= 0.66
         ? L('почти предел: ставь агента на починку', 'almost at the limit: put an agent on fixes')
         : run.debt < 1
-          ? L('долг копят агенты без твоей проверки', 'agents pile up debt without your review')
+          ? L('проверка: −50% нового долга; эксперт: без долга', 'review: −50% new debt; expert: no new debt')
           : L(`при ${limit} продукт упадёт; снимает починка`, `at ${limit} the product goes down; fixes remove it`);
     const blocks = `${run.live.size} ${plural(run.live.size, L(['блок', 'блока', 'блоков'], ['block', 'blocks', 'blocks']))}`;
     return (
@@ -1182,8 +1201,8 @@ export class GameScene extends Phaser.Scene {
     if (!isLive(run, 'pay')) return L('<b>Платежи ещё не выпущены</b>. Помоги стройке через Enter; готовые проекты включатся на релизе.', '<b>Payments have not shipped yet</b>. Help build with Enter; completed projects activate at release.');
     const totals = companyTotals(run);
     if (totals.utilization > 1) return L(
-      '<strong>Перегруз ' + Math.round(totals.utilization * 100) + '%</strong>: нажми «Инфраструктура» справа в блоках. Расширение заработает на релизе.',
-      '<strong>Load ' + Math.round(totals.utilization * 100) + '%</strong>: choose “Infrastructure” in Blocks on the right. The expansion starts at release.',
+      '<strong>Перегруз ' + Math.round(totals.utilization * 100) + '%</strong>: расширь «Инфраструктуру» справа. Агенты — к релизу; дорогой API — сразу.',
+      '<strong>Load ' + Math.round(totals.utilization * 100) + '%</strong>: expand “Infrastructure” on the right. Agents ship at release; paid API ships now.',
     );
     if (task && !task.block) return L('Основатель расширяет компанию. <b>Enter — помочь</b>.', 'The founder is expanding the company. <b>Enter to help</b>.');
     if (customerCount(run) === 0) return L('После выпуска ядра и лендинга придут первые клиенты. <b>Продвижение</b> пополняет воронку, нужные функции помогают им остаться.', 'The first clients arrive after core and landing ship. <b>Promotion</b> fills the funnel; useful features help them stay.');
@@ -1225,8 +1244,8 @@ export class GameScene extends Phaser.Scene {
       ['The city grows with your company.', 'The numbers count your customers.', 'Click the buildings to see', 'what they need.'],
     ))) return;
     if (run.debt >= 10 && tell('t:debt', L(
-      ['Техдолг растёт. Починка снимает его.', 'Без твоей проверки агенты оставляют', 'долг: сначала замедление, потом сбой.'],
-      ['Tech debt is rising. Fixes remove it.', 'Agents leave debt without your review:', 'first a slowdown, then an outage.'],
+      ['Техдолг растёт. Починка снимает его.', 'Проверка уменьшает новые баги вдвое.', 'Опытный чинит быстрее, эксперт — ещё быстрее.'],
+      ['Tech debt is rising. Fixes remove it.', 'Review halves new bugs.', 'Experienced agents fix faster; experts faster still.'],
     ))) return;
     if (run.blocks.length >= cellsMax(run) && tell('t:full', L(
       ['Чертёж полон. Улучшай здания', 'на месте — кликни любое.', 'Ненужное можно разобрать', 'из его карточки.'],
@@ -1263,18 +1282,18 @@ export class GameScene extends Phaser.Scene {
     const stage3 = `${rate(TUNING.stage3_mrr / TUNING.sprint_s)}${PER_S}`;
     const unlock =
       run.stage === 1
-        ? L('обычный и думающий агенты и ещё два места — после первого платящего клиента', 'regular and thinking agents and two more desks — after the first paying client')
+        ? L('опытный и эксперт + два места — после первого платящего клиента', 'experienced and expert + two desks — after the first paying client')
         : run.stage === 2
           ? L(`ещё два места для агентов — когда подписки дойдут до ${stage3}`, `two more desks for agents — when subscriptions reach ${stage3}`)
           : '';
     const rows: ShelfKeys[] = [
       {
         owner: 'hire',
-        keys: TIERS.map((t) => ({ id: t, title: `+ ${TIER_NAME[t]} $${TUNING.tiers[t].cost_per_s}${PER_S}`, off: !canHire(run, t) })),
+        keys: TIERS.map((t) => ({ id: t, title: `+ ${TIER_NAME[t]} $${TUNING.tiers[t].cost_per_s}${PER_S}`, note: `${dec(TUNING.tiers[t].work_per_s / TUNING.tiers.fast.work_per_s)}× · ${t === 'think' ? L('без багов', 'no bugs') : t === 'normal' ? L('мало багов', 'few bugs') : L('много багов', 'many bugs')}`, bar: TUNING.tiers[t].work_per_s / TUNING.tiers.think.work_per_s, tip: TIER_NOTE[t], off: !canHire(run, t) })),
       },
       ...run.agents.map((a) => ({
         owner: `a${a.id}`,
-        label: `<b>${NO}${a.id}</b> ${TIER_NAME[a.tier]}`,
+        label: `<button class="agent-inspect" data-o="info" data-l="${a.id}" title="${L('Производительность и стоимость', 'Performance and cost')}"><b>${NO}${a.id}</b> ${TIER_NAME[a.tier]} ⓘ</button>`,
         keys: [...LANES.map((l) => ({ id: l as string, title: LANE_NAME[l] })), { id: 'drop', title: '×' }],
         on: a.lane as string,
       })),
@@ -1290,9 +1309,10 @@ export class GameScene extends Phaser.Scene {
       {
         id: 'me',
         title: L('ТЫ · ОДИН ЧЕЛОВЕК', 'YOU · ONE PERSON'),
+        note: L('Проверка: +25% скорости · −50% новых багов', 'Review: +25% speed · −50% new bugs'),
         hint: `${ENERGY} ${'■'.repeat(Math.floor(run.energy))}${'□'.repeat(TUNING.crunch.max - Math.floor(run.energy))}`,
         rows: [
-          // what the founder checks: no debt there, and the work goes faster; chosen once a sprint
+          // Review speeds up one lane and halves its new debt; chosen once a sprint.
           {
             owner: 'me',
             label: run.reviewLocked ? L('проверяю <b>до релиза</b>', 'review <b>set</b>') : L('проверяю', 'I review'),

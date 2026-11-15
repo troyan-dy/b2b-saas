@@ -29,7 +29,7 @@ export interface ShelfKeys {
   label?: string;
   /** the choice is made: the other keys are dimmed */
   lock?: boolean;
-  keys: readonly { id: string; title: string; off?: boolean }[];
+  keys: readonly { id: string; title: string; off?: boolean; note?: string; bar?: number; tip?: string }[];
   on?: string;
 }
 
@@ -225,7 +225,7 @@ export function createPaper(under: HTMLElement, over: HTMLElement): Paper {
           if (r.label) html += `<p>${r.label}</p>`;
           for (const k of r.keys) {
             const cls = `${k.id === r.on ? 'on' : ''}${k.off ? ' off' : ''}${k.id === 'drop' ? ' drop' : ''}`;
-            html += `<span class="${cls}" data-o="${r.owner}" data-l="${k.id}">${k.title}</span>`;
+            html += `<span class="${cls}${k.note ? ' hire-stat' : ''}" data-o="${r.owner}" data-l="${k.id}"${k.tip ? ` title="${k.tip.replace(/"/g, '&quot;')}"` : ''}>${k.title}${k.note ? `<small>${k.note}</small><i class="agent-speed-bar"><i style="width:${Math.round((k.bar ?? 0) * 100)}%"></i></i>` : ''}</span>`;
           }
           html += '</div>';
         }

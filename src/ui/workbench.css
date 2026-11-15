@@ -100,6 +100,17 @@
 }
 .wb-categories { display: flex; gap: 5px; margin: 0 0 9px; }
 .wb-main .wb-category-tab { padding: 4px 7px; border-radius: 4px; font-size: 12px; background: transparent; }
+.wb-api-option { margin: 12px 0; }
+.wb-agent-stat { margin: 20px 0; }
+.wb-agent-stat h3 { display: flex; justify-content: space-between; gap: 8px; }
+.wb-agent-stat b { font: 16px var(--mono); color: #527088; }
+.wb-agent-stat small { display: block; color: var(--dim); font-size: 13px; margin-top: 5px; }
+.wb-agent-meter { height: 9px; margin-top: 9px; border-radius: 2px; background: #ddd9ce; }
+.wb-agent-meter i { display: block; height: 100%; border-radius: 2px; background: #6a9bcc; }
+.wb-agent-pay { padding: 12px 0; border-top: 1px solid var(--rule); }
+.wb-api-option small { display: block; margin-top: 5px; color: var(--dim); font-size: 13px; }
+.wb-main .wb-api-button { color: #527088; border-color: #9ab0bf; font: 13px var(--mono); }
+.wb-infrastructure-progress .wb-api-button { margin-left: auto; padding: 3px 6px; }
 .wb-category-product { --category: #6a9bcc; }
 .wb-category-growth { --category: #9bb6a5; }
 .wb-category-service { --category: #d4a27f; }
