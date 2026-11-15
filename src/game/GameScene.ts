@@ -33,7 +33,7 @@ import type { Paper, ShelfKeys, ShelfSection } from '../ui/paper';
 import type { WorkbenchAction } from '../ui/workbench';
 import { projectName, SEGMENT_TITLES, workbenchView, type WorkbenchSelection } from '../ui/workbench-view';
 import { DRAFT_CARDS } from '../systems/run/draft';
-import { PRODUCTION } from '../systems/run/product';
+import type { CityView } from '../ui/client-city';
 import { companyContext, companyTotals, customerCount } from '../systems/company/company';
 import { SEGMENTS, schedulePrice, segmentView } from '../systems/company/market';
 import {
@@ -61,6 +61,7 @@ import {
   handy,
   hire,
   honestMult,
+  IDEAS,
   isDemo,
   isLive,
   LANES,
@@ -74,7 +75,6 @@ import {
   place,
   promiseSprints,
   resumeTask,
-  reworkNeed,
   RULES,
   setLane,
   setReview,
@@ -94,7 +94,7 @@ import {
 import { Board, type BlockOnSheet, type SlotOnSheet } from '../view/board';
 import type { Pt } from '../view/iso';
 import { Squares } from '../view/squares';
-import { AGENT_SLOTS, BUS_GAP, BUS_Y, DESK, MARKET, MONEY_RECT, STAGE_VIEW, VIEW_AT } from './layout';
+import { AGENT_SLOTS, BUS_GAP, BUS_Y, CLIENT_SLOTS, DESK, MARKET, MONEY_RECT, STAGE_VIEW, TRUNK_X, VIEW_AT } from './layout';
 
 const STEP = 1 / 60;
 
@@ -174,6 +174,8 @@ export class GameScene extends Phaser.Scene {
   private workbenchAt = -Infinity;
   private draftShown = false;
   private cityCollapsed = false;
+  private citySignature = '';
+  private cityNodes: { id: string; segment: 'small' | 'medium' | 'large'; texture: string; title: string; x: number; y: number; height: number; chain: boolean }[] = [];
 
   constructor(run: Run, rng: Rng, paper: Paper, hooks: GameHooks) {
     super('game');
@@ -184,7 +186,8 @@ export class GameScene extends Phaser.Scene {
   }
 
   preload(): void {
-    for (const key of ['desk', 'laptop']) this.load.image(`node_${key}`, `assets/img/nodes/${key}.webp`);
+    const keys = new Set(['desk', 'laptop', this.run.idea.aud.texture, ...[...IDEAS.corp, ...IDEAS.gov, ...IDEAS.startup].map((client) => client.texture)]);
+    for (const key of keys) this.load.image(`node_${key}`, `assets/img/nodes/${key}.webp`);
   }
 
   create(): void {
@@ -917,11 +920,7 @@ export class GameScene extends Phaser.Scene {
       keep.add(id);
       const level = run.blocks.find((r) => r.kind === b.kind)?.level ?? 1;
       const task = run.tasks.find((entry) => entry.block === b.kind);
-      const liveBlock = run.blocks.find((block) => block.kind === b.kind);
-      const canUpgrade = liveBlock?.live && level < PRODUCTION.max_level && !task;
-      const upgradeCost = liveBlock ? reworkNeed(run, liveBlock) * PRODUCTION.upgrade_cost_per_work : 0;
-      this.paper.tag(id, x, y, `<button class="map-inspect" data-map="inspect:${b.kind}" title="${L('Свойства и улучшения', 'Details and upgrades')}">${kind.short}${level > 1 ? `<sup>${level}</sup>` : ''}</button>` +
-        (canUpgrade ? `<button class="map-upgrade" data-map="upgrade:${b.kind}" title="${L(`Улучшить ${kind.short} до v${level + 1}`, `Upgrade ${kind.short} to v${level + 1}`)} · ${money(upgradeCost)}" aria-label="${L(`Улучшить ${kind.short}`, `Upgrade ${kind.short}`)}">↑</button>` : ''), b.built ? 'face act' : 'face hot act');
+      this.paper.tag(id, x, y, `<button class="map-inspect" data-map="inspect:${b.kind}" title="${L('Свойства и улучшения', 'Details and upgrades')}">${kind.short}${level > 1 ? ` v${level}` : ''}</button>`, b.built ? 'face act' : 'face hot act');
       if (task) {
         const [tx, ty] = board.onScreen(...board.top(b));
         keep.add(`b:n${b.kind}`);
@@ -978,19 +977,7 @@ export class GameScene extends Phaser.Scene {
     });
     this.paper.pruneTags('a', keepA);
 
-    // Buildings stand for whole customer groups; their count has no visual seat limit.
-    const company = companyTotals(run);
-    const ctx = companyContext(run);
-    this.paper.setCity(!this.ended && (customerCount(run) || run.market.opened) ? {
-      total: customerCount(run),
-      collapsed: this.cityCollapsed,
-      overloaded: company.utilization > 1,
-      groups: SEGMENTS.map((id) => {
-        const segment = segmentView(run.market, ctx, id);
-        const contracts = run.clients.filter((client) => (client.type === 'corp' || client.type === 'gov' ? 'large' : client.type === 'mid' ? 'medium' : 'small') === id);
-        return { id, title: SEGMENT_TITLES[id], count: segment.count + contracts.length, happiness: Math.round(segment.satisfaction), delta: segment.delta };
-      }),
-    } : null);
+    this.syncCity();
     // the product is down: it is written across the product itself, with the reason
     if (run.down) {
       const [x, y] = board.onScreen(...board.cell(0, 0));
@@ -1359,10 +1346,76 @@ export class GameScene extends Phaser.Scene {
     });
   }
 
+  private syncCity(): void {
+    const run = this.run;
+    const board = this.board;
+    if (this.ended || (!customerCount(run) && !run.market.opened)) {
+      this.paper.setCity(null);
+      return;
+    }
+    const ctx = companyContext(run);
+    const groups = SEGMENTS.map((id) => {
+      const segment = segmentView(run.market, ctx, id);
+      const contracts = run.clients.filter((client) => (client.type === 'corp' || client.type === 'gov' ? 'large' : client.type === 'mid' ? 'medium' : 'small') === id);
+      return {id, segment, contracts, count: segment.count + contracts.length};
+    }).filter((group) => group.count > 0);
+    this.syncStage(1100);
+    const nodes: typeof this.cityNodes = [];
+    groups.forEach((group, column) => {
+      const amount = this.cityCollapsed ? 1 : Math.min(4, group.count);
+      for (let row = 0; row < amount; row++) {
+        const [x,y] = CLIENT_SLOTS[column * 4 + row];
+        const contract = group.contracts[row];
+        const corporate = [...IDEAS.corp, ...IDEAS.gov];
+        const texture = contract?.texture ?? (group.id === 'large' ? corporate[row % corporate.length].texture : run.idea.aud.texture);
+        nodes.push({
+          id: `city:${group.id}:${row}:${contract?.id ?? 'group'}`,
+          segment: group.id, texture,
+          title: contract ? `${contract.name} · ${rate(clientPay(run, contract) / TUNING.sprint_s)}${PER_S}` : L(`${SEGMENT_TITLES[group.id]} компании · потребности и тариф`, `${SEGMENT_TITLES[group.id]} companies · needs and tariff`),
+          x,y,height: contract ? CLIENT_LOOK[contract.type].height : group.id === 'large' ? 150 : 118,
+          chain: contract?.type === 'mid' || (!contract && group.id === 'medium'),
+        });
+      }
+    });
+    const signature = JSON.stringify(nodes.map((node) => [node.id, node.texture, node.x, node.y, node.height, node.chain]));
+    if (signature !== this.citySignature) {
+      for (const old of this.cityNodes) {
+        board.dropNode(old.id);
+        board.dropNode(`${old.id}:branch`);
+        board.dropRoute(old.id);
+      }
+      for (const node of nodes) {
+        if (node.chain) this.place(`${node.id}:branch`, node.texture, node.x - 38, node.y - 20, node.height * .82);
+        const image = this.place(node.id, node.texture, node.x, node.y, node.height, true);
+        board.route(node.id, [[TRUNK_X - 80, 0], [TRUNK_X, 0], [TRUNK_X, node.y - 56], [node.x - image.width * (node.height / image.height) / 2 - 10, node.y - 56]]);
+      }
+      this.citySignature = signature;
+    }
+    this.cityNodes = nodes;
+    const z = board.zoom;
+    const [hx,hy] = board.onScreen(760 + Math.max(0, groups.length - 1) * 225 / 2, -425);
+    const view: CityView = {
+      total: customerCount(run), collapsed: this.cityCollapsed,
+      heading: {x: Math.min(hx, 1180), y: hy, width: Math.max(275, groups.length * 225 * z)},
+      groups: groups.map((group, column) => {
+        const lastRow = this.cityCollapsed ? 0 : Math.min(4, group.count) - 1;
+        const [sx,sy] = CLIENT_SLOTS[column * 4 + lastRow];
+        const [x,y] = board.onScreen(sx,sy+12);
+        return {id:group.id,title:SEGMENT_TITLES[group.id],count:group.count,happiness:Math.round(group.segment.satisfaction),x,y,width:210*z};
+      }),
+      nodes: nodes.map((node) => {
+        const [x,y] = board.onScreen(node.x,node.y);
+        return {id:node.id,segment:node.segment,title:node.title,x,y,width:150*z,height:node.height*z};
+      }),
+    };
+    this.paper.setCity(view);
+  }
+
   /** A new stage: the camera pulls back and shows more of the sheet. */
   private syncStage(ms: number): void {
-    // Growing cohorts stay in the city; only product progression widens the blueprint.
-    const want = this.run.stage >= 3 ? 3 : this.run.stage === 2 || customerCount(this.run) > 0 ? 2 : 1;
+    const count = customerCount(this.run);
+    const groups = this.run.market.groups.filter((group) => group.profiles.some((profile) => profile.count > 0)).length;
+    const want = this.run.stage >= 3 || count > 4 || groups > 1 ? 3 : this.run.stage === 2 || count || this.run.market.opened ? 2 : 1;
     if (this.stageShown === want) return;
     this.stageShown = want;
     const v = STAGE_VIEW[want - 1];
@@ -1385,7 +1438,10 @@ export class GameScene extends Phaser.Scene {
     }
     this.payAt = Math.max(0.18, 1.4 / (1 + Math.sqrt(paying.reduce((sum, group) => sum + group.income, 0) / 10)));
     const group = paying[this.payTurn++ % paying.length];
-    const x = 1152, y = this.cityCollapsed ? 424 + group.index * 78 : 496 + group.index * 180;
+    const city = this.cityNodes.filter((node) => node.segment === SEGMENTS[group.index]);
+    const source = city[this.payTurn % Math.max(1, city.length)];
+    if (!source) return;
+    const [x,y] = this.board.onScreen(source.x,source.y-70);
     const count = Math.min(4, Math.max(1, Math.ceil(Math.log10(1 + group.income))));
     this.squares.fly({ x: x - 20, y: y - 14, w: 40, h: 28 }, MONEY_RECT, count, PALETTE.money, 200, [0.9, 1.3], PALETTE.money);
     if (this.payTurn % 6 === 0) this.paper.popMoney();

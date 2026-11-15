@@ -225,7 +225,7 @@
   padding: 0;
   border: none;
   background: none;
-  font-size: 17px;
+  font-size: max(12px, calc(15px * var(--z, 1)));
   font-weight: 700;
   letter-spacing: 0.03em;
   line-height: 1;
@@ -234,23 +234,7 @@
 .bl-tag.face.hot {
   color: var(--coral);
 }
-.bl-tag.face sup { font-size: 11px; margin-left: 1px; }
 .map-inspect { padding: 0; }
-.map-upgrade {
-  position: absolute;
-  right: -29px;
-  top: -3px;
-  width: 25px;
-  height: 25px;
-  border: 1px solid var(--rule);
-  border-radius: 50%;
-  background: var(--card);
-  color: var(--money);
-  font: 700 20px/1 var(--mono);
-  cursor: pointer;
-  transform: skewY(-26.565deg);
-}
-.map-upgrade:hover { background: var(--sage); }
 /* a caption that is a button: the cell of the sheet under it too */
 .bl-tag.act {
   pointer-events: auto;
@@ -261,10 +245,9 @@
   align-items: center;
   gap: 3px;
   padding: 2px 4px;
-  border: 1px solid var(--rule);
-  border-radius: 5px;
-  background: var(--card);
-  font-size: 22px;
+  border: 0;
+  background: var(--paper);
+  font-size: 17px;
   pointer-events: auto;
 }
 .map-task button, .map-inspect {
@@ -275,7 +258,7 @@
   padding: 2px 4px;
   cursor: pointer;
 }
-.map-task .task-cancel { font-size: 22px; }
+.map-task .task-cancel { font-size: 18px; }
 .bl-tag.face .map-inspect { padding: 0; }
 .map-task button:hover, .map-inspect:hover { background: var(--paper); color: var(--coral); }
 .map-task .task-progress { font-weight: 700; color: var(--coral); }
@@ -390,8 +373,8 @@
 .bl-shop.wb-enabled {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 14px 20px;
+  gap: 0;
+  padding: 22px 30px;
 }
 
 .bl-shop.wb-enabled > .bl-shelf-body {
@@ -400,8 +383,7 @@
   overflow-y: auto;
   scrollbar-width: thin;
   scrollbar-color: var(--rule) transparent;
-  padding-top: 3px;
-  border-top: 1.5px solid var(--ink);
+  padding-top: 12px;
 }
 
 .wb-enabled .bl-shelf-body .bl-lanes {

@@ -6,22 +6,16 @@ import './client-city.css';
 export interface CityView {
   total: number;
   collapsed: boolean;
-  groups: { id: SegmentId; title: string; count: number; happiness: number; delta: number }[];
-  overloaded: boolean;
+  heading: { x: number; y: number; width: number };
+  groups: { id: SegmentId; title: string; count: number; happiness: number; x: number; y: number; width: number }[];
+  nodes: { id: string; segment: SegmentId; title: string; x: number; y: number; width: number; height: number }[];
 }
 
-const BUILDINGS: Record<SegmentId, string[]> = {
-  small: ['coffee', 'pizzeria', 'garage'],
-  medium: ['office', 'warehouse', 'factory'],
-  large: ['bank', 'tower', 'hq'],
-};
+const esc = (text: string): string => text.replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]!);
+const at = (x: number, y: number, width: number): string => `left:${Math.round(x)}px;top:${Math.round(y)}px;width:${Math.round(width)}px`;
 
-/** A bounded illustration of an unbounded customer base. Counts always include key contracts. */
-export function createClientCity(
-  parent: HTMLElement,
-  choose: (segment: SegmentId) => void,
-  toggle: () => void,
-) {
+/** Captions and hit areas only. The buildings and their connections belong to the drawing. */
+export function createClientCity(parent: HTMLElement, choose: (segment: SegmentId) => void, toggle: () => void) {
   const el = document.createElement('section');
   el.className = 'client-city';
   el.setAttribute('aria-label', L('Город клиентов', 'Customer city'));
@@ -39,26 +33,12 @@ export function createClientCity(
       const sig = JSON.stringify(view);
       if (sig === signature) return;
       signature = sig;
-      el.classList.toggle('collapsed', view.collapsed);
-      el.innerHTML =
-        `<header><div><span>${L('КЛИЕНТЫ', 'CUSTOMERS')}</span><strong>${whole(view.total)}</strong></div>` +
-        `<button data-fold="1" aria-expanded="${!view.collapsed}">${view.collapsed ? L('Развернуть ↓', 'Expand ↓') : L('Свернуть ↑', 'Fold ↑')}</button></header>` +
-        `<div class="city-districts">${view.groups
-          .map((group) => {
-            const buildings = Math.min(3, group.count > 100 ? 3 : group.count > 10 ? 2 : 1);
-            return (
-              `<button class="city-district${group.count ? '' : ' empty'}" data-segment="${group.id}" aria-label="${group.title}: ${whole(group.count)}. ${L('Потребности и тариф', 'Needs and price')}">` +
-              `<span class="city-roofline" aria-hidden="true">${BUILDINGS[group.id]
-                .slice(0, buildings)
-                .map((key) => `<img src="assets/img/nodes/${key}.webp" alt="" draggable="false">`)
-                .join('')}</span>` +
-              `<span class="city-name">${group.title}<b>${whole(group.count)}</b></span>` +
-              `<span class="city-mood${group.happiness < 45 ? ' low' : ''}">${group.count ? L(`Довольство ${group.happiness}%`, `Satisfaction ${group.happiness}%`) : L('Ждут свой продукт', 'Waiting for their product')}${group.delta ? `<em>${group.delta > 0 ? '+' : '−'}${whole(Math.abs(group.delta))}</em>` : ''}</span>` +
-              `</button>`
-            );
-          })
-          .join('')}</div>` +
-        `<p class="city-hint${view.overloaded ? ' warning' : ''}">${view.overloaded ? L('Перегруз · нажми на клиентов, чтобы расшириться', 'Overloaded · click customers to expand') : L('Нажми на здания: чего хотят клиенты', 'Click buildings to see what customers need')}</p>`;
+      const {x,y,width} = view.heading;
+      el.innerHTML = `<header style="${at(x,y,width)}"><button class="city-total" data-segment="small">${L('КЛИЕНТЫ', 'CLIENTS')} · <strong>${whole(view.total)}</strong></button>` +
+        `<button data-fold="1" aria-expanded="${!view.collapsed}">${view.collapsed ? L('развернуть', 'expand') : L('свернуть', 'fold')}</button></header>` +
+        view.nodes.map((node) => `<button class="city-node" data-segment="${node.segment}" style="${at(node.x,node.y-node.height,node.width)};height:${Math.round(node.height)}px" title="${esc(node.title)}" aria-label="${esc(node.title)}"></button>`).join('') +
+        view.groups.map((group) => `<button class="city-district" data-segment="${group.id}" style="${at(group.x,group.y,group.width)}" aria-label="${esc(group.title)}: ${whole(group.count)}. ${L('Потребности и тариф', 'Needs and price')}">` +
+          `<span>${group.title} · <b>${whole(group.count)}</b></span><small>${L(`довольство ${group.happiness}%`, `satisfaction ${group.happiness}%`)}</small></button>`).join('');
     },
   };
 }
