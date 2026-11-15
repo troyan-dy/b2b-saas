@@ -7,6 +7,8 @@ pipeline work through the studioigor skill (`<skill>/SKILL.md`, phase rules in
 
 ## Claude Code и Codex
 
+- Перед инженерными задачами читай конфигурацию навыков из `docs/agents/issue-tracker.md`, `docs/agents/triage-labels.md` и `docs/agents/domain.md`. Общий указатель — раздел `Agent skills` в `CLAUDE.md`.
+
 - Общие правила проекта находятся в этом `AGENTS.md`. Отвечай пользователю по-русски.
 - `<skill>` — каталог установленного `studioigor`. В Codex возьми путь из списка навыков,
   обычно `~/.codex/skills/studioigor` (при заданном `CODEX_HOME` — `$CODEX_HOME/skills/studioigor`).
