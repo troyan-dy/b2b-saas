@@ -1,0 +1,67 @@
+import cardsData from '../../data/balance/draft.json';
+import cardsEn from '../../data/balance/draft.en.json';
+import { worded } from '../../core/lang';
+import { enqueueTask } from './production';
+import type { Run } from './run';
+
+export interface DraftCard {
+  id: string;
+  title: string;
+  description: string;
+  impact: string;
+  tradeoff: string;
+  work: number;
+  cost: number;
+  slot: 'support' | 'processing' | 'operation';
+  requires: string[];
+  leads?: number;
+  money?: number;
+}
+
+export const DRAFT_CARDS: DraftCard[] = worded(cardsData as DraftCard[], cardsEn);
+
+function available(run: Run, card: DraftCard): boolean {
+  if (!card.requires.every((kind) => run.live.has(kind))) return false;
+  if (card.slot === 'operation') return true;
+  if (run.strategy[card.slot] === card.id) return false;
+  return !run.tasks.some((task) => task.kind === 'card' && task.card === card.id);
+}
+
+export function dealDraft(run: Run): void {
+  const projects = DRAFT_CARDS.filter((card) => card.slot !== 'operation' && available(run, card));
+  for (let i = projects.length - 1; i > 0; i--) {
+    const j = run.rng.int(0, i);
+    [projects[i], projects[j]] = [projects[j], projects[i]];
+  }
+  const operations = DRAFT_CARDS.filter((card) => card.slot === 'operation');
+  const offset = run.sprint % operations.length;
+  run.draft = [...projects, ...operations.slice(offset), ...operations.slice(0, offset)]
+    .slice(0, 3)
+    .map((card) => card.id);
+}
+
+export function draftCards(run: Run): DraftCard[] {
+  return (run.draft ?? []).flatMap((id) => {
+    const card = DRAFT_CARDS.find((entry) => entry.id === id);
+    return card ? [{ ...card, requires: [...card.requires] }] : [];
+  });
+}
+
+export function chooseCard(run: Run, id: string): boolean {
+  if (run.over || !run.draft?.includes(id)) return false;
+  const card = DRAFT_CARDS.find((entry) => entry.id === id);
+  if (!card || !available(run, card)) return false;
+  enqueueTask(run, { kind: 'card', card: id, work: card.work, cost: card.cost });
+  run.draft = null;
+  return true;
+}
+
+/** Only called by the release, so selecting or finishing a card never grants its bonus early. */
+export function releaseCard(run: Run, id: string): void {
+  const card = DRAFT_CARDS.find((entry) => entry.id === id);
+  if (!card) return;
+  if (id === 'mass' || id === 'premium') run.strategy.support = id;
+  if (id === 'batch' || id === 'instant') run.strategy.processing = id;
+  run.leads += card.leads ?? 0;
+  run.money += card.money ?? 0;
+}

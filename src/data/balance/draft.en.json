@@ -1,0 +1,44 @@
+{
+  "mass": {
+    "title": "The client served itself",
+    "description": "Build self-service support: new companies get started on their own.",
+    "impact": "Promotion ×2 · +4 seats",
+    "tradeoff": "Replaces personal support. Hosting +$32 per sprint."
+  },
+  "premium": {
+    "title": "Now that is enterprise",
+    "description": "Personal support for larger contracts: companies pay for your attention.",
+    "impact": "Corporate bills ×2 · patience +2",
+    "tradeoff": "Replaces mass support. Hosting +$96 per sprint."
+  },
+  "batch": {
+    "title": "Your answer was ready yesterday",
+    "description": "Collect requests into batches and run the model once for the whole group.",
+    "impact": "Tokens −50%",
+    "tradeoff": "Replaces instant answers. Clients wait one sprint less."
+  },
+  "instant": {
+    "title": "While you were typing",
+    "description": "Instant answers make clients recommend the product and wait longer for improvements.",
+    "impact": "Promotion ×1.5 · patience +2",
+    "tradeoff": "Replaces batches. Tokens +20%, hosting +$48 per sprint."
+  },
+  "leads": {
+    "title": "Someone noticed us in a chat",
+    "description": "Prepare a demo for four new companies.",
+    "impact": "+4 leads after release",
+    "tradeoff": "Potential clients need free seats and a working product."
+  },
+  "consulting": {
+    "title": "One tiny consulting job",
+    "description": "A side project pays for the next product improvements.",
+    "impact": "+$1200 after release",
+    "tradeoff": "Six work from the shared queue. A one-time payment."
+  },
+  "credits": {
+    "title": "Provider credits",
+    "description": "Apply for an infrastructure grant: the provider pays for the next project.",
+    "impact": "+$600 after release",
+    "tradeoff": "Three work from the shared queue. A one-time payment."
+  }
+}

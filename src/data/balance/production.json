@@ -1,0 +1,35 @@
+{
+  "construction_cost_per_work": 12,
+  "upgrade_cost_per_work": 16,
+  "max_level": 3,
+  "infrastructure": { "cost": 900, "cost_growth": 1.6, "work": 12, "work_growth": 4 },
+  "strategy": {
+    "mass": { "promo": 2, "seats": 4 },
+    "premium": { "corp_pay": 2, "patience": 2 },
+    "batch": { "tokens": 0.5, "patience": -1 },
+    "instant": { "promo": 1.5, "tokens": 1.2, "patience": 2 }
+  },
+  "strategy_host": { "mass": 1, "premium": 3, "batch": 0, "instant": 1.5 },
+  "upgrade_steps": {
+    "core": { "tokens": -0.05 },
+    "landing": { "promo": 0.25 },
+    "pay": { "small_pay": 0.15 },
+    "wait": { "promo": 0.2 },
+    "bot": { "seats": 2, "patience": 1 },
+    "dash": { "corp_pay": 0.2 },
+    "dark": { "word_of_mouth": 0.5 },
+    "mobile": { "seats": 1, "small_pay": 0.15 },
+    "api": { "promo": 0.3 },
+    "excel": { "small_pay": 0.15 },
+    "push": { "seats": 1, "word_of_mouth": 0.15 },
+    "roles": { "corp_pay": 0.15 },
+    "onb": { "seats": 1, "small_pay": 0.15 },
+    "ref": { "word_of_mouth": 0.5 },
+    "cheap": { "tokens": -0.1 },
+    "crm": { "seats": 1, "corp_pay": 0.2 },
+    "sso": { "corp_pay": 0.2 },
+    "shield": { "patience": 1 },
+    "c1": { "corp_pay": 0.15 },
+    "audit": { "tokens": -0.1 }
+  }
+}

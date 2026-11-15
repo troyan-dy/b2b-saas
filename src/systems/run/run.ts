@@ -11,6 +11,32 @@ import ideasEn from '../../data/balance/ideas.en.json';
 import ideasData from '../../data/balance/ideas.json';
 import tuningData from '../../data/balance/run.json';
 import traitsData from '../../data/balance/traits.json';
+import { dealDraft, releaseCard } from './draft';
+import {
+  addProductionWork,
+  enqueueTask,
+  hasWork,
+  plannedWork,
+  startWork,
+  syncProduction,
+  takeReleasedTasks,
+  type WorkTask,
+} from './production';
+import { blockEffects, PRODUCTION, strategyEffects, strategyHosting } from './product';
+
+export { DRAFT_CARDS, chooseCard, draftCards, type DraftCard } from './draft';
+export {
+  activeWork,
+  buildCapacity,
+  remainingBuildCapacity,
+  queueView,
+  moveTask,
+  deferTask,
+  resumeTask,
+  expandInfrastructure,
+  type WorkTask,
+} from './production';
+export { blockEffectText } from './product';
 
 /**
  * One run = one startup, from an empty sheet to an ending. Pure logic: no Phaser, no DOM.
@@ -83,7 +109,10 @@ interface ClientRule {
   pays_waiting: boolean;
 }
 export const CLIENT_TYPES = clientsData as ClientRule[];
-const CLIENT_RULE = Object.fromEntries(CLIENT_TYPES.map((t) => [t.id, t])) as Record<ClientType, ClientRule>;
+const CLIENT_RULE = Object.fromEntries(CLIENT_TYPES.map((t) => [t.id, t])) as Record<
+  ClientType,
+  ClientRule
+>;
 
 /** One thing a chosen answer does. */
 export type Fx =
@@ -109,14 +138,25 @@ export interface Dilemma {
   bot: number;
 }
 /** the English words of a dilemma: its text, then every option with the words of its effects, in the order of the file */
-type DilemmaWords = Record<string, { text: string; options: { label: string; note: string; result: string; fx?: object[] }[] }>;
+type DilemmaWords = Record<
+  string,
+  { text: string; options: { label: string; note: string; result: string; fx?: object[] }[] }
+>;
 export const DILEMMAS: Dilemma[] =
   LANG === 'en'
     ? (dilemmasData as Dilemma[]).map((d) => {
         const w = (dilemmasEn as DilemmaWords)[d.id];
         // a dilemma nobody has translated yet is asked as it is written
         if (!w) return d;
-        return { ...d, text: w.text, options: d.options.map((o, k) => ({ ...o, ...w.options[k], fx: o.fx.map((f, m) => ({ ...f, ...w.options[k]?.fx?.[m] }) as Fx) })) };
+        return {
+          ...d,
+          text: w.text,
+          options: d.options.map((o, k) => ({
+            ...o,
+            ...w.options[k],
+            fx: o.fx.map((f, m) => ({ ...f, ...w.options[k]?.fx?.[m] }) as Fx),
+          })),
+        };
       })
     : (dilemmasData as Dilemma[]);
 
@@ -144,6 +184,8 @@ export interface Block {
   up: boolean;
   /** the last square of work was put in by the founder's own hands */
   hand: boolean;
+  /** A reserved cell in the queue or backlog, before construction starts. */
+  queued?: boolean;
 }
 
 export interface Client {
@@ -171,6 +213,8 @@ export interface Client {
 export interface Report {
   sprint: number;
   shipped: string[];
+  /** Completed non-building projects; these do not have a cell on the sheet. */
+  projects?: string[];
   came: number;
   left: number;
   /** clients that closed by themselves: a startup like yours ran out of money first */
@@ -191,7 +235,15 @@ export type RunEvent =
   | { type: 'client'; id: number }
   /** `closed` — nothing was wrong with the product: the client itself is no more */
   /** `say` — its own parting words, when it leaves over a dilemma */
-  | { type: 'left'; id: number; name: string; reason: string; closed?: boolean; demo?: boolean; say?: string }
+  | {
+      type: 'left';
+      id: number;
+      name: string;
+      reason: string;
+      closed?: boolean;
+      demo?: boolean;
+      say?: string;
+    }
   /** the demo day: something shipped and people came to look — or nothing did, and `name` walked out */
   | { type: 'demo'; ok: boolean; name: string }
   /** a promised block finished by hand in the last sprint of its term */
@@ -247,6 +299,11 @@ export interface Run {
   money: number;
   stage: number;
   blocks: Block[];
+  tasks: WorkTask[];
+  nextTask: number;
+  draft: string[] | null;
+  strategy: { support: 'mass' | 'premium' | null; processing: 'batch' | 'instant' | null };
+  infrastructure: number;
   agents: Agent[];
   /** the lane the founder checks: no debt there, and the work goes faster */
   review: Lane;
@@ -346,9 +403,13 @@ function shuffle<T>(rng: Rng, items: readonly T[]): T[] {
 }
 
 /** Three cards of each deck to choose from; `runs` — startups behind the founder: some cards come only with experience. */
-export function dealIdea(seed: number, runs = 99): { tech: TechCard[]; form: FormCard[]; aud: AudCard[] } {
+export function dealIdea(
+  seed: number,
+  runs = 99,
+): { tech: TechCard[]; form: FormCard[]; aud: AudCard[] } {
   const rng = createRng(seed);
-  const open = <T extends { unlock: number }>(deck: readonly T[]): T[] => deck.filter((c) => c.unlock <= runs);
+  const open = <T extends { unlock: number }>(deck: readonly T[]): T[] =>
+    deck.filter((c) => c.unlock <= runs);
   return {
     tech: shuffle(rng, open(IDEAS.tech)).slice(0, 3),
     form: shuffle(rng, open(IDEAS.form)).slice(0, 3),
@@ -356,7 +417,10 @@ export function dealIdea(seed: number, runs = 99): { tech: TechCard[]; form: For
   };
 }
 
-const TRAIT_STEP = Object.fromEntries(traitsData.map((t) => [t.id, t.per_level])) as Record<string, number>;
+const TRAIT_STEP = Object.fromEntries(traitsData.map((t) => [t.id, t.per_level])) as Record<
+  string,
+  number
+>;
 
 /** what a trait of the founder adds in this startup: its level times the step of the trait */
 function trait(run: Run, id: string): number {
@@ -365,10 +429,18 @@ function trait(run: Run, id: string): number {
 
 /** «Голосовой ИИ-тиндер для стоматологий», “Voice AI Tinder for dental clinics” */
 export function pitch(idea: Idea): string {
-  return L(`${idea.tech.adj} ИИ-${idea.form.name} для ${idea.aud.name}`, `${idea.tech.adj} AI ${idea.form.name} for ${idea.aud.name}`);
+  return L(
+    `${idea.tech.adj} ИИ-${idea.form.name} для ${idea.aud.name}`,
+    `${idea.tech.adj} AI ${idea.form.name} for ${idea.aud.name}`,
+  );
 }
 
-export function createRun(seed: number, idea: Idea, perks: readonly string[] = [], traits: Readonly<Record<string, number>> = {}): Run {
+export function createRun(
+  seed: number,
+  idea: Idea,
+  perks: readonly string[] = [],
+  traits: Readonly<Record<string, number>> = {},
+): Run {
   const rng = createRng(seed);
   const askable = Object.keys(RULES).filter((k) => RULES[k].role === 'ask');
   const corp = Object.keys(RULES).filter((k) => RULES[k].role === 'corp');
@@ -376,10 +448,14 @@ export function createRun(seed: number, idea: Idea, perks: readonly string[] = [
   const corpAsks = shuffle(rng, corp).slice(0, TUNING.corp_asks);
   // the toolkit of this startup: what the market asks for, two blocks that add places for clients,
   // and a random handful of the rest — never all of them
-  const others = shuffle(rng, Object.keys(RULES).filter((k) => RULES[k].role !== 'base'));
+  const others = shuffle(
+    rng,
+    Object.keys(RULES).filter((k) => RULES[k].role !== 'base'),
+  );
   const must = new Set([...asks, ...corpAsks]);
   if (perks.includes('cheapEarly')) must.add('cheap');
-  for (const k of others) if (EFFECTS[k]?.seats && [...must].filter((x) => EFFECTS[x]?.seats).length < 2) must.add(k);
+  for (const k of others)
+    if (EFFECTS[k]?.seats && [...must].filter((x) => EFFECTS[x]?.seats).length < 2) must.add(k);
   const pool = [...must, ...others.filter((k) => !must.has(k))].slice(0, TUNING.pool_size);
   const run: Run = {
     seed,
@@ -390,9 +466,17 @@ export function createRun(seed: number, idea: Idea, perks: readonly string[] = [
     t: 0,
     sprint: 1,
     sprintT: 0,
-    money: TUNING.start_money + (perks.includes('cash') ? 1500 : 0) + (traits.network ?? 0) * (TRAIT_STEP.network ?? 0),
+    money:
+      TUNING.start_money +
+      (perks.includes('cash') ? 1500 : 0) +
+      (traits.network ?? 0) * (TRAIT_STEP.network ?? 0),
     stage: 1,
     blocks: [],
+    tasks: [],
+    nextTask: 1,
+    draft: null,
+    strategy: { support: null, processing: null },
+    infrastructure: 0,
     agents: [{ id: 1, tier: 'fast', lane: 'build', carry: 0 }],
     review: 'build',
     reviewLocked: false,
@@ -420,17 +504,56 @@ export function createRun(seed: number, idea: Idea, perks: readonly string[] = [
     events: [],
     over: null,
     lastReport: null,
-    stats: { clients: 0, left: 0, downs: 0, peakMrr: 0, shipped: 0, corp: 0, soldFor: 0, tokens: 0, firstClientAt: 0, profitAt: 0, promises: 0, kept: 0, broken: 0, links: 0, reworks: 0, heroes: 0, offered: 0, shortcuts: 0, value: 0 },
+    stats: {
+      clients: 0,
+      left: 0,
+      downs: 0,
+      peakMrr: 0,
+      shipped: 0,
+      corp: 0,
+      soldFor: 0,
+      tokens: 0,
+      firstClientAt: 0,
+      profitAt: 0,
+      promises: 0,
+      kept: 0,
+      broken: 0,
+      links: 0,
+      reworks: 0,
+      heroes: 0,
+      offered: 0,
+      shortcuts: 0,
+      value: 0,
+    },
     nextId: 1,
     nextAgent: 2,
     live: new Set(),
     host: 0,
     linkCount: 0,
-    eff: { patience: 0, seats: 0, word_of_mouth: 1, corp_pay: 1, small_pay: 1, promo: 1, tokens: 1 },
+    eff: {
+      patience: 0,
+      seats: 0,
+      word_of_mouth: 1,
+      corp_pay: 1,
+      small_pay: 1,
+      promo: 1,
+      tokens: 1,
+    },
   };
   // what the founder learned in earlier startups
   if (perks.includes('template')) {
-    run.blocks.push({ kind: 'core', i: 0, j: 0, done: workNeed(run, 'core'), need: workNeed(run, 'core'), built: true, live: true, level: 1, up: false, hand: false });
+    run.blocks.push({
+      kind: 'core',
+      i: 0,
+      j: 0,
+      done: workNeed(run, 'core'),
+      need: workNeed(run, 'core'),
+      built: true,
+      live: true,
+      level: 1,
+      up: false,
+      hand: false,
+    });
   }
   if (perks.includes('posts')) run.leads = 1;
   if (perks.includes('buyers')) run.known.push(run.corpAsks[0]);
@@ -448,14 +571,26 @@ export function isLive(run: Run, kind: string): boolean {
 /** Recounts what the shipped blocks give. Liveness changes only at a release, so this is the only place it is counted. */
 function refresh(run: Run): void {
   run.live = new Set(run.blocks.filter((b) => b.live).map((b) => b.kind));
-  run.host = 0;
+  run.host = strategyHosting(run);
   // a reworked block is a bigger block: every version adds to its hosting
-  for (const b of run.blocks) if (b.live) run.host += RULES[b.kind].host * (1 + TUNING.rework.host_mult * (b.level - 1));
+  for (const b of run.blocks)
+    if (b.live) run.host += RULES[b.kind].host * (1 + TUNING.rework.host_mult * (b.level - 1));
   run.linkCount = links(run).length;
   run.stats.links = Math.max(run.stats.links, run.linkCount);
-  const eff: Effects = { patience: 0, seats: 0, word_of_mouth: 1, corp_pay: 1, small_pay: 1, promo: 1, tokens: 1 };
-  for (const [kind, e] of Object.entries(EFFECTS)) {
-    if (!run.live.has(kind)) continue;
+  const eff: Effects = {
+    patience: 0,
+    seats: 0,
+    word_of_mouth: 1,
+    corp_pay: 1,
+    small_pay: 1,
+    promo: 1,
+    tokens: 1,
+  };
+  const effects = [
+    ...run.blocks.filter((b) => b.live).map((b) => blockEffects(b.kind, b.level)),
+    ...strategyEffects(run),
+  ];
+  for (const e of effects) {
     for (const [name, v] of Object.entries(e)) {
       const key = name as keyof Effects;
       // sprints of patience and places for clients add up; everything else multiplies
@@ -467,6 +602,12 @@ function refresh(run: Run): void {
 
 /** Rebuilds derived values after loading; does not advance time or consume randomness. */
 export function refreshRun(run: Run): void {
+  run.tasks ??= [];
+  run.nextTask ??= 1;
+  run.draft ??= null;
+  run.strategy ??= { support: null, processing: null };
+  run.infrastructure ??= 0;
+  syncProduction(run);
   refresh(run);
   run.mod = { tokens: 1, price: 1, promo: 1 };
   for (const m of run.mods) run.mod[m.kind] *= m.mult;
@@ -474,7 +615,12 @@ export function refreshRun(run: Run): void {
 
 /** how many squares of work a block takes in this run */
 export function workNeed(run: Run, kind: string): number {
-  return Math.ceil(RULES[kind].work * run.idea.tech.work * run.idea.form.work * Math.max(0.5, 1 - trait(run, 'engineering')));
+  return Math.ceil(
+    RULES[kind].work *
+      run.idea.tech.work *
+      run.idea.form.work *
+      Math.max(0.5, 1 - trait(run, 'engineering')),
+  );
 }
 
 /** Pairs of live blocks that stand side by side and are friends: «лендинг + оплата». */
@@ -485,14 +631,21 @@ export function links(run: Run): [string, string][] {
     for (const b of live) {
       if (a.kind >= b.kind) continue;
       if (Math.abs(a.i - b.i) + Math.abs(a.j - b.j) !== 1) continue;
-      if (RULES[a.kind].friends.includes(b.kind) || RULES[b.kind].friends.includes(a.kind)) out.push([a.kind, b.kind]);
+      if (RULES[a.kind].friends.includes(b.kind) || RULES[b.kind].friends.includes(a.kind))
+        out.push([a.kind, b.kind]);
     }
   }
   return out;
 }
 
 export function priceMult(run: Run): number {
-  return run.idea.tech.price * run.idea.form.price * (1 + TUNING.link_bonus * run.linkCount) * run.mod.price * (1 + trait(run, 'sales'));
+  return (
+    run.idea.tech.price *
+    run.idea.form.price *
+    (1 + TUNING.link_bonus * run.linkCount) *
+    run.mod.price *
+    (1 + trait(run, 'sales'))
+  );
 }
 
 /** what a client is worth per sprint: its subscription at today's prices, whether it pays right now or not */
@@ -520,7 +673,13 @@ export function researchNeed(run: Run): number {
 /** what a client costs in tokens per sprint: free users burn them too */
 export function clientTokens(run: Run, c: Client): number {
   // the more a client uses the product, the more it burns: tokens follow the size of the subscription
-  return clientWorth(run, c) * TUNING.clients.token_share * run.idea.tech.tokens * run.eff.tokens * run.mod.tokens;
+  return (
+    clientWorth(run, c) *
+    TUNING.clients.token_share *
+    run.idea.tech.tokens *
+    run.eff.tokens *
+    run.mod.tokens
+  );
 }
 
 export function mrr(run: Run): number {
@@ -553,7 +712,13 @@ export function burnPerS(run: Run): number {
 }
 
 /** Where the money goes and comes from, $ per second: the sheet shows every line of it. */
-export function flows(run: Run): { living: number; agents: number; hosting: number; tokens: number; income: number } {
+export function flows(run: Run): {
+  living: number;
+  agents: number;
+  hosting: number;
+  tokens: number;
+  income: number;
+} {
   return {
     living: TUNING.living_per_s * (1 - trait(run, 'thrift')),
     agents: agentCost(run),
@@ -598,7 +763,13 @@ export function freeCells(run: Run): { i: number; j: number }[] {
       // the sheet of the product is a diamond: its far corners are cut off
       if (Math.abs(i) + Math.abs(j) > r + 1) continue;
       if (taken.has(`${i},${j}`)) continue;
-      if (taken.has(`${i + 1},${j}`) || taken.has(`${i - 1},${j}`) || taken.has(`${i},${j + 1}`) || taken.has(`${i},${j - 1}`)) out.push({ i, j });
+      if (
+        taken.has(`${i + 1},${j}`) ||
+        taken.has(`${i - 1},${j}`) ||
+        taken.has(`${i},${j + 1}`) ||
+        taken.has(`${i},${j - 1}`)
+      )
+        out.push({ i, j });
     }
   }
   return out;
@@ -609,7 +780,12 @@ export function shelf(run: Run): string[] {
   if (run.blocks.length === 0) return ['core'];
   const placed = new Set(run.blocks.map((b) => b.kind));
   const mine = (k: string): boolean => RULES[k].role === 'base' || run.pool.includes(k);
-  return Object.keys(RULES).filter((k) => mine(k) && !placed.has(k) && (RULES[k].stage <= run.stage || (k === 'cheap' && run.perks.includes('cheapEarly'))));
+  return Object.keys(RULES).filter(
+    (k) =>
+      mine(k) &&
+      !placed.has(k) &&
+      (RULES[k].stage <= run.stage || (k === 'cheap' && run.perks.includes('cheapEarly'))),
+  );
 }
 
 export function sites(run: Run): Block[] {
@@ -618,7 +794,7 @@ export function sites(run: Run): Block[] {
 
 /** work still goes into this block: it is being built, or reworked on a client's request */
 export function isSite(b: Block): boolean {
-  return !b.built || (b.up && b.done < b.need);
+  return !b.queued && (!b.built || (b.up && b.done < b.need));
 }
 
 /** the client has what it waits for: the block is shipped, in the version it asked for */
@@ -638,7 +814,7 @@ export function reworks(run: Run): { kind: string; level: number; who: string[] 
   for (const c of run.clients) {
     if (c.happy || c.wantLevel < 2) continue;
     const b = run.blocks.find((x) => x.kind === c.want);
-    if (!b || !b.live || b.up || b.level >= c.wantLevel) continue;
+    if (!b || !b.live || b.up || plannedWork(run, b.kind) || b.level >= c.wantLevel) continue;
     const row = out.find((r) => r.kind === c.want);
     if (row) row.who.push(c.name);
     else out.push({ kind: c.want, level: c.wantLevel, who: [c.name] });
@@ -664,10 +840,29 @@ export function friendsAt(run: Run, kind: string, i: number, j: number): number 
 // ---------------------------------------------------------------- the player's intents
 
 export function place(run: Run, kind: string, i: number, j: number): boolean {
-  if (run.over || !shelf(run).includes(kind)) return false;
-  if (sites(run).length >= TUNING.sites_max) return false;
+  if (run.over || run.draft || !shelf(run).includes(kind)) return false;
   if (!freeCells(run).some((c) => c.i === i && c.j === j)) return false;
-  run.blocks.push({ kind, i, j, done: 0, need: workNeed(run, kind), built: false, live: false, level: 1, up: false, hand: false });
+  const work = workNeed(run, kind);
+  run.blocks.push({
+    kind,
+    i,
+    j,
+    done: 0,
+    need: work,
+    built: false,
+    live: false,
+    level: 1,
+    up: false,
+    hand: false,
+    queued: true,
+  });
+  enqueueTask(run, {
+    kind: 'build',
+    block: kind,
+    level: 1,
+    work,
+    cost: work * PRODUCTION.construction_cost_per_work,
+  });
   run.events.push({ type: 'placed', kind, i, j });
   return true;
 }
@@ -678,7 +873,16 @@ export function place(run: Run, kind: string, i: number, j: number): boolean {
  */
 export function demolish(run: Run, kind: string): boolean {
   const b = run.blocks.find((x) => x.kind === kind);
-  if (run.over || !b || !b.live || b.up || RULES[kind].role === 'base') return false;
+  if (
+    run.over ||
+    run.draft ||
+    !b ||
+    !b.live ||
+    b.up ||
+    plannedWork(run, kind) ||
+    RULES[kind].role === 'base'
+  )
+    return false;
   run.blocks = run.blocks.filter((x) => x !== b);
   refresh(run);
   for (const c of run.clients) {
@@ -694,23 +898,37 @@ export function demolish(run: Run, kind: string): boolean {
 /** Starts the rework a client asked for: the shipped block goes back to the site and keeps working meanwhile. */
 export function upgrade(run: Run, kind: string): boolean {
   const b = run.blocks.find((x) => x.kind === kind);
-  if (run.over || !b || !b.live || b.up || b.level >= TUNING.rework.max_level) return false;
-  if (sites(run).length >= TUNING.sites_max) return false;
-  b.up = true;
-  b.done = 0;
-  b.need = reworkNeed(run, b);
+  if (
+    run.over ||
+    run.draft ||
+    !b ||
+    !b.live ||
+    b.up ||
+    plannedWork(run, kind) ||
+    b.level >= PRODUCTION.max_level
+  )
+    return false;
+  const work = reworkNeed(run, b);
+  enqueueTask(run, {
+    kind: 'upgrade',
+    block: kind,
+    level: b.level + 1,
+    work,
+    cost: work * PRODUCTION.upgrade_cost_per_work,
+  });
   run.events.push({ type: 'placed', kind, i: b.i, j: b.j });
   return true;
 }
 
 export function setLane(run: Run, agentId: number, lane: Lane): void {
+  if (run.over || run.draft) return;
   const a = run.agents.find((x) => x.id === agentId);
   if (a) a.lane = lane;
 }
 
 /** The founder picks what to check; the choice holds until the release. */
 export function setReview(run: Run, lane: Lane): boolean {
-  if (run.reviewLocked || run.review === lane) return false;
+  if (run.over || run.draft || run.reviewLocked || run.review === lane) return false;
   run.review = lane;
   run.reviewLocked = true;
   return true;
@@ -718,7 +936,9 @@ export function setReview(run: Run, lane: Lane): boolean {
 
 export function canHire(run: Run, tier: Tier): boolean {
   const rule = stageRule(run);
-  return !run.over && run.agents.length < rule.agents_max && rule.tiers.includes(tier);
+  return (
+    !run.over && !run.draft && run.agents.length < rule.agents_max && rule.tiers.includes(tier)
+  );
 }
 
 export function hire(run: Run, tier: Tier): boolean {
@@ -728,6 +948,7 @@ export function hire(run: Run, tier: Tier): boolean {
 }
 
 export function fire(run: Run, agentId: number): void {
+  if (run.over || run.draft) return;
   run.agents = run.agents.filter((a) => a.id !== agentId);
 }
 
@@ -736,14 +957,12 @@ export function fire(run: Run, agentId: number): void {
  * fixes, writes a post or calls a client. One point of strength each.
  */
 export function crunch(run: Run, lane: Lane = 'build'): boolean {
-  if (run.over || run.energy < 1 || !handy(run, lane)) return false;
+  if (run.over || run.draft || run.energy < 1 || !handy(run, lane)) return false;
   run.energy -= 1;
   switch (lane) {
     case 'build': {
-      const site = run.blocks.find(isSite)!;
       run.debt += TUNING.crunch.debt;
-      run.events.push({ type: 'work', agent: 0, lane, i: site.i, j: site.j });
-      addWork(run, site, true);
+      work(run, 0, true);
       break;
     }
     case 'fix':
@@ -766,7 +985,7 @@ export function crunch(run: Run, lane: Lane = 'build'): boolean {
 export function handy(run: Run, lane: Lane): boolean {
   switch (lane) {
     case 'build':
-      return run.blocks.some(isSite);
+      return hasWork(run);
     case 'fix':
       return run.debt > 0;
     case 'promo':
@@ -779,13 +998,23 @@ export function handy(run: Run, lane: Lane): boolean {
 
 /** what the market wants and the founder does not know yet */
 export function unknownAsks(run: Run): string[] {
-  return [...run.asks, ...(run.stage >= 2 ? run.corpAsks : [])].filter((k) => !run.known.includes(k));
+  return [...run.asks, ...(run.stage >= 2 ? run.corpAsks : [])].filter(
+    (k) => !run.known.includes(k),
+  );
 }
 
 /** how much of a lead one square of promotion is */
 export function leadsPerWork(run: Run): number {
   const trust = (1 + TUNING.logos.promo * logos(run)) * (1 + trait(run, 'marketing'));
-  return (run.idea.tech.hype * run.idea.form.hype * run.idea.aud.hype * run.eff.promo * run.mod.promo * trust) / TUNING.promo_work_per_lead;
+  return (
+    (run.idea.tech.hype *
+      run.idea.form.hype *
+      run.idea.aud.hype *
+      run.eff.promo *
+      run.mod.promo *
+      trust) /
+    TUNING.promo_work_per_lead
+  );
 }
 
 /** One square of research: enough of them and the market names one more block it wants. */
@@ -800,13 +1029,13 @@ function interview(run: Run): void {
   }
 }
 
-function addWork(run: Run, site: Block, hand = false): void {
-  site.done++;
-  site.hand = hand;
-  if (site.done >= site.need) {
-    site.built = true;
-    run.events.push({ type: 'built', kind: site.kind, i: site.i, j: site.j });
-  }
+function work(run: Run, agent: number, hand = false): boolean {
+  const task = startWork(run);
+  if (!task) return false;
+  const site = task.block ? run.blocks.find((b) => b.kind === task.block) : undefined;
+  run.events.push({ type: 'work', agent, lane: 'build', i: site?.i, j: site?.j });
+  addProductionWork(run, hand);
+  return true;
 }
 
 export type OfferAnswer = 'sell' | 'haggle' | 'no';
@@ -816,7 +1045,7 @@ export type OfferAnswer = 'sell' | 'haggle' | 'no';
  * whole valuation: the cleaner the code, the likelier the buyer agrees; if not, he hangs up.
  */
 export function answerOffer(run: Run, answer: OfferAnswer): void {
-  if (run.offer === null || run.over) return;
+  if (run.offer === null || run.over || run.draft) return;
   const bid = run.offer;
   run.offer = null;
   if (answer === 'no') return;
@@ -835,7 +1064,13 @@ export function valueMult(run: Run): number {
   const V = TUNING.valuation;
   let levels = 0;
   for (const b of run.blocks) if (b.live) levels += b.level - 1;
-  return Math.min(V.max, Math.max(V.min, V.base + V.per_link * run.linkCount + V.per_level * levels - V.per_debt * run.debt));
+  return Math.min(
+    V.max,
+    Math.max(
+      V.min,
+      V.base + V.per_link * run.linkCount + V.per_level * levels - V.per_debt * run.debt,
+    ),
+  );
 }
 
 /** The company's price tag: the goal of the third stage. */
@@ -857,7 +1092,10 @@ export function isDemo(run: Run, sprint: number = run.sprint): boolean {
 /** logos of happy big clients on the landing page: each one makes promotion work better */
 export function logos(run: Run): number {
   if (!isLive(run, 'landing')) return 0;
-  return Math.min(TUNING.logos.max, run.clients.filter((c) => c.happy && CLIENT_RULE[c.type].asks === 'corp').length);
+  return Math.min(
+    TUNING.logos.max,
+    run.clients.filter((c) => c.happy && CLIENT_RULE[c.type].asks === 'corp').length,
+  );
 }
 
 /**
@@ -866,7 +1104,7 @@ export function logos(run: Run): number {
  */
 export function answerCall(run: Run, sure: boolean): void {
   const c = run.call;
-  if (!c || run.over) return;
+  if (!c || run.over || run.draft) return;
   run.call = null;
   if (run.clients.length >= clientsMax(run)) return;
   if (sure) {
@@ -901,7 +1139,7 @@ export function dilemmaOf(run: Run): Dilemma | null {
 function fits(run: Run, d: Dilemma): boolean {
   switch (d.needs) {
     case 'site':
-      return run.blocks.some(isSite);
+      return hasWork(run);
     case 'sellable':
       return sellable(run);
     case 'client':
@@ -924,13 +1162,19 @@ function fits(run: Run, d: Dilemma): boolean {
 /** A new sprint: now and then it starts with a choice. */
 function propose(run: Run): void {
   const D = TUNING.dilemma;
-  if (run.sprint < D.from_sprint || run.call || run.offer !== null || run.rng.next() >= D.chance) return;
+  if (run.sprint < D.from_sprint || run.call || run.offer !== null || run.rng.next() >= D.chance)
+    return;
   const pool = DILEMMAS.filter((d) => !run.seen.includes(d.id) && fits(run, d));
   if (pool.length === 0) return;
   let roll = run.rng.next() * pool.reduce((s, d) => s + d.weight, 0);
   const d = pool.find((x) => (roll -= x.weight) < 0) ?? pool[0];
   // a client's own question is about that client; a rival goes for the one that pays most
-  const about = d.who === 'client' ? run.rng.pick(run.clients) : d.who === 'rival' ? [...run.clients].sort((a, b) => clientWorth(run, b) - clientWorth(run, a))[0] : undefined;
+  const about =
+    d.who === 'client'
+      ? run.rng.pick(run.clients)
+      : d.who === 'rival'
+        ? [...run.clients].sort((a, b) => clientWorth(run, b) - clientWorth(run, a))[0]
+        : undefined;
   run.dilemma = { id: d.id, client: about?.id ?? 0, name: about?.name ?? '' };
   run.seen = [...run.seen, d.id].slice(-D.no_repeat);
   if (d.who === 'claude') run.stats.offered++;
@@ -941,7 +1185,7 @@ function propose(run: Run): void {
 export function answerDilemma(run: Run, option: number): void {
   const d = dilemmaOf(run);
   const about = run.dilemma;
-  if (!d || !about || run.over) return;
+  if (!d || !about || run.over || run.draft) return;
   run.dilemma = null;
   const o = d.options[Math.min(Math.max(option, 0), d.options.length - 1)];
   if (d.who === 'claude' && o !== d.options[d.options.length - 1]) run.stats.shortcuts++;
@@ -955,10 +1199,7 @@ export function answerDilemma(run: Run, option: number): void {
     switch (f.k) {
       case 'work': {
         for (let k = 0; k < f.n; k++) {
-          const site = run.blocks.find(isSite);
-          if (!site) break;
-          run.events.push({ type: 'work', agent: 0, lane: 'build', i: site.i, j: site.j });
-          addWork(run, site);
+          if (!work(run, 0)) break;
         }
         break;
       }
@@ -983,7 +1224,8 @@ export function answerDilemma(run: Run, option: number): void {
         for (const c of f.who === 'all' ? run.clients : one ? [one] : []) c.deal *= f.mult;
         break;
       case 'leave':
-        for (const c of f.who === 'all' ? [...run.clients] : one ? [one] : []) if (run.rng.next() < f.p) walk(c, f.say);
+        for (const c of f.who === 'all' ? [...run.clients] : one ? [one] : [])
+          if (run.rng.next() < f.p) walk(c, f.say);
         break;
       case 'risk':
         run.risks.push({ left: 3, p: f.p, n: f.n, say: f.say, text: f.text });
@@ -995,7 +1237,7 @@ export function answerDilemma(run: Run, option: number): void {
 
 /** The money is gone. Mortgaging the flat buys a minute of life, once. */
 export function answerLastChance(run: Run, accept: boolean): void {
-  if (run.lastChance === null || run.over) return;
+  if (run.lastChance === null || run.over || run.draft) return;
   if (accept) {
     run.money += run.lastChance;
     run.mortgaged = true;
@@ -1007,7 +1249,8 @@ export function answerLastChance(run: Run, accept: boolean): void {
 
 export function step(run: Run, dt: number): void {
   // the bank is on the line: the clock waits for the answer
-  if (run.over || run.lastChance !== null) return;
+  if (run.over || run.draft || run.lastChance !== null) return;
+  startWork(run);
   run.t += dt;
   run.money += netPerS(run) * dt;
   run.stats.tokens += (tokens(run) / TUNING.sprint_s) * dt;
@@ -1044,17 +1287,17 @@ export function step(run: Run, dt: number): void {
 
 /** One square of work arrives where the agent's lane points. */
 function deliver(run: Run, a: Agent): void {
-  const dirty = a.lane === run.review ? 0 : TUNING.tiers[a.tier].debt_per_work * (run.perks.includes('tests') ? 0.6 : 1);
+  const dirty =
+    a.lane === run.review
+      ? 0
+      : TUNING.tiers[a.tier].debt_per_work * (run.perks.includes('tests') ? 0.6 : 1);
   switch (a.lane) {
     case 'build': {
-      const site = run.blocks.find(isSite);
-      if (!site) {
+      if (!work(run, a.id)) {
         run.events.push({ type: 'work', agent: a.id, lane: a.lane, idle: true });
         return;
       }
       run.debt += dirty;
-      run.events.push({ type: 'work', agent: a.id, lane: a.lane, i: site.i, j: site.j });
-      addWork(run, site);
       return;
     }
     case 'fix':
@@ -1067,7 +1310,12 @@ function deliver(run: Run, a: Agent): void {
       run.events.push({ type: 'work', agent: a.id, lane: a.lane });
       return;
     case 'research':
-      run.events.push({ type: 'work', agent: a.id, lane: a.lane, idle: unknownAsks(run).length === 0 });
+      run.events.push({
+        type: 'work',
+        agent: a.id,
+        lane: a.lane,
+        idle: unknownAsks(run).length === 0,
+      });
       interview(run);
       return;
   }
@@ -1080,11 +1328,19 @@ function makeClient(run: Run): Client {
   const known = run.perks.includes('name') && run.stats.clients === 0;
   const rule =
     (known ? CLIENT_RULE.mid : undefined) ??
-    CLIENT_TYPES.find((t) => run.stage >= t.from_stage && count(t.id) < t.max && (t.chance >= 1 || run.rng.next() < t.chance)) ??
+    CLIENT_TYPES.find(
+      (t) =>
+        run.stage >= t.from_stage &&
+        count(t.id) < t.max &&
+        (t.chance >= 1 || run.rng.next() < t.chance),
+    ) ??
     CLIENT_RULE.small;
 
   const taken = new Set(run.clients.map((c) => c.name));
-  const all = rule.pool === 'aud' ? run.idea.aud.clients.map((name) => ({ name, texture: run.idea.aud.texture })) : IDEAS[rule.pool];
+  const all =
+    rule.pool === 'aud'
+      ? run.idea.aud.clients.map((name) => ({ name, texture: run.idea.aud.texture }))
+      : IDEAS[rule.pool];
   const pool = all.filter((c) => !taken.has(c.name));
   const who = run.rng.pick(pool.length > 0 ? pool : all);
   let name = who.name;
@@ -1094,7 +1350,12 @@ function makeClient(run: Run): Client {
     name += tails.find((x) => !taken.has(name + x)) ?? tails[0];
   }
   // how long this market waits: the idea, the shipped blocks and, for its own audience, the audience itself
-  const patience = rule.patience + run.idea.tech.patience + run.idea.form.patience + run.eff.patience + (rule.pool === 'aud' ? run.idea.aud.patience : 0);
+  const patience =
+    rule.patience +
+    run.idea.tech.patience +
+    run.idea.form.patience +
+    run.eff.patience +
+    (rule.pool === 'aud' ? run.idea.aud.patience : 0);
   return {
     id: run.nextId++,
     texture: who.texture,
@@ -1133,7 +1394,22 @@ function seat(run: Run, client: Client): void {
 /** The end of a sprint: what is built ships, the market answers. */
 function release(run: Run): void {
   const C = TUNING.clients;
-  const report: Report = { sprint: run.sprint, shipped: [], came: 0, left: 0, closed: 0, reasons: [], mrr: 0, tokens: 0, debt: 0, down: false };
+  const report: Report = {
+    sprint: run.sprint,
+    shipped: [],
+    came: 0,
+    left: 0,
+    closed: 0,
+    reasons: [],
+    mrr: 0,
+    tokens: 0,
+    debt: 0,
+    down: false,
+  };
+  const completed = takeReleasedTasks(run);
+  report.projects = completed
+    .filter((task) => task.kind === 'card' || task.kind === 'infrastructure')
+    .map((task) => task.card ?? task.kind);
 
   for (const b of run.blocks) {
     if (b.built && !b.live) {
@@ -1165,6 +1441,11 @@ function release(run: Run): void {
   }
 
   news(run);
+  for (const task of completed) {
+    if (task.kind === 'card' && task.card) releaseCard(run, task.card);
+    if (task.kind === 'infrastructure') run.infrastructure++;
+  }
+  refreshRun(run);
 
   // nobody picked up: the client on the line is gone
   if (run.call) {
@@ -1244,9 +1525,18 @@ function release(run: Run): void {
 
   // the demo day: everyone watches this release. Something shipped — people come to look; nothing — one walks out
   if (isDemo(run) && run.clients.length > 0) {
-    if (report.shipped.length > 0) {
+    const stable =
+      netPerS(run) >= 0 &&
+      !run.down &&
+      (run.sprint > TUNING.last_sprint ||
+        (shelf(run).length === 0 && run.blocks.every((b) => b.level >= PRODUCTION.max_level)));
+    if (report.shipped.length > 0 || report.projects.length > 0 || stable) {
       run.leads += TUNING.demo.leads;
-      run.events.push({ type: 'demo', ok: true, name: report.shipped[0] });
+      run.events.push({
+        type: 'demo',
+        ok: true,
+        name: report.shipped[0] ?? report.projects[0] ?? L('стабильная прибыль', 'steady profit'),
+      });
     } else {
       const c = run.clients.find((x) => !x.happy) ?? run.rng.pick(run.clients);
       run.clients = run.clients.filter((x) => x !== c);
@@ -1279,7 +1569,8 @@ function release(run: Run): void {
       if (!c.happy || c.promised || run.rng.next() >= R.chance) continue;
       const own = run.blocks.find((b) => b.kind === c.want);
       const open = run.blocks.filter((b) => b.live && b.level < R.max_level);
-      const b = own && own.level < R.max_level ? own : open.length > 0 ? run.rng.pick(open) : undefined;
+      const b =
+        own && own.level < R.max_level ? own : open.length > 0 ? run.rng.pick(open) : undefined;
       if (!b) continue;
       c.want = b.kind;
       c.wantLevel = b.level + 1;
@@ -1302,7 +1593,12 @@ function release(run: Run): void {
       run.leads -= 1;
       const c = makeClient(run);
       // a client that needs what is not there may call first and ask; it comes when the founder answers
-      if (run.call === null && run.stage >= 2 && !isLive(run, c.want) && run.rng.next() < TUNING.call.chance) {
+      if (
+        run.call === null &&
+        run.stage >= 2 &&
+        !isLive(run, c.want) &&
+        run.rng.next() < TUNING.call.chance
+      ) {
         run.call = c;
         run.events.push({ type: 'call', name: c.name, kind: c.want });
         // the question itself says what this market wants
@@ -1331,7 +1627,7 @@ function release(run: Run): void {
   run.offer = null;
   const V = TUNING.valuation;
   if (income > 0) run.stats.value = valuation(run);
-  if (run.stage >= 3 && run.sprint % V.every === 0 && income > 0 && run.sprint < TUNING.last_sprint) {
+  if (run.stage >= 3 && run.sprint % V.every === 0 && income > 0) {
     run.offer = Math.round((valuation(run) * V.first_bid) / 100) * 100;
     run.events.push({ type: 'offer', price: run.offer });
   }
@@ -1348,8 +1644,8 @@ function release(run: Run): void {
   run.sprint++;
   run.sprintT = 0;
   run.reviewLocked = false;
-  if (run.sprint <= TUNING.last_sprint) propose(run);
-  if (run.sprint > TUNING.last_sprint) end(run, netPerS(run) >= 0 ? 'profit' : 'late');
+  propose(run);
+  dealDraft(run);
 }
 
 /**
@@ -1362,9 +1658,18 @@ function news(run: Run): void {
 
   const N = TUNING.news;
   run.newsWait--;
-  if (run.sprint >= N.from_sprint && run.newsWait <= 0 && run.rng.next() < (run.stage >= 3 ? N.chance_stage3 : N.chance)) {
+  if (
+    run.sprint >= N.from_sprint &&
+    run.newsWait <= 0 &&
+    run.rng.next() < (run.stage >= 3 ? N.chance_stage3 : N.chance)
+  ) {
     const waiting = [...new Set(run.clients.filter((c) => !c.happy).map((c) => c.want))];
-    const pool = EVENTS.filter((e) => e.stage <= run.stage && (e.kind !== 'impatience' || waiting.length > 0) && (e.kind !== 'down' || !run.down));
+    const pool = EVENTS.filter(
+      (e) =>
+        e.stage <= run.stage &&
+        (e.kind !== 'impatience' || waiting.length > 0) &&
+        (e.kind !== 'down' || !run.down),
+    );
     let roll = run.rng.next() * pool.reduce((s, e) => s + e.weight, 0);
     const e = pool.find((x) => (roll -= x.weight) < 0) ?? pool[0];
     let arg = '';
@@ -1391,13 +1696,18 @@ function news(run: Run): void {
       case 'impatience': {
         const kind = run.rng.pick(waiting);
         // tired of waiting, but not gone yet: the founder still has a sprint to answer
-        for (const c of run.clients) if (!c.happy && c.want === kind) c.patience = Math.max(1, c.patience - e.add);
+        for (const c of run.clients)
+          if (!c.happy && c.want === kind) c.patience = Math.max(1, c.patience - e.add);
         arg = kind;
         break;
       }
     }
     run.newsWait = N.cooldown;
-    const good = e.kind === 'leads' || e.kind === 'money' || (e.kind === 'promo' && e.mult > 1) || (e.kind === 'tokens' && e.mult < 1);
+    const good =
+      e.kind === 'leads' ||
+      e.kind === 'money' ||
+      (e.kind === 'promo' && e.mult > 1) ||
+      (e.kind === 'tokens' && e.mult < 1);
     run.events.push({ type: 'news', id: e.id, text: e.text, arg, good });
   }
 
