@@ -43,7 +43,10 @@ export function dealDraft(run: Run): void {
     (card) => card.slot === 'operation' && available(run, card),
   );
   const offset = run.sprint % operations.length;
-  run.draft = [...projects, ...operations.slice(offset), ...operations.slice(0, offset)]
+  const rotated = [...operations.slice(offset), ...operations.slice(0, offset)];
+  const affordable = rotated.filter((card) => card.cost <= run.money);
+  const costly = rotated.filter((card) => card.cost > run.money);
+  run.draft = [...projects.slice(0, 2), ...affordable, ...costly]
     .slice(0, 3)
     .map((card) => card.id);
 }

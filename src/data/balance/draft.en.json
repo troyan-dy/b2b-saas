@@ -1,21 +1,21 @@
 {
   "mass": {
     "title": "The client served itself",
-    "description": "Build self-service support: new companies get started on their own.",
+    "description": "Link onboarding to AI support to double company support capacity. Compute capacity remains a separate limit.",
     "impact": "Promotion ×2 · +4 seats",
     "tradeoff": "Replaces personal support. Hosting +$32 per sprint."
   },
   "premium": {
     "title": "Now that is enterprise",
-    "description": "Personal support for larger contracts: companies pay for your attention.",
-    "impact": "Corporate bills ×2 · patience +2",
-    "tradeoff": "Replaces mass support. Hosting +$96 per sprint."
+    "description": "CRM v2 linked to AI support lets large companies accept a price up to ×2 without a price penalty. You set the price yourself.",
+    "impact": "Named corporate contracts ×2 · patience +2",
+    "tradeoff": "Replaces mass support. With batch processing, the penalty-free price limit is ×1.25. Hosting +$96 per sprint."
   },
   "batch": {
     "title": "Your answer was ready yesterday",
     "description": "Collect requests into batches and run the model once for the whole group.",
     "impact": "Tokens −50%",
-    "tradeoff": "Replaces instant answers. Clients wait one sprint less."
+    "tradeoff": "Large companies: satisfaction −12. Companies needing instant answers become less satisfied and stop joining. Replaces instant answers; contract patience −1."
   },
   "instant": {
     "title": "While you were typing",

@@ -128,6 +128,25 @@ describe('production queue and sprint choices', () => {
     expect(run.tasks.length).toBe(6);
   });
 
+  it('reserves an affordable operation in every draft even with no cash and available projects', () => {
+    for (const claimedGrants of [[], ['consulting', 'credits']]) {
+      const run = fresh(['core']);
+      run.claimedGrants = claimedGrants;
+      run.money = 0;
+      for (let sprint = 1; sprint <= 10; sprint++) {
+        run.sprint = sprint;
+        dealDraft(run);
+        const cards = draftCards(run);
+        expect(cards).toHaveLength(3);
+        expect(new Set(cards.map((card) => card.id)).size).toBe(3);
+        expect(cards.filter((card) => card.slot !== 'operation').length).toBeLessThanOrEqual(2);
+        expect(cards.some((card) => card.slot === 'operation' && card.cost <= run.money)).toBe(
+          true,
+        );
+      }
+    }
+  });
+
   it('applies non-cash maintenance and rest effects only at release and caps restored energy', () => {
     const run = fresh();
     select(run, 'maintenance');
