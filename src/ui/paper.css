@@ -345,6 +345,37 @@
 .bl-shop h2:first-child {
   margin-top: 0;
 }
+
+.bl-shop.wb-enabled {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 20px;
+}
+
+.bl-shop.wb-enabled > .bl-shelf-body {
+  flex: 0 0 auto;
+  max-height: 430px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--rule) transparent;
+  padding-top: 3px;
+  border-top: 1.5px solid var(--ink);
+}
+
+.wb-enabled .bl-shelf-body .bl-lanes {
+  gap: 4px;
+  margin-bottom: 5px;
+}
+
+.wb-enabled .bl-shelf-body .bl-lanes span {
+  padding: 4px 0;
+  font-size: 14px;
+}
+
+.wb-enabled .bl-shelf-body .bl-lanes p {
+  font-size: 12px;
+}
 .bl-shop h2 em {
   margin-left: auto;
   font-style: normal;
@@ -432,7 +463,7 @@
   margin: -2px 0 6px;
   font: 400 13px/1.3 var(--mono);
   color: var(--dim);
-}/* work is counted in Claude's squares */
+} /* work is counted in Claude's squares */
 .bl-item .price u {
   display: inline-block;
   width: 13px;

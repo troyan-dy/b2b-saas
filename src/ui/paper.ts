@@ -1,5 +1,6 @@
 import './paper.css';
 import { L } from '../core/lang';
+import { createWorkbench, type WorkbenchAction, type WorkbenchView } from './workbench';
 
 export interface ShelfItem {
   id: string;
@@ -54,6 +55,7 @@ export interface Paper {
   setLedger(html: string): void;
   setNews(text: string, hint?: string): void;
   setShelf(sections: readonly ShelfSection[]): void;
+  setWorkbench(view: WorkbenchView | null): void;
   /** a row of the shelf answers a click */
   flash(section: string, item: string, how: 'bought' | 'denied'): void;
   /** a caption of a node; coordinates are screen pixels of the 1920×1080 layer */
@@ -77,6 +79,7 @@ export interface Paper {
   onLane: (owner: string, lane: string) => void;
   onCell: (id: string) => void;
   onAnswer: (index: number) => void;
+  onWorkbench: (action: WorkbenchAction) => void;
 }
 
 /**
@@ -95,7 +98,7 @@ export function createPaper(under: HTMLElement, over: HTMLElement): Paper {
     '<div class="bl-cells"></div><div class="bl-tags"></div><div class="bl-pops"></div>' +
     '<div class="bl-term"><i></i><div></div></div><div class="bl-call"></div>' +
     // the shelf and the news stand above the canvas: nothing drawn on the sheet may cover them
-    `<div class="bl-shop"></div><div class="bl-news"><i>${L('НОВОСТИ', 'NEWS')}</i><span></span><em></em></div>`;
+    `<div class="bl-shop"><div class="bl-shelf-body"></div></div><div class="bl-news"><i>${L('НОВОСТИ', 'NEWS')}</i><span></span><em></em></div>`;
   over.append(top);
 
   const hud = sheet.querySelector('.bl-hud') as HTMLElement;
@@ -107,6 +110,7 @@ export function createPaper(under: HTMLElement, over: HTMLElement): Paper {
   const goal = sheet.querySelector('.bl-goal') as HTMLElement;
   const ledger = sheet.querySelector('.bl-ledger') as HTMLElement;
   const shop = top.querySelector('.bl-shop') as HTMLElement;
+  const shelfBody = shop.querySelector('.bl-shelf-body') as HTMLElement;
   const newsText = top.querySelector('.bl-news span') as HTMLElement;
   const newsHint = top.querySelector('.bl-news em') as HTMLElement;
   const cellLayer = top.querySelector('.bl-cells') as HTMLElement;
@@ -120,6 +124,8 @@ export function createPaper(under: HTMLElement, over: HTMLElement): Paper {
   let shelfSig = '';
   let cellSig = '';
   let callSig = '';
+  let shelfSections: readonly ShelfSection[] = [];
+  const workbench = createWorkbench(shop, top, (action) => paper.onWorkbench(action));
   const last = { money: '', sub: '', news: '', hint: '', sprint: '', part: -1, zoom: -1, goal: '', ledger: '' };
 
   const paper: Paper = {
@@ -127,6 +133,7 @@ export function createPaper(under: HTMLElement, over: HTMLElement): Paper {
     onLane: () => undefined,
     onCell: () => undefined,
     onAnswer: () => undefined,
+    onWorkbench: () => undefined,
 
     setMoney(text, sub, broke = false) {
       if (text !== last.money) {
@@ -176,11 +183,15 @@ export function createPaper(under: HTMLElement, over: HTMLElement): Paper {
       }
     },
     setShelf(sections) {
-      const sig = JSON.stringify(sections);
+      shelfSections = sections;
+      const shown = workbench.active
+        ? sections.filter((section) => section.id !== 'blocks')
+        : sections;
+      const sig = JSON.stringify(shown);
       if (sig === shelfSig) return;
       shelfSig = sig;
       let html = '';
-      for (const s of sections) {
+      for (const s of shown) {
         html += `<h2>${s.title}${s.hint ? `<em>${s.hint}</em>` : ''}</h2>`;
         if (s.note) html += `<p class="bl-note">${s.note}</p>`;
         if (s.scroll) html += `<div class="bl-scroll${s.grid ? ' grid' : ''}" style="max-height:${s.scroll}px">`;
@@ -205,11 +216,19 @@ export function createPaper(under: HTMLElement, over: HTMLElement): Paper {
         }
       }
       // the list of blocks keeps its scroll position while the shelf is redrawn
-      const box = shop.querySelector('.bl-scroll');
+      const box = shelfBody.querySelector('.bl-scroll');
       const at = box ? box.scrollTop : 0;
-      shop.innerHTML = html;
-      const next = shop.querySelector('.bl-scroll');
+      shelfBody.innerHTML = html;
+      const next = shelfBody.querySelector('.bl-scroll');
       if (next) next.scrollTop = at;
+    },
+    setWorkbench(view) {
+      const active = workbench.active;
+      workbench.set(view);
+      shelfBody.inert = Boolean(view?.draft);
+      cellLayer.inert = Boolean(view?.draft);
+      callCard.inert = Boolean(view?.draft);
+      if (active !== workbench.active) paper.setShelf(shelfSections);
     },
     flash(section, item, how) {
       const el = shop.querySelector(`.bl-item[data-s="${section}"][data-i="${item}"]`);
