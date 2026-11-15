@@ -181,6 +181,12 @@ function market(value: unknown, infrastructure: number): boolean {
 }
 
 function production(value: RecordValue, blocks: Run['blocks']): boolean {
+  if (
+    value.apiShipped !== undefined &&
+    (!strings(value.apiShipped) ||
+      !value.apiShipped.every((id) => id === 'infrastructure' || kind(id)))
+  )
+    return false;
   const infrastructure = value.infrastructure ?? 0;
   if (
     !integer(infrastructure) ||

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { companyTotals } from '../src/systems/company/company';
 import {
   addProductionWork,
@@ -9,6 +9,7 @@ import {
 } from '../src/systems/run/production';
 import {
   cancelTask,
+  clientPay,
   createRun,
   expandInfrastructure,
   freeCells,
@@ -19,6 +20,9 @@ import {
   upgrade,
   type Run,
 } from '../src/systems/run/run';
+import { loadRun, RUN_SAVE_KEY, saveRun } from '../src/systems/run/save';
+
+afterEach(() => vi.unstubAllGlobals());
 
 function fresh(): Run {
   const run = createRun(7, { tech: IDEAS.tech[0], form: IDEAS.form[0], aud: IDEAS.aud[0] });
@@ -31,6 +35,37 @@ function build(run: Run, kind: string) {
   const cell = freeCells(run)[0];
   expect(place(run, kind, cell.i, cell.j)).toBe(true);
   return run.tasks.find((task) => task.block === kind)!;
+}
+
+function contractCompany(): Run {
+  const run = fresh();
+  for (const kind of ['core', 'landing', 'pay']) rushTask(run, build(run, kind).id);
+  run.agents = [];
+  step(run, TUNING.sprint_s);
+  run.stage = 2;
+  run.sprint = 6;
+  run.draft = null;
+  run.dilemma = null;
+  run.call = null;
+  if (!run.pool.includes('crm')) run.pool.push('crm');
+  run.clients = [
+    {
+      id: 1,
+      name: 'CRM contract',
+      type: 'gov',
+      texture: IDEAS.gov[0].texture,
+      pay: 850,
+      want: 'crm',
+      wantLevel: 1,
+      patience: 2,
+      happy: false,
+      slot: 0,
+      deal: 1,
+      promised: true,
+    },
+  ];
+  run.nextId = 2;
+  return run;
 }
 
 describe('paid immediate production', () => {
@@ -92,7 +127,7 @@ describe('paid immediate production', () => {
     step(run, TUNING.sprint_s);
     expect(run.live.has('landing')).toBe(true);
     expect(run.stats.shipped).toBe(2);
-    expect(run.lastReport?.shipped).toEqual(['landing']);
+    expect(run.lastReport?.shipped).toEqual(['core', 'landing']);
   });
 
   it('activates just the selected upgrade or infrastructure level, including at the final sprint', () => {
@@ -173,5 +208,97 @@ describe('paid immediate production', () => {
     const legacy = enqueueTask(run, { kind: 'card', card: 'credits', work: 6, cost: 0 });
     expect(apiWorkQuote(run, legacy.id)).toBeNull();
     expect(rushTask(run, legacy.id)).toBe(false);
+  });
+
+  it('fulfills the affected government contract immediately and awards upgrades and promises once', () => {
+    const run = contractCompany();
+    const client = run.clients[0];
+    const unrelated = { ...client, id: 2, want: 'sso', slot: 1 };
+    run.clients.push(unrelated);
+    run.nextId = 3;
+    const task = build(run, 'crm');
+    const market = JSON.stringify(run.market);
+    const rng = run.rng.state();
+    expect(clientPay(run, client)).toBe(0);
+    expect(rushTask(run, task.id)).toBe(true);
+    expect(client).toMatchObject({ happy: true, promised: false, patience: 2 });
+    expect(clientPay(run, client)).toBeGreaterThan(0);
+    expect(run.stats.kept).toBe(1);
+    expect(run.stats.heroes).toBe(0);
+    expect(unrelated).toMatchObject({ happy: false, promised: true, patience: 2 });
+    expect(run.rng.state()).toBe(rng);
+    expect(JSON.stringify(run.market)).toBe(market);
+    expect(run.sprintT).toBe(0);
+
+    client.wantLevel = 2;
+    client.happy = false;
+    client.promised = true;
+    client.patience = 1;
+    run.blocks.find((block) => block.kind === 'crm')!.hand = true;
+    expect(upgrade(run, 'crm')).toBe(true);
+    const upgradeTask = run.tasks[0];
+    expect(rushTask(run, upgradeTask.id)).toBe(true);
+    expect(client.deal).toBeCloseTo(TUNING.rework.pay_mult);
+    expect(run.stats.kept).toBe(2);
+    expect(rushTask(run, upgradeTask.id)).toBe(false);
+    step(run, TUNING.sprint_s);
+    expect(client.deal).toBeCloseTo(TUNING.rework.pay_mult);
+    expect(run.stats.kept).toBe(2);
+    expect(run.stats.heroes).toBe(0);
+    expect(run.stats.reworks).toBe(1);
+    expect(run.lastReport?.shipped).toEqual(['crm']);
+  });
+
+  it('counts an API release on demo day without shipping it again or dropping the client', () => {
+    const run = contractCompany();
+    const task = build(run, 'crm');
+    rushTask(run, task.id);
+    const shipped = run.stats.shipped;
+    step(run, TUNING.sprint_s);
+    expect(run.lastReport?.shipped).toEqual(['crm']);
+    expect(run.events.some((event) => event.type === 'demo' && event.ok)).toBe(true);
+    expect(run.events.some((event) => event.type === 'left' && event.demo)).toBe(false);
+    expect(run.clients.some((client) => client.id === 1)).toBe(true);
+    expect(run.stats.shipped).toBe(shipped);
+    run.draft = null;
+    step(run, TUNING.sprint_s);
+    expect(run.lastReport?.shipped).toEqual([]);
+  });
+
+  it('saves pending API releases, consumes them once and accepts legacy saves without the field', () => {
+    const memory = new Map<string, string>();
+    vi.stubGlobal('localStorage', {
+      getItem: (key: string) => memory.get(key) ?? null,
+      setItem: (key: string, value: string) => {
+        memory.set(key, value);
+      },
+    });
+    const run = contractCompany();
+    rushTask(run, build(run, 'crm').id);
+    expandInfrastructure(run);
+    rushTask(run, run.tasks[0].id);
+    expandInfrastructure(run);
+    rushTask(run, run.tasks[0].id);
+    expect(saveRun(run)).toBe(true);
+    const saved = memory.get(RUN_SAVE_KEY)!;
+    const loaded = loadRun()!;
+    expect(loaded).not.toBeNull();
+    expect(loaded.apiShipped).toEqual(['crm', 'infrastructure']);
+    step(loaded, TUNING.sprint_s);
+    expect(loaded.lastReport?.shipped).toEqual(['crm']);
+    expect(loaded.lastReport?.projects).toEqual(['infrastructure']);
+    expect(loaded.apiShipped).toEqual([]);
+    expect(loaded.infrastructure).toBe(2);
+    expect(loaded.stats.shipped).toBe(run.stats.shipped);
+    for (const invalid of [null, ['missing'], ['crm', 123], 'crm']) {
+      const data = JSON.parse(saved);
+      data.run.apiShipped = invalid;
+      memory.set(RUN_SAVE_KEY, JSON.stringify(data));
+      expect(loadRun()).toBeNull();
+    }
+    const legacy = JSON.parse(saved);
+    delete legacy.run.apiShipped;
+    memory.set(RUN_SAVE_KEY, JSON.stringify(legacy));
+    expect(loadRun()?.apiShipped).toEqual([]);
   });
 });

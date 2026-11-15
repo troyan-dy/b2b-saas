@@ -318,6 +318,7 @@ export interface Run {
   stage: number;
   blocks: Block[];
   tasks: WorkTask[];
+  apiShipped: string[];
   nextTask: number;
   draft: string[] | null;
   claimedGrants: string[];
@@ -494,6 +495,7 @@ export function createRun(
     stage: 1,
     blocks: [],
     tasks: [],
+    apiShipped: [],
     nextTask: 1,
     draft: null,
     claimedGrants: [],
@@ -838,6 +840,23 @@ export function isSite(b: Block): boolean {
 export function satisfied(run: Run, c: Client): boolean {
   const b = run.blocks.find((x) => x.kind === c.want);
   return b !== undefined && b.live && b.level >= c.wantLevel;
+}
+
+export function fulfillClient(run: Run, c: Client): void {
+  if (!satisfied(run, c)) return;
+  if (!c.happy && c.wantLevel > 1) c.deal *= TUNING.rework.pay_mult;
+  if (c.promised) {
+    c.promised = false;
+    run.stats.kept++;
+    run.events.push({ type: 'kept', id: c.id });
+    if (c.patience === 1 && run.blocks.find((b) => b.kind === c.want)?.hand) {
+      c.deal = TUNING.hero.deal;
+      run.leads += TUNING.hero.leads;
+      run.stats.heroes++;
+      run.events.push({ type: 'hero', id: c.id });
+    }
+  }
+  c.happy = true;
 }
 
 /** squares of work a rework takes: each next version of a block is a bigger job */
@@ -1429,7 +1448,7 @@ function release(run: Run): void {
   const C = TUNING.clients;
   const report: Report = {
     sprint: run.sprint,
-    shipped: [],
+    shipped: [...new Set(run.apiShipped.filter((kind) => kind !== 'infrastructure'))],
     came: 0,
     left: 0,
     closed: 0,
@@ -1440,12 +1459,18 @@ function release(run: Run): void {
     down: false,
   };
   const completed = takeReleasedTasks(run);
-  report.projects = completed
-    .filter((task) => task.kind === 'card' || task.kind === 'infrastructure')
-    .map((task) => task.card ?? task.kind);
+  report.projects = [
+    ...new Set([
+      ...completed
+        .filter((task) => task.kind === 'card' || task.kind === 'infrastructure')
+        .map((task) => task.card ?? task.kind),
+      ...run.apiShipped.filter((kind) => kind === 'infrastructure'),
+    ]),
+  ];
+  run.apiShipped = [];
 
   for (const b of run.blocks) {
-    if (shipBlock(run, b)) report.shipped.push(b.kind);
+    if (shipBlock(run, b) && !report.shipped.includes(b.kind)) report.shipped.push(b.kind);
   }
   refresh(run);
 
@@ -1486,21 +1511,7 @@ function release(run: Run): void {
       continue;
     }
     if (satisfied(run, c)) {
-      // it asked for a rework and got it: the cheque grows with the product
-      if (!c.happy && c.wantLevel > 1) c.deal *= TUNING.rework.pay_mult;
-      if (c.promised) {
-        c.promised = false;
-        run.stats.kept++;
-        run.events.push({ type: 'kept', id: c.id });
-        // finished by the founder's own hands in the last sprint of the term: the client takes it for dedication
-        if (c.patience === 1 && run.blocks.find((b) => b.kind === c.want)?.hand) {
-          c.deal = TUNING.hero.deal;
-          run.leads += TUNING.hero.leads;
-          run.stats.heroes++;
-          run.events.push({ type: 'hero', id: c.id });
-        }
-      }
-      c.happy = true;
+      fulfillClient(run, c);
       stay.push(c);
       continue;
     }

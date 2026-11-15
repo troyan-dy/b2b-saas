@@ -1,7 +1,7 @@
 import api from '../../data/balance/api.json';
 import tuning from '../../data/balance/run.json';
 import { PRODUCTION } from './product';
-import { refreshRun, RULES, workNeed, type Block, type Run } from './run';
+import { fulfillClient, refreshRun, RULES, workNeed, type Block, type Run } from './run';
 import { agentWorkRate } from './workforce';
 
 export type TaskStatus = 'queued' | 'active' | 'ready' | 'backlog';
@@ -92,7 +92,10 @@ export function rushTask(run: Run, id: string): boolean {
     shipBlock(run, block);
   }
   run.tasks = run.tasks.filter((entry) => entry !== task);
+  const shipped = task.kind === 'infrastructure' ? task.kind : task.block!;
+  if (!run.apiShipped.includes(shipped)) run.apiShipped.push(shipped);
   refreshRun(run);
+  for (const client of run.clients) if (client.want === task.block) fulfillClient(run, client);
   return true;
 }
 
