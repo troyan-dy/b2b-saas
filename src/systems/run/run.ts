@@ -11,6 +11,8 @@ import ideasEn from '../../data/balance/ideas.en.json';
 import ideasData from '../../data/balance/ideas.json';
 import tuningData from '../../data/balance/run.json';
 import traitsData from '../../data/balance/traits.json';
+import { companyContext, companyTotals, customerCount } from '../company/company';
+import { advanceMarket, createMarket, MARKET, type MarketState } from '../company/market';
 import { dealDraft, releaseCard } from './draft';
 import {
   addProductionWork,
@@ -302,6 +304,7 @@ export interface Run {
   tasks: WorkTask[];
   nextTask: number;
   draft: string[] | null;
+  claimedGrants: string[];
   strategy: { support: 'mass' | 'premium' | null; processing: 'batch' | 'instant' | null };
   infrastructure: number;
   agents: Agent[];
@@ -321,6 +324,7 @@ export interface Run {
   corpAsks: string[];
   known: string[];
   clients: Client[];
+  market: MarketState;
   /** the product is down this sprint: nobody pays */
   down: boolean;
   /** what brought it down: the founder's own debt or the model supplier's outage */
@@ -475,6 +479,7 @@ export function createRun(
     tasks: [],
     nextTask: 1,
     draft: null,
+    claimedGrants: [],
     strategy: { support: null, processing: null },
     infrastructure: 0,
     agents: [{ id: 1, tier: 'fast', lane: 'build', carry: 0 }],
@@ -489,6 +494,7 @@ export function createRun(
     corpAsks,
     known: [],
     clients: [],
+    market: createMarket(['core', 'landing', 'pay', ...pool]),
     down: false,
     downWhy: null,
     offer: null,
@@ -605,8 +611,10 @@ export function refreshRun(run: Run): void {
   run.tasks ??= [];
   run.nextTask ??= 1;
   run.draft ??= null;
+  run.claimedGrants ??= [];
   run.strategy ??= { support: null, processing: null };
   run.infrastructure ??= 0;
+  run.market ??= createMarket(['core', 'landing', 'pay', ...run.pool]);
   syncProduction(run);
   refresh(run);
   run.mod = { tokens: 1, price: 1, promo: 1 };
@@ -672,9 +680,9 @@ export function researchNeed(run: Run): number {
 
 /** what a client costs in tokens per sprint: free users burn them too */
 export function clientTokens(run: Run, c: Client): number {
-  // the more a client uses the product, the more it burns: tokens follow the size of the subscription
+  // Usage follows account size; raising the price or fulfilling a promise cannot raise token use.
   return (
-    clientWorth(run, c) *
+    c.pay *
     TUNING.clients.token_share *
     run.idea.tech.tokens *
     run.eff.tokens *
@@ -683,13 +691,13 @@ export function clientTokens(run: Run, c: Client): number {
 }
 
 export function mrr(run: Run): number {
-  let sum = 0;
+  let sum = companyTotals(run).income;
   for (const c of run.clients) sum += clientPay(run, c);
   return sum;
 }
 
 export function tokens(run: Run): number {
-  let sum = 0;
+  let sum = companyTotals(run).tokens;
   for (const c of run.clients) sum += clientTokens(run, c);
   return sum;
 }
@@ -723,7 +731,7 @@ export function flows(run: Run): {
     living: TUNING.living_per_s * (1 - trait(run, 'thrift')),
     agents: agentCost(run),
     // every shipped block has to be hosted and kept alive: a feature is a commitment
-    hosting: run.host * (1 - trait(run, 'thrift')),
+    hosting: (run.host + MARKET.capacity.hosting_per_expansion * run.infrastructure) * (1 - trait(run, 'thrift')),
     tokens: tokens(run) / TUNING.sprint_s,
     income: mrr(run) / TUNING.sprint_s,
   };
@@ -989,8 +997,7 @@ export function handy(run: Run, lane: Lane): boolean {
     case 'fix':
       return run.debt > 0;
     case 'promo':
-      // no room for a client and a queue of leads at the door: one more post changes nothing
-      return sellable(run) && (run.clients.length < clientsMax(run) || run.leads < 1);
+      return sellable(run);
     case 'research':
       return unknownAsks(run).length > 0 && run.clients.length > 0;
   }
@@ -1164,7 +1171,8 @@ function propose(run: Run): void {
   const D = TUNING.dilemma;
   if (run.sprint < D.from_sprint || run.call || run.offer !== null || run.rng.next() >= D.chance)
     return;
-  const pool = DILEMMAS.filter((d) => !run.seen.includes(d.id) && fits(run, d));
+  // Tariffs are now a deliberate segment decision in the product panel.
+  const pool = DILEMMAS.filter((d) => d.id !== 'price' && !run.seen.includes(d.id) && fits(run, d));
   if (pool.length === 0) return;
   let roll = run.rng.next() * pool.reduce((s, d) => s + d.weight, 0);
   const d = pool.find((x) => (roll -= x.weight) < 0) ?? pool[0];
@@ -1581,6 +1589,7 @@ function release(run: Run): void {
     }
   }
 
+  let marketLeads = 0;
   if (sellable(run)) {
     const wom = C.word_of_mouth * run.eff.word_of_mouth * run.idea.form.viral;
     for (const c of run.clients) {
@@ -1589,6 +1598,9 @@ function release(run: Run): void {
     // the very first client is an acquaintance: no promotion needed
     if (run.stats.clients === 0) run.leads = Math.max(run.leads, 1);
     const max = clientsMax(run);
+    // One lead can become a named key account; the rest enters the scalable market.
+    marketLeads = Math.max(0, run.leads - (run.clients.length < max ? 1 : 0));
+    run.leads -= marketLeads;
     while (run.leads >= 1 && run.clients.length < max) {
       run.leads -= 1;
       const c = makeClient(run);
@@ -1611,14 +1623,22 @@ function release(run: Run): void {
       seat(run, c);
       report.came++;
     }
-    run.leads = Math.min(run.leads, 3);
   }
 
-  const income = mrr(run);
-  if (run.stage === 1 && run.clients.length > 0 && isLive(run, 'pay')) {
+  if (run.stage === 1 && customerCount(run) > 0 && isLive(run, 'pay')) {
     run.stage = 2;
     run.events.push({ type: 'stage', stage: 2 });
-  } else if (run.stage === 2 && income >= TUNING.stage3_mrr) {
+  }
+  const marketRelease = advanceMarket(run.market, companyContext(run), marketLeads);
+  report.came += marketRelease.came;
+  report.left += marketRelease.left;
+  run.stats.clients += marketRelease.came;
+  run.stats.left += marketRelease.left;
+  run.stats.corp += run.market.groups.find(group => group.id === 'large')?.came ?? 0;
+  if (run.stats.firstClientAt === 0 && customerCount(run) > 0) run.stats.firstClientAt = run.t;
+
+  const income = mrr(run);
+  if (run.stage === 2 && income >= TUNING.stage3_mrr) {
     run.stage = 3;
     run.events.push({ type: 'stage', stage: 3 });
   }
