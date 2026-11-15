@@ -8,6 +8,7 @@ import type { Card, CardOptions, Terminal } from '../ui/terminal/terminal';
 import { finish, LESSONS, pastPitch, raise, saveMeta, traitChoices, traitGives, TRAITS, unlockedNow, type Meta, type Trait } from '../systems/meta/meta';
 import { pitch, TUNING, type Idea, type Run } from '../systems/run/run';
 import { createPitchDraft, type PitchDeck } from '../systems/run/pitch';
+import { playerCollectionSummary, playerCollectionView } from '../ui/player-collection-view';
 
 /** What the player does outside a run: the menu, the idea, the ending, the résumé. All of it in the terminal. */
 
@@ -41,6 +42,7 @@ export async function menu(term: Terminal, meta: Meta, state: MenuState, version
         title: meta.runs.length > 0 ? NEW_STARTUP : L('Основать стартап', 'Found a startup'),
         note: meta.lessons.length > 0 ? L(`30 спринтов · уроков основателя: ${meta.lessons.length}`, `30 sprints · founder lessons: ${meta.lessons.length}`) : L('30 спринтов · компания сохраняется', '30 sprints · your company is saved'),
       },
+      { title: L('Коллекция карт', 'Card collection'), note: playerCollectionSummary(meta) },
       { title: RESUME, note: meta.runs.length > 0 ? L(`стартапов: ${meta.runs.length}`, `startups: ${meta.runs.length}`) : L('пока пустое', 'empty so far') },
       { title: L(`Звук: ${state.sound ? 'включён' : 'выключен'}`, `Sound: ${state.sound ? 'on' : 'off'}`) },
       { title: L(`Музыка: ${state.music ? 'включена' : 'выключена'}`, `Music: ${state.music ? 'on' : 'off'}`) },
@@ -53,17 +55,18 @@ export async function menu(term: Terminal, meta: Meta, state: MenuState, version
     if (saved && picked === 0) return 'continue';
     const k = picked - (saved ? 1 : 0);
     if (k === 0) return 'start';
-    if (k === 1) await resume(term, meta);
-    if (k === 2) return 'sound';
-    if (k === 3) return 'music';
-    if (k === 4) return 'track';
-    if (k === 5) {
+    if (k === 1) await term.collection(playerCollectionView(meta, saved));
+    if (k === 2) await resume(term, meta);
+    if (k === 3) return 'sound';
+    if (k === 4) return 'music';
+    if (k === 5) return 'track';
+    if (k === 6) {
       term.clear();
       term.print(L('Титры', 'Credits'), 'mid');
       for (const line of CREDITS) term.print(line, 'small');
       await term.wait(BACK);
     }
-    if (k === 6) return 'lang';
+    if (k === 7) return 'lang';
   }
 }
 

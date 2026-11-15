@@ -7,7 +7,7 @@ import { TUNING, type Run } from '../systems/run/run';
 import { dec, whole } from './format';
 import type { SprintCardsView, SprintCardView } from './sprint-cards';
 
-const ART: Record<string, string> = {
+export const SPRINT_CARD_ART: Record<string, string> = {
   mass: 'school',
   premium: 'hq',
   batch: 'racks',
@@ -98,7 +98,7 @@ function cardView(run: Run, card: DraftCard, choosing = false): SprintCardView {
   return {
     id: card.id,
     title: card.title,
-    art: ART[card.id] ?? 'laptop',
+    art: SPRINT_CARD_ART[card.id] ?? 'laptop',
     category,
     description: card.description,
     impact:
