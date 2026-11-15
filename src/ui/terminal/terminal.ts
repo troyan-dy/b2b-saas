@@ -1,5 +1,6 @@
 import './terminal.css';
 import { L } from '../../core/lang';
+import { createPlayerCollection, type CollectionView } from '../player-collection';
 
 export interface Option {
   title: string;
@@ -41,6 +42,8 @@ export interface Terminal {
   ask(options: readonly Option[], hint?: string): Promise<number>;
   /** deals a few cards face up and waits for one to be picked: digits, arrows + Enter, or a click */
   cards(cards: readonly Card[], hint?: string, options?: CardOptions): Promise<number>;
+  /** Browses all owned and locked cards without choosing or modifying any of them. */
+  collection(view: CollectionView): Promise<void>;
   /** waits for Enter, Space or a click */
   wait(hint: string): Promise<void>;
   readonly shown: boolean;
@@ -99,7 +102,7 @@ export function createTerminal(root: HTMLElement, sound: (name: 'ui' | 'yes') =>
     clear() {
       body.innerHTML = '';
       foot.innerHTML = '';
-      el.classList.remove('wide');
+      el.classList.remove('wide', 'catalog');
     },
     print(html, cls) {
       line(html, cls);
@@ -354,6 +357,21 @@ export function createTerminal(root: HTMLElement, sound: (name: 'ui' | 'yes') =>
           at = focused && box.contains(focused) ? Number(focused.dataset.k) : -1;
           mark();
         });
+      });
+    },
+    collection(view) {
+      term.clear();
+      el.classList.add('wide', 'catalog');
+      onClick = null;
+      return new Promise((resolve) => {
+        const collection = createPlayerCollection(body, foot, view, sound, () => {
+          onKey = null;
+          onClick = null;
+          collection.destroy();
+          el.classList.remove('wide', 'catalog');
+          resolve();
+        });
+        onKey = (event) => collection.key(event);
       });
     },
     wait(hint) {
