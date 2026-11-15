@@ -1,5 +1,6 @@
 import type Phaser from 'phaser';
-import { BLOCK_BY_ID, type BlockGroup } from '../content/blocks';
+import { BLOCK_BY_ID } from '../content/blocks';
+import { buildCategory, CATEGORY_COLOR } from '../content/build-categories';
 import { PALETTE } from '../data/palette';
 import { cellCenter, drawBox, drawDebt, drawGlyph, drawLogos, drawProgress, drawSite, drawSlot, leftFace, type Pt } from './iso';
 
@@ -41,12 +42,6 @@ interface Dot {
   done: (() => void) | null;
 }
 
-const SIDE: Record<BlockGroup, number> = {
-  core: PALETTE.sand,
-  sell: PALETTE.sage,
-  ai: PALETTE.sand,
-  corp: PALETTE.blue,
-};
 const DOTS = 220;
 
 /** a connector with one right-angle turn: out along x, then along y */
@@ -162,7 +157,7 @@ export class Board {
       if (!kind) continue;
       const [x, y] = this.cell(block.i, block.j);
       if (block.built) {
-        drawBox(b, x, y, kind.height, SIDE[kind.group]);
+        drawBox(b, x, y, kind.height, CATEGORY_COLOR[buildCategory(kind.id)]);
         drawGlyph(b, x, y, kind.height, kind.glyph);
         if (block.debt > 0) drawDebt(b, x, y, kind.height, block.debt);
         if (block.up) drawProgress(b, x, y, kind.height, block.done, block.need);

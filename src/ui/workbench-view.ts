@@ -1,4 +1,6 @@
 import { BLOCK_BY_ID } from '../content/blocks';
+import { buildCategory } from '../content/build-categories';
+import { buildReason } from './build-reasons';
 import { L } from '../core/lang';
 import { companyContext, companyTotals } from '../systems/company/company';
 import {
@@ -208,6 +210,8 @@ function moduleView(
       : undefined;
   return {
     id: kind,
+    category: buildCategory(kind),
+    reason: buildReason(run, kind),
     title: blockName(kind),
     shortTitle:
       kind === 'core'

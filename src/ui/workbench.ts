@@ -1,5 +1,7 @@
 import './workbench.css';
 import { L } from '../core/lang';
+import { BUILD_CATEGORIES, CATEGORY_TITLE, type BuildCategory } from '../content/build-categories';
+import type { BuildReason } from './build-reasons';
 import { dec, money, PER_S, rate, whole } from './format';
 
 export type SegmentId = 'small' | 'medium' | 'large';
@@ -21,6 +23,8 @@ export interface WorkbenchTask {
 
 export interface WorkbenchModule {
   readonly id: string;
+  readonly category: BuildCategory;
+  readonly reason?: BuildReason;
   readonly title: string;
   readonly shortTitle?: string;
   readonly level: number;
@@ -200,13 +204,14 @@ function moduleCard(module: WorkbenchModule): string {
     .filter(Boolean)
     .join(' · ');
   return (
-    `<article class="wb-build${module.selected ? ' wb-selected' : ''}">` +
+    `<article class="wb-build wb-category-${module.category}${module.selected ? ' wb-selected' : ''}">` +
     button(
       module.action,
       module.id,
       `<strong>${title}</strong><span class="wb-build-work" aria-label="${whole(module.work)} ${L('работы', 'work')}"><i aria-hidden="true"></i>${whole(module.work)}</span>` +
         `<span class="wb-build-effect${module.selected ? ' wb-picked-hint' : ''}">${module.selected ? L('кликни клетку на чертеже', 'click a cell on the blueprint') : effect}</span>` +
-        `<span class="wb-build-price">${money(module.cost)}</span>`,
+        `<span class="wb-build-price">${money(module.cost)}</span>` +
+        (module.reason ? `<span class="wb-build-reason wb-reason-${module.reason.tone}" title="${esc(module.reason.detail)}">${esc(module.reason.label)}</span>` : ''),
       module.disabled,
       'wb-build-main',
       tip,
@@ -414,7 +419,10 @@ export function createWorkbench(
   root.innerHTML =
     '<section class="wb-catalog"><header><h2 tabindex="-1">' +
     L('БЛОКИ', 'BLOCKS') +
-    '</h2></header>' +
+    '</h2><nav class="wb-categories" aria-label="' + L('Категории построек', 'Building categories') + '">' +
+    button('category', 'all', L('Все', 'All'), false, 'wb-category-tab wb-category-all') +
+    BUILD_CATEGORIES.map((category) => button('category', category, CATEGORY_TITLE[category], false, 'wb-category-tab wb-category-' + category)).join('') +
+    '</nav></header>' +
     '<div class="wb-builds"></div></section>' +
     '<section class="wb-detail wb-module-panel" aria-label="' +
     L('Постройка', 'Building') +
@@ -479,6 +487,7 @@ export function createWorkbench(
   let panelKey = '';
   let clientId: SegmentId | null = null;
   let beforePanel: HTMLElement | null = null;
+  let category: BuildCategory | 'all' = 'all';
 
   const text = (node: HTMLElement, value: string): void => {
     if (node.textContent !== value) node.textContent = value;
@@ -501,6 +510,10 @@ export function createWorkbench(
     const id = target.dataset.wbId ?? '';
     if (view.draft) return;
     switch (action) {
+      case 'category':
+        category = id as BuildCategory | 'all';
+        renderCatalog();
+        break;
       case 'place':
       case 'upgrade':
       case 'demolish':
@@ -521,6 +534,20 @@ export function createWorkbench(
         break;
     }
   };
+  function renderCatalog(): void {
+    if (!view || view.draft) return;
+    const builds = view.modules.filter((module) => module.action === 'place' && !module.disabled);
+    const upgrades = view.modules.filter((module) => module.action === 'upgrade' && !module.disabled);
+    const requested = upgrades.filter((module) => module.reason);
+    const available = [...(requested.length ? requested : builds.length ? [] : upgrades), ...builds]
+      .filter((module) => category === 'all' || module.category === category)
+      .sort((a, b) => Number(Boolean(b.reason)) - Number(Boolean(a.reason)));
+    for (const tab of root.querySelectorAll<HTMLButtonElement>('.wb-category-tab')) tab.setAttribute('aria-pressed', String(tab.dataset.wbId === category));
+    html(find('.wb-builds'),
+      (view.infrastructure && (category === 'all' || category === 'infra') ? infrastructureCard(view.infrastructure) : '') +
+      (available.length ? available.map(moduleCard).join('') : '<p class="wb-empty">' + L('Кликни здание на карте, чтобы улучшить его.', 'Click a building on the map to upgrade it.') + '</p>'),
+    );
+  }
   root.addEventListener('click', click);
   clientPanel.addEventListener('click', click);
   clientPanel.addEventListener('input', (event) => {
@@ -672,29 +699,7 @@ export function createWorkbench(
       modulePanel.hidden = panel !== 'module';
       clientPanel.hidden = panel !== 'clients' || Boolean(view.draft);
       if (!view.draft) {
-        const builds = view.modules
-          .filter((module) => module.action === 'place' && !module.disabled)
-          .sort((a, b) => Number(Boolean(b.demand)) - Number(Boolean(a.demand)));
-        const upgrades = view.modules.filter(
-          (module) => module.action === 'upgrade' && !module.disabled,
-        );
-        const requested = upgrades.filter((module) => module.demand);
-        const available = [
-          ...(requested.length ? requested : builds.length ? [] : upgrades),
-          ...builds,
-        ];
-        html(
-          find('.wb-builds'),
-          (view.infrastructure ? infrastructureCard(view.infrastructure) : '') +
-            (available.length
-              ? available.map(moduleCard).join('')
-              : '<p class="wb-empty">' +
-                L(
-                  'Всё доступное уже на чертеже.<br>Кликни здание, чтобы улучшить его.',
-                  'Everything available is on the blueprint.<br>Click a building to improve it.',
-                ) +
-                '</p>'),
-        );
+        renderCatalog();
       }
       if (panel === 'module') {
         const module = view.modules.find((entry) => entry.id === view?.selectedModule);

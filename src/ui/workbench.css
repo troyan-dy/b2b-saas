@@ -98,6 +98,18 @@
 .wb-catalog {
   display: block;
 }
+.wb-categories { display: flex; gap: 5px; margin: 0 0 9px; }
+.wb-main .wb-category-tab { padding: 4px 7px; border-radius: 4px; font-size: 12px; background: transparent; }
+.wb-category-product { --category: #6a9bcc; }
+.wb-category-growth { --category: #9bb6a5; }
+.wb-category-service { --category: #d4a27f; }
+.wb-category-infra { --category: #d97757; }
+.wb-category-tab::before { content: ''; display: inline-block; width: 7px; height: 7px; margin-right: 5px; border-radius: 50%; background: var(--category, var(--ink)); }
+.wb-main .wb-category-tab[aria-pressed="true"] { border-color: var(--ink); background: var(--card); }
+.wb-build[class*="wb-category-"] { border-left: 4px solid var(--category); }
+.wb-build-reason { grid-column: 1 / -1; width: fit-content; max-width: 100%; margin-top: 4px; padding: 2px 4px; border-radius: 3px; font: 11.5px/1.25 var(--mono); color: #496e57; background: #e8eee3; }
+.wb-reason-goal { color: #527088; background: #e7edf0; }
+.wb-reason-capacity { color: #8b6044; background: #f2e6d9; }
 .wb-detail {
   flex: 1 1 auto;
   min-height: 0;
@@ -189,6 +201,7 @@
   background: transparent;
 }
 .wb-infrastructure-card {
+  border-left: 4px solid #d97757;
   grid-column: 1 / -1;
   display: grid;
   grid-template-columns: 42% minmax(0, 1fr);

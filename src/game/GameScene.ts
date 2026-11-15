@@ -33,6 +33,7 @@ import type { Paper, ShelfKeys, ShelfSection } from '../ui/paper';
 import type { WorkbenchAction } from '../ui/workbench';
 import { projectName, SEGMENT_TITLES, workbenchView, type WorkbenchSelection } from '../ui/workbench-view';
 import { sprintCardsView } from '../ui/sprint-cards-view';
+import { buildReason } from '../ui/build-reasons';
 import { DRAFT_CARDS } from '../systems/run/draft';
 import type { CityView } from '../ui/client-city';
 import { companyContext, companyTotals, customerCount } from '../systems/company/company';
@@ -156,6 +157,7 @@ export class GameScene extends Phaser.Scene {
   private readonly idle = new Set<number>();
   private routeSig = '';
   private stageShown = 0;
+  private cityColumnsShown = 0;
   private termUntil = 0;
   private newsAt = 0;
   private newsIndex = 0;
@@ -940,6 +942,13 @@ export class GameScene extends Phaser.Scene {
         const [tx, ty] = board.onScreen(...board.top(b));
         keep.add(`b:n${b.kind}`);
         this.paper.tag(`b:n${b.kind}`, tx, ty - 58 * z, this.taskCaption(task), 'map-task');
+      } else {
+        const reason = buildReason(run, b.kind);
+        if (reason) {
+          const [tx, ty] = board.onScreen(...board.top(b));
+          keep.add(`b:why${b.kind}`);
+          this.paper.tag(`b:why${b.kind}`, tx, ty - 38 * z, `<button data-map="inspect:${b.kind}" title="${reason.detail}">${reason.label}</button>`, 'map-reason');
+        }
       }
     }
     // the very first placement: the free cell says «click here»
@@ -1450,12 +1459,19 @@ export class GameScene extends Phaser.Scene {
   /** A new stage: the camera pulls back and shows more of the sheet. */
   private syncStage(ms: number): void {
     const count = customerCount(this.run);
-    const groups = this.run.market.groups.filter((group) => group.profiles.some((profile) => profile.count > 0)).length;
+    const segments = new Set<string>(this.run.market.groups.filter((group) => group.profiles.some((profile) => profile.count > 0)).map((group) => group.id));
+    for (const client of this.run.clients) segments.add(client.type === 'corp' || client.type === 'gov' ? 'large' : client.type === 'mid' ? 'medium' : 'small');
+    const groups = segments.size;
     const want = this.run.stage >= 3 || count > 4 || groups > 1 ? 3 : this.run.stage === 2 || count || this.run.market.opened ? 2 : 1;
-    if (this.stageShown === want) return;
+    if (this.stageShown === want && this.cityColumnsShown === groups) return;
     this.stageShown = want;
+    this.cityColumnsShown = groups;
     const v = STAGE_VIEW[want - 1];
-    this.board.view(v.zoom, v.x, v.y, VIEW_AT[0], VIEW_AT[1], ms, () => undefined);
+    // Reserve the whole caption, not just the building centre, before the shelf at x=1340.
+    const rightEdge = groups ? CLIENT_SLOTS[(groups - 1) * 4][0] + 105 : 0;
+    const centre = Math.max(v.x, rightEdge - (1322 - VIEW_AT[0]) / v.zoom);
+    const duration = groups && this.board.onScreen(rightEdge, 0)[0] > 1322 ? 0 : ms;
+    this.board.view(v.zoom, centre, v.y, VIEW_AT[0], VIEW_AT[1], duration, () => undefined);
   }
 
   /** Subscriptions: green squares keep flying from the clients into the money. */
