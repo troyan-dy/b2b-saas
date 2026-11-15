@@ -104,10 +104,19 @@ export interface WorkbenchView {
     readonly disabled?: boolean;
   };
   readonly selectedSegment?: SegmentId;
+  readonly panel?: 'module' | 'clients' | null;
+  readonly selectedModule?: string;
+  readonly perks?: readonly {
+    readonly id: string;
+    readonly title: string;
+    readonly impact: string;
+  }[];
+  readonly applied?: { readonly title: string; readonly impact: string } | null;
 }
 
 export type WorkbenchAction =
-  | { type: 'place' | 'upgrade' | 'demolish'; block: string }
+  | { type: 'place' | 'upgrade' | 'demolish' | 'inspect-module'; block: string }
+  | { type: 'close-panel' }
   | { type: 'move'; task: string; direction: -1 | 1 }
   | { type: 'defer' | 'resume'; task: string }
   | { type: 'choose-card'; id: string }
@@ -121,63 +130,219 @@ const esc = (value: string): string =>
     /[&<>"']/g,
     (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!,
   );
-const disabled = (value: boolean): string => (value ? ' disabled' : '');
-const multiplier = (value: number): string => `×${dec(Number(value.toFixed(2)))}`;
+const multiplier = (value: number): string => '×' + dec(Number(value.toFixed(2)));
 const signed = (value: number): string =>
-  `${value > 0 ? '+' : value < 0 ? '−' : ''}${whole(Math.abs(value))}`;
-const taskState = (status: WorkbenchTask['status']): string =>
-  ({
-    queued: L('В плане', 'Planned'),
-    active: L('В работе', 'In progress'),
-    ready: L('К релизу', 'For release'),
-    backlog: L('На потом', 'Later'),
-  })[status];
+  (value > 0 ? '+' : value < 0 ? '−' : '') + whole(Math.abs(value));
+const primary = (value: string): string => value.replace(/^v\d+:\s*/, '').split(' · ')[0];
 const buildLabel = (action: WorkbenchBuildAction): string =>
   ({
     place: L('Разместить', 'Place'),
-    upgrade: L('В очередь', 'Queue'),
-    none: L('Готово', 'Complete'),
+    upgrade: L('Улучшить', 'Upgrade'),
+    none: L('Выпущено', 'Shipped'),
   })[action];
 
-function button(action: string, id: string, label: string, off = false, extra = ''): string {
-  return `<button type="button" data-wb-action="${action}" data-wb-id="${esc(id)}" data-wb-key="${action}:${esc(id)}${extra}"${disabled(off)}>${label}</button>`;
-}
-
-function taskHtml(task: WorkbenchTask, index: number): string {
-  const detail = `${whole(task.done)} / ${whole(task.work)} ${L('работы', 'work')} · ${money(task.cost)}`;
-  const arrows = (direction: -1 | 1, off: boolean): string =>
-    `<button type="button" data-wb-action="move" data-wb-id="${esc(task.id)}" data-wb-direction="${direction}" data-wb-key="move:${esc(task.id)}:${direction}" aria-label="${esc(`${direction < 0 ? L('Поднять', 'Move up') : L('Опустить', 'Move down')}: ${task.title}`)}"${disabled(off)}>${direction < 0 ? '↑' : '↓'}</button>`;
+function button(action: string, id: string, label: string, off = false, cls = ''): string {
   return (
-    `<li class="wb-task"><div class="wb-task-head"><span class="wb-order">${index + 1}.</span><strong>${esc(task.title)}</strong><small>${taskState(task.status)}</small></div>` +
-    `<p>${esc(task.detail)}</p><div class="wb-task-foot"><span>${detail}</span><div class="wb-task-actions">${task.status === 'backlog' ? button('resume', task.id, L('В очередь', 'Queue'), task.canResume === false) : arrows(-1, !task.canMoveUp) + arrows(1, !task.canMoveDown) + button('defer', task.id, L('На потом', 'Later'), !task.canDefer)}</div></div>` +
-    `${task.status === 'active' ? `<progress value="${task.done}" max="${Math.max(1, task.work)}" aria-label="${esc(task.title)}"></progress>` : ''}</li>`
+    '<button type="button" class="' +
+    cls +
+    '" data-wb-action="' +
+    action +
+    '" data-wb-id="' +
+    esc(id) +
+    '" data-wb-key="' +
+    action +
+    ':' +
+    esc(id) +
+    ':' +
+    cls +
+    '"' +
+    (off ? ' disabled' : '') +
+    '>' +
+    label +
+    '</button>'
   );
 }
 
-function moduleHtml(module: WorkbenchModule): string {
+function moduleCard(module: WorkbenchModule): string {
   return (
-    `<tr class="${module.selected ? 'wb-selected' : ''}"><th scope="row"><strong>${esc(module.title)}</strong><small>${module.level > 0 ? `v${module.level}` : L('Новый блок', 'New block')}${module.demand ? ` · ${esc(module.demand)}` : ''}</small>${module.specialization ? `<small class="wb-specialization">${esc(module.specialization)}</small>` : ''}</th>` +
-    `<td><span>${esc(module.current)}</span>${module.next ? `<small class="wb-next">→ ${esc(module.next)}</small>` : ''}${module.links?.length ? `<small class="wb-links">${L('Связи', 'Links')}: ${module.links.map(esc).join(' · ')}</small>` : ''}</td>` +
-    `<td class="wb-host">${rate(module.hosting)}${PER_S}${module.nextHosting !== undefined ? `<small>→ ${rate(module.nextHosting)}${PER_S}</small>` : ''}</td><td class="wb-buy">${module.action !== 'none' ? `<small>${whole(module.work)} ${L('раб.', 'work')}<br><span class="wb-cash">${money(module.cost)}</span></small>` : ''}${button(module.action, module.id, esc(module.selected ? L('Выберите клетку', 'Pick a cell') : (module.actionLabel ?? buildLabel(module.action))), module.disabled || module.action === 'none')}${module.canDemolish ? button('demolish', module.id, L('Разобрать…', 'Demolish…')) : ''}</td></tr>`
+    '<article class="wb-build' +
+    (module.selected ? ' wb-selected' : '') +
+    '">' +
+    '<h3>' +
+    button('inspect-module', module.id, esc(module.title), false, 'wb-build-name') +
+    '</h3>' +
+    '<p class="wb-build-effect">' +
+    esc(primary(module.next || module.current)) +
+    '</p>' +
+    '<p class="wb-build-price"><span>' +
+    money(module.cost) +
+    '</span> · ' +
+    whole(module.work) +
+    ' ' +
+    L('работы', 'work') +
+    '</p>' +
+    '<div class="wb-build-actions">' +
+    button(
+      'place',
+      module.id,
+      module.selected ? L('Выбери клетку', 'Pick a cell') : L('Поставить', 'Build'),
+      module.disabled,
+      'wb-primary',
+    ) +
+    '</div></article>'
+  );
+}
+
+function moduleDetail(module: WorkbenchModule): string {
+  const action =
+    module.action !== 'none'
+      ? '<div class="wb-module-buy"><p><span class="wb-cash">' +
+        money(module.cost) +
+        '</span> · ' +
+        whole(module.work) +
+        ' ' +
+        L('работы', 'work') +
+        '</p>' +
+        button(
+          module.action,
+          module.id,
+          esc(
+            module.selected
+              ? L('Выбери клетку на карте', 'Pick a cell on the map')
+              : (module.actionLabel ?? buildLabel(module.action)),
+          ),
+          module.disabled,
+          'wb-primary',
+        ) +
+        '</div>'
+      : '<p class="wb-muted">' +
+        esc(module.actionLabel ?? L('Максимальный уровень', 'Maximum level')) +
+        '</p>';
+  return (
+    '<h2>' +
+    esc(module.title) +
+    '</h2>' +
+    '<section class="wb-module-effect"><h3>' +
+    (module.level
+      ? L('Сейчас · v', 'Current · v') + module.level
+      : L('Новая постройка', 'New building')) +
+    '</h3><p>' +
+    esc(module.current) +
+    '</p></section>' +
+    (module.next
+      ? '<section class="wb-module-effect wb-next"><h3>' +
+        L('После выпуска', 'After release') +
+        '</h3><p>' +
+        esc(module.next) +
+        '</p></section>'
+      : '') +
+    action +
+    (module.demand
+      ? '<p class="wb-demand">' + L('Нужно клиентам: ', 'Wanted by: ') + esc(module.demand) + '</p>'
+      : '') +
+    '<p class="wb-host">' +
+    L('Хостинг ', 'Hosting ') +
+    rate(module.hosting) +
+    PER_S +
+    (module.nextHosting !== undefined ? ' → ' + rate(module.nextHosting) + PER_S : '') +
+    '</p>' +
+    (module.links?.length
+      ? '<section class="wb-module-links"><h3>' +
+        L('Соседи и связи', 'Neighbours and links') +
+        '</h3><ul>' +
+        module.links.map((link) => '<li>' + esc(link) + '</li>').join('') +
+        '</ul></section>'
+      : '') +
+    (module.canDemolish
+      ? button(
+          'demolish',
+          module.id,
+          L('Разобрать здание…', 'Demolish building…'),
+          false,
+          'wb-text-button wb-demolish',
+        )
+      : '')
   );
 }
 
 function needHtml(need: WorkbenchNeed): string {
-  return `<li><div class="wb-need-title"><strong>${esc(need.title)}</strong><span>${whole(need.share)}% · ${whole(need.count)}</span></div><p>${esc(need.effect)}</p>${need.action === 'none' ? `<small>${esc(need.actionLabel ?? L('Нужный уровень выпущен', 'Required level shipped'))}</small>` : button(need.action, need.block, esc(need.actionLabel ?? buildLabel(need.action)), need.disabled)}</li>`;
+  return (
+    '<li><div class="wb-need-title">' +
+    button('inspect-module', need.block, esc(need.title), false, 'wb-text-button') +
+    '<span>' +
+    whole(need.share) +
+    '% · ' +
+    whole(need.count) +
+    '</span></div>' +
+    '<p>' +
+    esc(need.effect) +
+    '</p>' +
+    (need.action === 'none'
+      ? '<span class="wb-muted">' +
+        esc(need.actionLabel ?? L('Нужный уровень выпущен', 'Required level shipped')) +
+        '</span>'
+      : button(
+          need.action,
+          need.block,
+          esc(need.actionLabel ?? buildLabel(need.action)),
+          need.disabled,
+        )) +
+    '</li>'
+  );
 }
 
 function draftHtml(draft: WorkbenchDraft): string {
   return (
-    `<section class="wb-draft-panel" role="dialog" aria-modal="true" aria-labelledby="wb-draft-title"><header><span class="wb-kicker">${L('Пауза · время не идёт', 'Paused · time is stopped')}</span><h2 id="wb-draft-title">${L(`Спринт ${draft.sprint}. Следующий ход`, `Sprint ${draft.sprint}. Your next move`)}</h2><p>${esc(draft.summary)}</p></header>` +
-    `${draft.news ? `<div class="wb-draft-news"><strong>${esc(draft.news.title)}</strong><span>${esc(draft.news.text)}</span></div>` : ''}<div class="wb-draft-cards">${draft.cards
+    '<section class="wb-draft-panel" role="dialog" aria-modal="true" aria-labelledby="wb-draft-title">' +
+    '<header><span class="wb-kicker">' +
+    L('Пауза · время не идёт', 'Paused · time is stopped') +
+    '</span>' +
+    '<h2 id="wb-draft-title">' +
+    L(
+      'Спринт ' + draft.sprint + '. Выбери усиление',
+      'Sprint ' + draft.sprint + '. Choose a boost',
+    ) +
+    '</h2><p>' +
+    esc(draft.summary) +
+    '</p></header>' +
+    (draft.news
+      ? '<div class="wb-draft-news"><strong>' +
+        esc(draft.news.title) +
+        '</strong><span>' +
+        esc(draft.news.text) +
+        '</span></div>'
+      : '') +
+    '<div class="wb-draft-cards">' +
+    draft.cards
       .slice(0, 3)
       .map(
         (card, index) =>
-          `<article class="wb-draft-card"><small class="wb-kicker">${L('Вариант', 'Option')} ${index + 1}</small><h3>${esc(card.title)}</h3><strong class="wb-impact">${esc(card.impact)}</strong><p>${esc(card.description)}</p><p class="wb-tradeoff">${esc(card.tradeoff)}</p><div class="wb-card-cost">${whole(card.work)} ${L('работы', 'work')} · <span>${money(card.cost)}</span></div>${button('choose-card', card.id, `<kbd>${index + 1}</kbd> ${L('Выбрать', 'Choose')}`)}</article>`,
+          '<article class="wb-draft-card"><h3>' +
+          esc(card.title) +
+          '</h3>' +
+          '<strong class="wb-impact">' +
+          esc(primary(card.impact)) +
+          '</strong>' +
+          '<p class="wb-tradeoff">' +
+          esc(card.tradeoff) +
+          '</p>' +
+          '<span class="wb-immediate">' +
+          L('Действует сразу', 'Takes effect immediately') +
+          '</span>' +
+          button(
+            'choose-card',
+            card.id,
+            '<kbd>' + (index + 1) + '</kbd> ' + L('Выбрать', 'Choose'),
+          ) +
+          '</article>',
       )
-      .join(
-        '',
-      )}</div><footer>${L('Выберите одну карту. После выбора спринт продолжится.', 'Choose one card. The sprint continues after your choice.')}</footer></section>`
+      .join('') +
+    '</div><footer>' +
+    L(
+      'Один выбор. Спринт продолжится, когда решишь.',
+      'One choice. The sprint continues when you decide.',
+    ) +
+    '</footer></section>'
   );
 }
 
@@ -186,7 +351,7 @@ export interface Workbench {
   set(view: WorkbenchView | null): void;
 }
 
-/** The shelf owns only presentation state: selected tab, open backlog and input focus. */
+/** The scene owns which detail is open. Input nodes survive simulation updates. */
 export function createWorkbench(
   shop: HTMLElement,
   over: HTMLElement,
@@ -195,35 +360,87 @@ export function createWorkbench(
   const root = document.createElement('section');
   root.className = 'wb-main';
   root.hidden = true;
+  const back = button('close-panel', '', '← ' + L('Постройки', 'Buildings'), false, 'wb-back');
   root.innerHTML =
-    `<nav class="wb-tabs" aria-label="${L('Рабочая полка', 'Workbench')}" role="tablist"><button type="button" role="tab" id="wb-tab-product" aria-controls="wb-product" data-wb-tab="product">${L('Продукт', 'Product')}</button><button type="button" role="tab" id="wb-tab-clients" aria-controls="wb-clients" data-wb-tab="clients">${L('Клиенты', 'Clients')}</button></nav>` +
-    `<section class="wb-plan"><div class="wb-plan-title"><h2>${L('Очередь релиза', 'Release queue')}</h2><span class="wb-budget"></span></div><ol class="wb-tasks"></ol><details class="wb-backlog"><summary></summary><ol></ol></details></section>` +
-    `<section id="wb-product" class="wb-product" role="tabpanel" aria-labelledby="wb-tab-product"><div class="wb-table-scroll"><table><thead><tr><th>${L('Блок', 'Block')}</th><th>${L('Свойство → улучшение', 'Effect → upgrade')}</th><th>${L('Хост', 'Host')}</th><th>${L('Проект', 'Project')}</th></tr></thead><tbody></tbody></table></div><div class="wb-infrastructure"></div></section>` +
-    `<section id="wb-clients" class="wb-clients" role="tabpanel" aria-labelledby="wb-tab-clients" hidden><div class="wb-segment-tabs"></div><div class="wb-segment-pages"></div></section><aside class="wb-news" hidden></aside>`;
+    '<ul class="wb-perks" aria-label="' +
+    L('Усиления продукта', 'Product boosts') +
+    '" hidden></ul>' +
+    '<section class="wb-catalog"><header><h2 tabindex="-1">' +
+    L('Построить', 'Build') +
+    '</h2></header>' +
+    '<p class="wb-catalog-hint"></p><div class="wb-builds"></div></section>' +
+    '<section class="wb-detail wb-module-panel" aria-label="' +
+    L('Постройка', 'Building') +
+    '" hidden>' +
+    '<header>' +
+    back +
+    '</header><div class="wb-panel-scroll wb-module-content"></div></section>' +
+    '<section class="wb-detail wb-client-panel" aria-label="' +
+    L('Клиенты', 'Clients') +
+    '" hidden><header>' +
+    back +
+    '</header><div class="wb-panel-scroll wb-client-content"><h2></h2><p class="wb-client-count"></p>' +
+    '<div class="wb-happiness"><span></span><meter min="0" max="100"></meter></div>' +
+    '<section class="wb-price"><label for="wb-price">' +
+    L('Тариф', 'Tariff') +
+    '<output for="wb-price"></output></label>' +
+    '<input id="wb-price" type="range" min="0.75" max="2.5" step="0.05" data-wb-price="small">' +
+    '<p class="wb-current-price"></p><p class="wb-forecast" role="status"></p>' +
+    button(
+      'confirm-price',
+      'small',
+      L('На следующий релиз', 'Apply next release'),
+      false,
+      'wb-primary',
+    ) +
+    '</section>' +
+    '<section class="wb-client-needs"><h3>' +
+    L('Что им нужно', 'What they need') +
+    '</h3><ul class="wb-needs"></ul></section>' +
+    '<details class="wb-market-detail"><summary>' +
+    L('Рынок и удовлетворённость', 'Market and satisfaction') +
+    '</summary><p class="wb-market-numbers"></p><p class="wb-reasons"></p></details>' +
+    '<details class="wb-contracts"><summary>' +
+    L('Ключевые договоры', 'Key contracts') +
+    '</summary><p>' +
+    L(
+      'Их фиксированные тарифы считаются отдельно. Ползунок выше на них не влияет.',
+      'Their fixed tariffs are counted separately. The slider above does not affect them.',
+    ) +
+    '</p><ul></ul></details>' +
+    '<details class="wb-infrastructure"><summary>' +
+    L('Расширить инфраструктуру', 'Expand infrastructure') +
+    '</summary><p></p>' +
+    button('expand-infrastructure', '', L('Расширить', 'Expand')) +
+    '</details></div></section>';
   shop.prepend(root);
-  const clouds = document.createElement('div');
-  clouds.className = 'wb-clouds';
-  clouds.hidden = true;
-  clouds.setAttribute('aria-label', L('Группы клиентов', 'Client segments'));
+
   const draft = document.createElement('div');
   draft.className = 'wb-draft';
   draft.hidden = true;
-  over.append(clouds, draft);
+  const applied = document.createElement('div');
+  applied.className = 'wb-applied';
+  applied.hidden = true;
+  applied.setAttribute('role', 'status');
+  applied.setAttribute('aria-live', 'polite');
+  over.append(draft, applied);
 
   const find = <T extends HTMLElement = HTMLElement>(selector: string): T =>
     root.querySelector<T>(selector)!;
-  const product = find('#wb-product');
-  const clients = find('#wb-clients');
-  const tasks = find('.wb-tasks');
-  const backlog = find('.wb-backlog');
-  const segments = find('.wb-segment-pages');
+  const catalog = find('.wb-catalog');
+  const modulePanel = find('.wb-module-panel');
+  const clientPanel = find('.wb-client-panel');
+  const client = find('.wb-client-content');
   const signatures = new WeakMap<HTMLElement, string>();
   let view: WorkbenchView | null = null;
-  let tab: 'product' | 'clients' = 'product';
-  let selected: SegmentId = 'small';
+  let panelKey = '';
+  let clientId: SegmentId | null = null;
   let draftKey = '';
   let chosenDraft = false;
   let beforeDraft: HTMLElement | null = null;
+  let beforePanel: HTMLElement | null = null;
+  let appliedKey = '';
+  let appliedTimer = 0;
 
   const text = (node: HTMLElement, value: string): void => {
     if (node.textContent !== value) node.textContent = value;
@@ -239,36 +456,6 @@ export function createWorkbench(
         .find((el) => el.dataset.wbKey === key)
         ?.focus({ preventScroll: true });
   };
-
-  const switchTab = (): void => {
-    product.hidden = tab !== 'product';
-    clients.hidden = tab !== 'clients';
-    root.querySelectorAll<HTMLButtonElement>('[data-wb-tab]').forEach((el) => {
-      const on = el.dataset.wbTab === tab;
-      el.setAttribute('aria-selected', String(on));
-      el.tabIndex = on ? 0 : -1;
-    });
-    segments.querySelectorAll<HTMLElement>('[data-wb-page]').forEach((el) => {
-      el.hidden = el.dataset.wbPage !== selected;
-    });
-    root
-      .querySelectorAll<HTMLButtonElement>('.wb-segment-tabs button')
-      .forEach((el) => el.setAttribute('aria-pressed', String(el.dataset.wbId === selected)));
-    clouds
-      .querySelectorAll<HTMLButtonElement>('button')
-      .forEach((el) =>
-        el.setAttribute('aria-pressed', String(tab === 'clients' && el.dataset.wbId === selected)),
-      );
-  };
-
-  const selectSegment = (id: SegmentId): void => {
-    selected = id;
-    tab = 'clients';
-    switchTab();
-    segments.scrollTop = 0;
-    send({ type: 'select-segment', segment: id });
-  };
-
   const chooseCard = (id: string): void => {
     if (!view?.draft || chosenDraft || !view.draft.cards.some((card) => card.id === id)) return;
     chosenDraft = true;
@@ -277,36 +464,25 @@ export function createWorkbench(
     });
     send({ type: 'choose-card', id });
   };
-
   const click = (event: MouseEvent): void => {
     const target = (event.target as HTMLElement).closest<HTMLButtonElement>('button');
     if (!target || target.disabled || !view) return;
-    if (target.dataset.wbAction === 'choose-card') {
-      chooseCard(target.dataset.wbId!);
+    const action = target.dataset.wbAction;
+    const id = target.dataset.wbId ?? '';
+    if (action === 'choose-card') {
+      chooseCard(id);
       return;
     }
     if (view.draft) return;
-    if (target.dataset.wbTab) {
-      tab = target.dataset.wbTab as typeof tab;
-      switchTab();
-      return;
-    }
-    const id = target.dataset.wbId ?? '';
-    switch (target.dataset.wbAction) {
+    switch (action) {
       case 'place':
       case 'upgrade':
       case 'demolish':
-        send({ type: target.dataset.wbAction, block: id });
+      case 'inspect-module':
+        send({ type: action, block: id });
         break;
-      case 'move':
-        send({ type: 'move', task: id, direction: Number(target.dataset.wbDirection) as -1 | 1 });
-        break;
-      case 'defer':
-      case 'resume':
-        send({ type: target.dataset.wbAction, task: id });
-        break;
-      case 'select-segment':
-        selectSegment(id as SegmentId);
+      case 'close-panel':
+        send({ type: 'close-panel' });
         break;
       case 'confirm-price':
         send({ type: 'confirm-price', segment: id as SegmentId });
@@ -317,40 +493,36 @@ export function createWorkbench(
     }
   };
   root.addEventListener('click', click);
-  clouds.addEventListener('click', click);
   draft.addEventListener('click', click);
   root.addEventListener('input', (event) => {
     const input = event.target as HTMLInputElement;
     if (!input.matches('[data-wb-price]') || !view || view.draft || input.disabled) return;
     const value = Number(input.value);
-    text(input.closest('.wb-price')!.querySelector('output')!, multiplier(value));
+    text(find('.wb-price output'), multiplier(value));
     send({ type: 'preview-price', segment: input.dataset.wbPrice as SegmentId, value });
   });
-  // Editing a tariff or pressing a button must not also trigger the scene's build shortcuts.
   root.addEventListener('keydown', (event) => {
     if ((event.target as HTMLElement).closest('button, input, summary')) event.stopPropagation();
-  });
-  root.querySelector('.wb-tabs')!.addEventListener('keydown', (event) => {
-    const key = event as KeyboardEvent;
-    if (view?.draft || !['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(key.code)) return;
-    key.preventDefault();
-    key.stopPropagation();
-    tab =
-      key.code === 'Home'
-        ? 'product'
-        : key.code === 'End'
-          ? 'clients'
-          : tab === 'product'
-            ? 'clients'
-            : 'product';
-    switchTab();
-    root.querySelector<HTMLButtonElement>(`[data-wb-tab="${tab}"]`)?.focus();
   });
   window.addEventListener(
     'keydown',
     (event) => {
-      if (!view?.draft || over.style.visibility === 'hidden') return;
-      if (event.altKey || event.ctrlKey || event.metaKey) return;
+      if (
+        !view ||
+        over.style.visibility === 'hidden' ||
+        event.altKey ||
+        event.ctrlKey ||
+        event.metaKey
+      )
+        return;
+      if (!view.draft) {
+        if (view.panel && event.code === 'Escape') {
+          event.preventDefault();
+          event.stopImmediatePropagation();
+          send({ type: 'close-panel' });
+        }
+        return;
+      }
       event.stopImmediatePropagation();
       const digit = /^(?:Digit|Numpad)([1-3])$/.exec(event.code);
       if (digit) {
@@ -370,61 +542,73 @@ export function createWorkbench(
   );
 
   function updateSegment(segment: WorkbenchSegment): void {
-    let page = segments.querySelector<HTMLElement>(`[data-wb-page="${segment.id}"]`);
-    if (!page) {
-      page = document.createElement('article');
-      page.dataset.wbPage = segment.id;
-      page.className = 'wb-segment';
-      page.innerHTML = `<h3></h3><p class="wb-segment-numbers"></p><div class="wb-happiness"><span></span><meter min="0" max="100"></meter></div><p class="wb-reasons"></p><ul class="wb-needs"></ul><section class="wb-price"><label for="wb-price-${segment.id}">${L('Тариф сегмента', 'Segment tariff')}<output for="wb-price-${segment.id}"></output></label><input id="wb-price-${segment.id}" type="range" min="0.75" max="2.5" step="0.05" data-wb-price="${segment.id}"><small class="wb-current-price"></small><p class="wb-forecast" role="status"></p>${button('confirm-price', segment.id, L('На следующий релиз', 'Apply next release'))}</section><details class="wb-contracts"><summary>${L('Ключевые договоры · отдельный тариф', 'Key contracts · separate tariff')}</summary><p>${L('Эти компании учитываются отдельно от облака. Ползунок сегмента не меняет их фиксированный тариф.', 'These companies are counted separately from the cloud. The segment slider does not change their fixed tariff.')}</p><ul></ul></details>`;
-      segments.append(page);
+    const changed = clientId !== segment.id;
+    clientId = segment.id;
+    if (changed) {
+      client.scrollTop = 0;
+      client.querySelectorAll<HTMLDetailsElement>('details').forEach((details) => {
+        details.open = false;
+      });
     }
-    text(page.querySelector('h3')!, segment.title);
+    text(client.querySelector('h2')!, segment.title);
     text(
-      page.querySelector('.wb-segment-numbers')!,
+      find('.wb-client-count'),
       L(
-        `${whole(segment.count)} компаний · ${whole(segment.leads)} лидов · рынок ${whole(segment.market)}`,
-        `${whole(segment.count)} companies · ${whole(segment.leads)} leads · market ${whole(segment.market)}`,
+        whole(segment.count) + ' компаний · ' + signed(segment.delta) + ' за спринт',
+        whole(segment.count) + ' companies · ' + signed(segment.delta) + ' this sprint',
       ),
     );
     text(
-      page.querySelector('.wb-happiness span')!,
-      L(
-        `Удовлетворённость ${whole(segment.happiness)}/100`,
-        `Satisfaction ${whole(segment.happiness)}/100`,
-      ),
+      find('.wb-happiness span'),
+      L('Довольство ', 'Satisfaction ') + whole(segment.happiness) + '/100',
     );
-    const meter = page.querySelector('meter')!;
+    const meter = find<HTMLMeterElement>('.wb-happiness meter');
     meter.value = segment.happiness;
     meter.setAttribute('aria-label', L('Удовлетворённость', 'Satisfaction'));
-    text(page.querySelector('.wb-reasons')!, segment.reasons.join(' · '));
-    const contracts = page.querySelector<HTMLElement>('.wb-contracts')!;
+    text(
+      find('.wb-market-numbers'),
+      L(
+        whole(segment.leads) + ' лидов · доступный рынок ' + whole(segment.market),
+        whole(segment.leads) + ' leads · reachable market ' + whole(segment.market),
+      ),
+    );
+    text(find('.wb-reasons'), segment.reasons.join(' · '));
+    html(
+      find('.wb-needs'),
+      segment.needs.length
+        ? segment.needs.map(needHtml).join('')
+        : '<li>' + L('Новых запросов пока нет.', 'No new requests yet.') + '</li>',
+    );
+    const contracts = find('.wb-contracts');
     contracts.hidden = !segment.contracts?.length;
     html(
       contracts.querySelector('ul')!,
       (segment.contracts ?? [])
         .map(
           (contract) =>
-            `<li><strong>${esc(contract.title)}</strong><span>${esc(contract.detail)}</span></li>`,
+            '<li><strong>' +
+            esc(contract.title) +
+            '</strong><p>' +
+            esc(contract.detail) +
+            '</p></li>',
         )
         .join(''),
     );
-    html(
-      page.querySelector('.wb-needs')!,
-      segment.needs.length
-        ? segment.needs.map(needHtml).join('')
-        : `<li>${L('Новых запросов пока нет.', 'No new requests yet.')}</li>`,
-    );
-    const input = page.querySelector('input')!;
+    const input = find<HTMLInputElement>('.wb-price input');
+    input.dataset.wbPrice = segment.id;
     input.disabled = Boolean(view?.draft || segment.pricePending || segment.priceDisabled);
-    // Keep this exact input node and its local value while the player drags or uses arrow keys.
-    if (document.activeElement !== input) input.value = String(segment.previewPrice);
-    text(page.querySelector('output')!, multiplier(Number(input.value)));
+    // The same native slider keeps pointer capture and focus while its forecast changes.
+    if (changed || document.activeElement !== input) input.value = String(segment.previewPrice);
+    text(find('.wb-price output'), multiplier(Number(input.value)));
     text(
-      page.querySelector('.wb-current-price')!,
-      `${L('Сейчас', 'Current')}: ${multiplier(segment.price)}${segment.priceLabel ? ` · ${segment.priceLabel}` : ''}`,
+      find('.wb-current-price'),
+      L('Сейчас ', 'Current ') +
+        multiplier(segment.price) +
+        (segment.priceLabel ? ' · ' + segment.priceLabel : ''),
     );
-    text(page.querySelector('.wb-forecast')!, segment.forecast);
-    const confirm = page.querySelector<HTMLButtonElement>('[data-wb-action="confirm-price"]')!;
+    text(find('.wb-forecast'), segment.forecast);
+    const confirm = find<HTMLButtonElement>('[data-wb-action="confirm-price"]');
+    confirm.dataset.wbId = segment.id;
     confirm.disabled = Boolean(
       view?.draft ||
       segment.pricePending ||
@@ -437,6 +621,30 @@ export function createWorkbench(
         ? L('Назначено на релиз', 'Scheduled for release')
         : L('На следующий релиз', 'Apply next release'),
     );
+    const infrastructure = find('.wb-infrastructure');
+    infrastructure.hidden = !view?.infrastructure;
+    if (view?.infrastructure) {
+      text(infrastructure.querySelector('p')!, view.infrastructure.detail);
+      const expand = infrastructure.querySelector('button')!;
+      text(expand, view.infrastructure.label);
+      expand.disabled = Boolean(view.draft || view.infrastructure.disabled);
+    }
+  }
+
+  function updateApplied(value: WorkbenchView['applied']): void {
+    const key = value ? value.title + '\n' + value.impact : '';
+    if (key === appliedKey) return;
+    appliedKey = key;
+    window.clearTimeout(appliedTimer);
+    applied.hidden = !value;
+    if (!value) return;
+    html(
+      applied,
+      '<span>' + esc(value.title) + '</span><strong>' + esc(value.impact) + '</strong>',
+    );
+    appliedTimer = window.setTimeout(() => {
+      applied.hidden = true;
+    }, 4500);
   }
 
   return {
@@ -446,77 +654,94 @@ export function createWorkbench(
     set(next) {
       view = next;
       root.hidden = !view;
-      clouds.hidden = !view;
-      shop.classList.toggle('wb-enabled', Boolean(view));
       root.inert = Boolean(view?.draft);
-      clouds.inert = Boolean(view?.draft);
+      shop.classList.toggle('wb-enabled', Boolean(view));
       if (!view) {
         draft.hidden = true;
         draftKey = '';
+        panelKey = '';
         chosenDraft = false;
+        updateApplied(null);
         return;
       }
-      if (view.selectedSegment) selected = view.selectedSegment;
-      text(
-        find('.wb-budget'),
-        L(
-          `План ${whole(view.budget.planned)} · успеем ≈${whole(view.budget.capacity)}`,
-          `Planned ${whole(view.budget.planned)} · can finish ≈${whole(view.budget.capacity)}`,
-        ),
-      );
-      find('.wb-budget').title = L(
-        'Остаток работы / прогноз агентов до релиза; ручная помощь не учтена.',
-        'Remaining work / agents’ forecast until release; manual help is not included.',
-      );
-      const queued = view.tasks.filter((task) => task.status !== 'backlog');
-      const deferred = view.tasks.filter((task) => task.status === 'backlog');
+      const perks = find('.wb-perks');
+      perks.hidden = !view.perks?.length;
       html(
-        tasks,
-        queued.length
-          ? queued.map(taskHtml).join('')
-          : `<li class="wb-empty">${L('Выберите улучшение или поставьте новый блок.', 'Choose an upgrade or place a new block.')}</li>`,
-      );
-      text(
-        backlog.querySelector('summary')!,
-        `${L('Бэклог · на потом', 'Backlog · later')} (${deferred.length})`,
-      );
-      html(
-        backlog.querySelector('ol')!,
-        deferred.length
-          ? deferred.map(taskHtml).join('')
-          : `<li class="wb-empty">${L('Отложенные задачи не занимают план спринта.', 'Deferred tasks do not take up the sprint plan.')}</li>`,
-      );
-      html(find('tbody'), view.modules.map(moduleHtml).join(''));
-      html(
-        find('.wb-infrastructure'),
-        view.infrastructure
-          ? `<p>${esc(view.infrastructure.detail)}</p>${button('expand-infrastructure', '', esc(view.infrastructure.label), Boolean(view.infrastructure.disabled))}`
-          : '',
-      );
-      html(
-        find('.wb-segment-tabs'),
-        view.segments
-          .map((segment) => button('select-segment', segment.id, esc(segment.title)))
-          .join(''),
-      );
-      for (const segment of view.segments) updateSegment(segment);
-      html(
-        clouds,
-        view.segments
+        perks,
+        (view.perks ?? [])
           .map(
-            (segment) =>
-              `<button type="button" class="wb-cloud" data-wb-action="select-segment" data-wb-id="${segment.id}" data-wb-key="cloud:${segment.id}" aria-label="${esc(`${segment.title}: ${whole(segment.count)}, ${L('удовлетворённость', 'satisfaction')} ${whole(segment.happiness)}/100`)}"><span class="wb-cloud-head"><i aria-hidden="true"></i><span>${esc(segment.title)}</span></span><strong>${whole(segment.count)}</strong><span class="wb-cloud-foot"><span>${whole(segment.happiness)}/100 ${segment.count ? L('довольство', 'satisfaction') : L('ожидается', 'expected')}</span><span>${signed(segment.delta)}${L('/спр.', '/sprint')}</span></span></button>`,
+            (perk) =>
+              '<li title="' +
+              esc(perk.title + ': ' + perk.impact) +
+              '">' +
+              esc(primary(perk.impact) || perk.title) +
+              '</li>',
           )
           .join(''),
       );
-      const news = find('.wb-news');
-      news.hidden = !view.news;
-      if (view.news)
-        html(news, `<strong>${esc(view.news.title)}</strong><span>${esc(view.news.text)}</span>`);
-      switchTab();
+      const panel = view.panel ?? null;
+      catalog.hidden = panel !== null;
+      modulePanel.hidden = panel !== 'module';
+      clientPanel.hidden = panel !== 'clients';
+      if (!view.draft) {
+        const available = view.modules.filter(
+          (module) => module.level === 0 && module.action === 'place' && !module.disabled,
+        );
+        html(
+          find('.wb-builds'),
+          available.length
+            ? available.map(moduleCard).join('')
+            : '<p class="wb-empty">' +
+                L(
+                  'Всё доступное уже на чертеже.<br>Кликни здание, чтобы улучшить его.',
+                  'Everything available is on the blueprint.<br>Click a building to improve it.',
+                ) +
+                '</p>',
+        );
+        text(
+          find('.wb-catalog-hint'),
+          available.some((module) => module.selected)
+            ? L('Теперь выбери клетку на чертеже.', 'Now choose a cell on the blueprint.')
+            : L('Улучшения — клик по зданию на карте.', 'To upgrade, click a building on the map.'),
+        );
+      }
+      if (panel === 'module') {
+        const module = view.modules.find((entry) => entry.id === view?.selectedModule);
+        html(
+          find('.wb-module-content'),
+          module
+            ? moduleDetail(module)
+            : '<p class="wb-empty">' +
+                L('Выбери здание на карте.', 'Choose a building on the map.') +
+                '</p>',
+        );
+      }
+      const segment =
+        view.segments.find((entry) => entry.id === view?.selectedSegment) ?? view.segments[0];
+      if (panel === 'clients' && segment) updateSegment(segment);
+      const nextPanelKey =
+        panel === 'module'
+          ? 'module:' + (view.selectedModule ?? '')
+          : panel === 'clients'
+            ? 'clients:' + (segment?.id ?? '')
+            : '';
+      if (panelKey !== nextPanelKey) {
+        if (nextPanelKey && !panelKey) beforePanel = document.activeElement as HTMLElement | null;
+        if (!view.draft) {
+          if (nextPanelKey)
+            (panel === 'module' ? modulePanel : clientPanel)
+              .querySelector<HTMLButtonElement>('.wb-back')
+              ?.focus({ preventScroll: true });
+          else if (beforePanel?.isConnected) beforePanel.focus({ preventScroll: true });
+          else catalog.querySelector('h2')?.focus({ preventScroll: true });
+        }
+        if (panel === 'module') find('.wb-module-content').scrollTop = 0;
+        panelKey = nextPanelKey;
+      }
+      updateApplied(view.applied);
       draft.hidden = !view.draft;
       const key = view.draft
-        ? `${view.draft.sprint}:${view.draft.cards.map((card) => card.id).join(',')}`
+        ? view.draft.sprint + ':' + view.draft.cards.map((card) => card.id).join(',')
         : '';
       if (key !== draftKey) {
         const wasDraft = draftKey !== '';
