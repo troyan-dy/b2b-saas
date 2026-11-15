@@ -19,12 +19,14 @@ import {
   enqueueTask,
   hasWork,
   plannedWork,
+  shipBlock,
   startWork,
   syncProduction,
   takeReleasedTasks,
   type WorkTask,
 } from './production';
 import { blockEffects, PRODUCTION, strategyEffects, strategyHosting } from './product';
+import { agentDebtPerWork, agentFixPerWork, agentWorkRate } from './workforce';
 
 export { DRAFT_CARDS, chooseCard, draftCards, type DraftCard } from './draft';
 export {
@@ -37,9 +39,13 @@ export {
   resumeTask,
   cancelTask,
   expandInfrastructure,
+  apiWorkQuote,
+  rushTask,
+  type ApiWorkQuote,
   type WorkTask,
 } from './production';
 export { blockEffectText } from './product';
+export { agentDebtPerWork, agentFixPerWork, agentWorkRate, WORKFORCE } from './workforce';
 
 /**
  * One run = one startup, from an empty sheet to an ending. Pure logic: no Phaser, no DOM.
@@ -1280,14 +1286,10 @@ export function step(run: Run, dt: number): void {
   run.stats.tokens += (tokens(run) / TUNING.sprint_s) * dt;
   run.energy = Math.min(TUNING.crunch.max, run.energy + dt / TUNING.crunch.regen_s);
 
-  const slow = 1 - Math.min(TUNING.debt.slow_max, run.debt * TUNING.debt.slow_per_point);
   for (const a of run.agents) {
     // nothing to do on the lane: the agent waits, for free
     if (!busy(run, a)) continue;
-    let rate = TUNING.tiers[a.tier].work_per_s;
-    if (a.lane === run.review) rate *= TUNING.review_boost;
-    if (a.lane === 'build') rate *= slow;
-    a.carry += rate * dt;
+    a.carry += agentWorkRate(run, a) * dt;
     while (a.carry >= 1) {
       a.carry -= 1;
       deliver(run, a);
@@ -1311,10 +1313,7 @@ export function step(run: Run, dt: number): void {
 
 /** One square of work arrives where the agent's lane points. */
 function deliver(run: Run, a: Agent): void {
-  const dirty =
-    a.lane === run.review
-      ? 0
-      : TUNING.tiers[a.tier].debt_per_work * (run.perks.includes('tests') ? 0.6 : 1);
+  const dirty = agentDebtPerWork(run, a);
   switch (a.lane) {
     case 'build': {
       if (!work(run, a.id)) {
@@ -1326,7 +1325,7 @@ function deliver(run: Run, a: Agent): void {
     }
     case 'fix':
       run.events.push({ type: 'work', agent: a.id, lane: a.lane, idle: run.debt <= 0 });
-      run.debt = Math.max(0, run.debt - TUNING.fix_per_work);
+      run.debt = Math.max(0, run.debt - agentFixPerWork(a.tier));
       return;
     case 'promo':
       run.leads += leadsPerWork(run);
@@ -1436,19 +1435,7 @@ function release(run: Run): void {
     .map((task) => task.card ?? task.kind);
 
   for (const b of run.blocks) {
-    if (b.built && !b.live) {
-      b.live = true;
-      report.shipped.push(b.kind);
-      run.stats.shipped++;
-      run.events.push({ type: 'live', kind: b.kind });
-    } else if (b.up && b.done >= b.need) {
-      // the rework is done: the block ships in its next version
-      b.up = false;
-      b.level++;
-      report.shipped.push(b.kind);
-      run.stats.reworks++;
-      run.events.push({ type: 'live', kind: b.kind });
-    }
+    if (shipBlock(run, b)) report.shipped.push(b.kind);
   }
   refresh(run);
 

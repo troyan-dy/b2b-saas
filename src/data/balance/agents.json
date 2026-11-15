@@ -1,0 +1,5 @@
+{
+  "review_debt_mult": 0.5,
+  "tests_debt_mult": 0.6,
+  "fix_multiplier": { "fast": 0.5, "normal": 1, "think": 1.5 }
+}

@@ -116,16 +116,16 @@ export const HAND_DONE: Record<Lane, string> = L(
   { build: '', fix: 'fixed it yourself', promo: 'post written', research: 'called a client' },
 );
 
-export const TIER_NAME: Record<Tier, string> = L({ fast: 'быстрый', normal: 'обычный', think: 'думающий' }, { fast: 'fast', normal: 'regular', think: 'thinking' });
+export const TIER_NAME: Record<Tier, string> = L({ fast: 'базовый', normal: 'опытный', think: 'эксперт' }, { fast: 'basic', normal: 'experienced', think: 'expert' });
 
 export const TIER_TITLE: Record<Tier, string> = L(
-  { fast: 'Быстрый агент', normal: 'Обычный агент', think: 'Думающий агент' },
-  { fast: 'Fast agent', normal: 'Regular agent', think: 'Thinking agent' },
+  { fast: 'Базовый агент', normal: 'Опытный агент', think: 'Агент-эксперт' },
+  { fast: 'Basic agent', normal: 'Experienced agent', think: 'Expert agent' },
 );
 
 export const TIER_NOTE: Record<Tier, string> = L(
-  { fast: 'много кода, много долга', normal: 'пишет как человек: средне', think: 'медленно, дорого, зато без долга' },
-  { fast: 'lots of code, lots of debt', normal: 'writes like a human: so-so', think: 'slow, expensive, but no debt' },
+  { fast: 'дешёвая работа · долг копится быстро', normal: 'в 1,4 раза быстрее · в 4 раза меньше долга', think: 'вдвое быстрее базового · без нового долга' },
+  { fast: 'cheap work · debt builds up quickly', normal: '1.4× faster · 4× less debt', think: 'twice as fast as basic · no new debt' },
 );
 
 export const STAGE_NAME = L(['', 'кухня', 'первые клиенты', 'город клиентов'], ['', 'the kitchen', 'first clients', 'a city of clients']);

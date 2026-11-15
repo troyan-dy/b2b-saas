@@ -8,9 +8,9 @@
   "link_bonus": 0.08,
   "lessons": { "arch_link_bonus": 0.08, "ear_leads": 15, "buyers_leads": 20 },
   "tiers": {
-    "fast": { "cost_per_s": 6, "work_per_s": 0.25, "debt_per_work": 0.5 },
-    "normal": { "cost_per_s": 10, "work_per_s": 0.2, "debt_per_work": 0.2 },
-    "think": { "cost_per_s": 16, "work_per_s": 0.15, "debt_per_work": 0 }
+    "fast": { "cost_per_s": 6, "work_per_s": 0.25, "debt_per_work": 0.8 },
+    "normal": { "cost_per_s": 10, "work_per_s": 0.35, "debt_per_work": 0.2 },
+    "think": { "cost_per_s": 16, "work_per_s": 0.5, "debt_per_work": 0 }
   },
   "review_boost": 1.25,
   "crunch": { "max": 8, "regen_s": 3, "debt": 1 },

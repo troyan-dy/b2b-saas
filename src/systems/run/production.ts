@@ -1,6 +1,8 @@
+import api from '../../data/balance/api.json';
 import tuning from '../../data/balance/run.json';
 import { PRODUCTION } from './product';
-import { workNeed, type Run } from './run';
+import { refreshRun, RULES, workNeed, type Block, type Run } from './run';
+import { agentWorkRate } from './workforce';
 
 export type TaskStatus = 'queued' | 'active' | 'ready' | 'backlog';
 export interface WorkTask {
@@ -13,6 +15,99 @@ export interface WorkTask {
   done: number;
   cost: number;
   status: TaskStatus;
+}
+
+export interface ApiWorkQuote {
+  cost: number;
+  fee: number;
+  unpaidCost: number;
+  remainingWork: number;
+  affordable: boolean;
+}
+
+export function apiWorkQuote(run: Run, id: string): ApiWorkQuote | null {
+  if (
+    run.over ||
+    run.draft ||
+    run.lastChance !== null ||
+    !Number.isFinite(run.money) ||
+    run.sprint > tuning.last_sprint ||
+    (run.sprint === tuning.last_sprint && run.sprintT >= tuning.sprint_s)
+  )
+    return null;
+  const task = run.tasks.find((entry) => entry.id === id);
+  if (
+    !task ||
+    task.kind === 'card' ||
+    !['build', 'upgrade', 'infrastructure'].includes(task.kind) ||
+    !['queued', 'active', 'ready', 'backlog'].includes(task.status) ||
+    ![task.work, task.done, task.cost].every(Number.isFinite) ||
+    task.work <= 0 ||
+    task.done < 0 ||
+    task.done > task.work ||
+    task.cost < 0 ||
+    (task.status === 'ready' && task.done !== task.work)
+  )
+    return null;
+  if (task.kind === 'infrastructure') {
+    if (!Number.isSafeInteger(run.infrastructure) || run.infrastructure < 0) return null;
+  } else {
+    const block = run.blocks.find((entry) => entry.kind === task.block);
+    if (
+      !block ||
+      !RULES[block.kind] ||
+      !Number.isSafeInteger(block.level) ||
+      block.level < 1 ||
+      (task.kind === 'build' && block.live) ||
+      (task.kind === 'upgrade' &&
+        (!block.live ||
+          block.level >= PRODUCTION.max_level ||
+          (task.level !== undefined && task.level !== block.level + 1)))
+    )
+      return null;
+  }
+  const remainingWork = task.work - task.done;
+  const unpaidCost = task.status === 'queued' || task.status === 'backlog' ? task.cost : 0;
+  const fee = Math.ceil(api.minimum_fee + remainingWork * api.cost_per_work);
+  const cost = Math.ceil(unpaidCost + fee);
+  if (!Number.isSafeInteger(cost)) return null;
+  return { cost, fee, unpaidCost, remainingWork, affordable: run.money >= cost };
+}
+
+/** Ships only this order. It does not tick the market, clients or the sprint clock. */
+export function rushTask(run: Run, id: string): boolean {
+  const quote = apiWorkQuote(run, id);
+  if (!quote?.affordable) return false;
+  const task = run.tasks.find((entry) => entry.id === id)!;
+  run.money -= quote.cost;
+  run.stats.tokens += quote.fee;
+  task.done = task.work;
+  task.status = 'ready';
+  syncProduction(run);
+  if (task.kind === 'infrastructure') run.infrastructure++;
+  else {
+    const block = run.blocks.find((entry) => entry.kind === task.block)!;
+    block.hand = false;
+    run.events.push({ type: 'built', kind: block.kind, i: block.i, j: block.j });
+    shipBlock(run, block);
+  }
+  run.tasks = run.tasks.filter((entry) => entry !== task);
+  refreshRun(run);
+  return true;
+}
+
+/** The same block activation serves the scheduled release and a paid early release. */
+export function shipBlock(run: Run, block: Block): boolean {
+  if (block.built && !block.live) {
+    block.live = true;
+    run.stats.shipped++;
+  } else if (block.up && block.done >= block.need) {
+    block.up = false;
+    block.level++;
+    run.stats.reworks++;
+  } else return false;
+  run.events.push({ type: 'live', kind: block.kind });
+  return true;
 }
 
 export function queueView(run: Run): WorkTask[] {
@@ -160,17 +255,11 @@ export function expandInfrastructure(run: Run): boolean {
 }
 
 function buildWork(run: Run, seconds: number, withCarry: boolean): number {
-  const slow = 1 - Math.min(tuning.debt.slow_max, run.debt * tuning.debt.slow_per_point);
-  const review = run.review === 'build' ? tuning.review_boost : 1;
   return run.agents
     .filter((agent) => agent.lane === 'build')
     .reduce(
       (sum, agent) =>
-        sum +
-        Math.floor(
-          tuning.tiers[agent.tier].work_per_s * slow * review * seconds +
-            (withCarry ? agent.carry : 0),
-        ),
+        sum + Math.floor(agentWorkRate(run, agent) * seconds + (withCarry ? agent.carry : 0)),
       0,
     );
 }
