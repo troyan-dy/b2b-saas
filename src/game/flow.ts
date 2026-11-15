@@ -17,14 +17,14 @@ export interface MenuState {
   readonly track: string;
 }
 
-export type MenuChoice = 'start' | 'sound' | 'music' | 'track' | 'lang';
+export type MenuChoice = 'start' | 'continue' | 'sound' | 'music' | 'track' | 'lang';
 
 const RESUME = L('Резюме основателя', 'Founder’s résumé');
 const NEW_STARTUP = L('Новый стартап', 'New startup');
 const BACK = L('назад', 'back');
 const CLAUDE = L('<b>❯ Клод</b>', '<b>❯ Claude</b>');
 
-export async function menu(term: Terminal, meta: Meta, state: MenuState, version: string): Promise<MenuChoice> {
+export async function menu(term: Terminal, meta: Meta, state: MenuState, version: string, saved: Run | null = null): Promise<MenuChoice> {
   for (;;) {
     term.clear();
     term.print('B2B SaaS', 'big');
@@ -36,6 +36,7 @@ export async function menu(term: Terminal, meta: Meta, state: MenuState, version
     }
     const minutes = Math.round((TUNING.last_sprint * TUNING.sprint_s) / 60);
     const options = [
+      ...(saved ? [{ title: L('Продолжить компанию', 'Continue company'), note: `${pitch(saved.idea)} · ${L('спринт', 'sprint')} ${saved.sprint}` }] : []),
       {
         title: meta.runs.length > 0 ? NEW_STARTUP : L('Основать стартап', 'Found a startup'),
         note: meta.lessons.length > 0 ? L(`тот же основатель, уроков: ${meta.lessons.length}`, `same founder, lessons: ${meta.lessons.length}`) : L(`одна попытка — ${minutes} минут`, `one attempt — ${minutes} minutes`),
@@ -48,7 +49,9 @@ export async function menu(term: Terminal, meta: Meta, state: MenuState, version
       // the note is in the other language: whoever cannot read the menu finds the way out of it
       { title: L('Язык: русский', 'Language: English'), note: L('switch to English', 'переключить на русский') },
     ];
-    const k = await term.ask(options, L(`версия ${version}`, `version ${version}`));
+    const picked = await term.ask(options, L(`версия ${version}`, `version ${version}`));
+    if (saved && picked === 0) return 'continue';
+    const k = picked - (saved ? 1 : 0);
     if (k === 0) return 'start';
     if (k === 1) await resume(term, meta);
     if (k === 2) return 'sound';

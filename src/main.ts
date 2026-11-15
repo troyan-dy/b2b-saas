@@ -24,6 +24,7 @@ import { mountMusicDemo } from './gyms/music/MusicDemo';
 import { SheetScene } from './gyms/sheet/SheetScene';
 import { emptyMeta, loadMeta, traitLevels } from './systems/meta/meta';
 import { createRun, IDEAS, type Idea, type Run } from './systems/run/run';
+import { clearRunSave, loadRun, saveRun } from './systems/run/save';
 import { createHud } from './ui/hud';
 import { createPaper } from './ui/paper';
 import { mountUiScale } from './ui/scale';
@@ -135,6 +136,10 @@ async function play(): Promise<void> {
   setTrack(settings.track);
   setMusicOn(settings.music);
   const meta = loadMeta();
+  const persistent = !(__TOOLS__ && (args.gym !== '' || args.bot || args.capture));
+  const saved = persistent ? loadRun() : null;
+  let selected: Run | null = null;
+  let restored = false;
   const paper = createPaper(under, over);
   paper.show(false);
   const term = createTerminal(over, (name) => {
@@ -144,10 +149,19 @@ async function play(): Promise<void> {
   });
 
   term.open(L('терминал основателя', 'the founder’s terminal'));
-  if (!takeAgain() || args.menu) {
+  if (!takeAgain() || args.menu || saved) {
     for (;;) {
-      const choice = await menu(term, meta, audio, __VERSION__);
-      if (choice === 'start') break;
+      const choice = await menu(term, meta, audio, __VERSION__, saved);
+      if (choice === 'continue') {
+        if (!saved) continue;
+        selected = saved;
+        restored = true;
+        break;
+      }
+      if (choice === 'start') {
+        if (persistent) clearRunSave();
+        break;
+      }
       if (choice === 'lang') {
         switchLanguage(settings);
         // the page is leaving: nothing more is asked on this one
@@ -156,18 +170,43 @@ async function play(): Promise<void> {
       audio.toggle(choice);
     }
   }
-  const { idea, boost } = await mixIdea(term, args.seed, meta);
-  const run = createRun(args.seed, idea, meta.lessons, traitLevels(meta, boost));
+  if (!selected) {
+    const { idea, boost } = await mixIdea(term, args.seed, meta);
+    selected = createRun(args.seed, idea, meta.lessons, traitLevels(meta, boost));
+  }
+  const run = selected;
+  const persist = (): void => {
+    if (!persistent) return;
+    if (run.over) clearRunSave();
+    else saveRun(run);
+  };
+  persist();
+  const autosave = persistent ? window.setInterval(persist, 2000) : undefined;
+  if (persistent) window.addEventListener('pagehide', persist);
+  const stopSaving = (): void => {
+    if (autosave !== undefined) window.clearInterval(autosave);
+    window.removeEventListener('pagehide', persist);
+  };
+  let finished = false;
   const scene = new GameScene(run, rng, paper, {
+    restored,
     // the bot is a tool of the gyms and captures: the release has no code path to it
     beforeStep: __TOOLS__ && args.bot ? (r) => playBot(r) : undefined,
     onEnd: (r: Run) => {
+      if (finished) return;
+      finished = true;
+      stopSaving();
+      if (persistent) clearRunSave();
       // the last frame of the startup stays on the sheet for a moment, then the terminal takes over
       window.setTimeout(() => {
-        void ending(term, r, meta).then(() => reload(true));
+        void ending(term, r, meta, persistent).then(() => reload(true));
       }, 1400);
     },
-    onQuit: () => reload(false),
+    onQuit: () => {
+      persist();
+      stopSaving();
+      reload(false);
+    },
     audio,
   });
   scene.speed = args.speed;

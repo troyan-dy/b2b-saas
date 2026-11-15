@@ -6,11 +6,12 @@ export interface Rng {
   /** integer in [min, max] */
   int(min: number, max: number): number;
   pick<T>(items: readonly T[]): T;
+  state(): number;
 }
 
 /** mulberry32: the game's only source of randomness, so a seed reproduces a session. */
-export function createRng(seed: number): Rng {
-  let a = seed >>> 0;
+export function createRng(seed: number, state = seed): Rng {
+  let a = state >>> 0;
   const next = (): number => {
     a = (a + 0x6d2b79f5) >>> 0;
     let t = a;
@@ -24,5 +25,6 @@ export function createRng(seed: number): Rng {
     range,
     int: (min, max) => Math.floor(range(min, max + 1)),
     pick: (items) => items[Math.floor(next() * items.length)],
+    state: () => a,
   };
 }
