@@ -1,12 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { emptyMeta, finish, learn, migrate, raise, traitChoices, traitLevels, TRAITS } from '../src/systems/meta/meta';
-import { answerLastChance, createRun, IDEAS, isLive, priceMult, shelf, step, TUNING, type Idea } from '../src/systems/run/run';
+import { answerLastChance, chooseCard, createRun, IDEAS, isLive, priceMult, shelf, step, TUNING, type Idea } from '../src/systems/run/run';
 
 const idea: Idea = { tech: IDEAS.tech[0], form: IDEAS.form[3], aud: IDEAS.aud[0] };
 
 function goBroke(seed: number): ReturnType<typeof createRun> {
   const run = createRun(seed, idea);
+  run.agents = [];
   while (!run.over) {
+    if (run.draft) chooseCard(run, run.draft[0]);
     // the bank calls when the money is gone: this founder keeps the flat
     if (run.lastChance !== null) answerLastChance(run, false);
     step(run, 0.5);
@@ -15,6 +17,14 @@ function goBroke(seed: number): ReturnType<typeof createRun> {
 }
 
 describe('founder', () => {
+  it('learns profitable operations without requiring the removed timed ending', () => {
+    const run = createRun(1, idea);
+    run.over = 'sold';
+    run.stats.profitAt = 120;
+    const meta = emptyMeta();
+    meta.lessons = ['cash', 'template'];
+    expect(learn(run, meta).map(lesson => lesson.id)).toContain('cheapEarly');
+  });
   it('test_meta_broken_record_is_a_founder_with_no_past', () => {
     expect(migrate(null)).toEqual(emptyMeta());
     expect(migrate('x')).toEqual(emptyMeta());

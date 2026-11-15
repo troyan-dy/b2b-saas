@@ -127,7 +127,7 @@ function happened(run: Run, when: string): boolean {
     case 'sold':
       return run.over === 'sold';
     case 'profit':
-      return run.over === 'profit';
+      return run.stats.profitAt > 0 || run.over === 'profit';
     case 'broke':
       return run.over === 'broke' || run.over === 'late';
     default:

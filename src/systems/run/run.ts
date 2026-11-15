@@ -564,6 +564,12 @@ export function createRun(
   if (perks.includes('posts')) run.leads = 1;
   if (perks.includes('buyers')) run.known.push(run.corpAsks[0]);
   if (perks.includes('ear')) run.known.push(run.asks[0]);
+  for (const [id, perk, amount] of [['small', 'ear', TUNING.lessons.ear_leads], ['large', 'buyers', TUNING.lessons.buyers_leads]] as const) {
+    if (perks.includes(perk)) {
+      for (const profile of run.market.groups.find(group => group.id === id)!.profiles)
+        profile.leads = amount * profile.share / 100;
+    }
+  }
   refresh(run);
   return run;
 }
@@ -650,10 +656,14 @@ export function priceMult(run: Run): number {
   return (
     run.idea.tech.price *
     run.idea.form.price *
-    (1 + TUNING.link_bonus * run.linkCount) *
+    (1 + linkBonus(run) * run.linkCount) *
     run.mod.price *
     (1 + trait(run, 'sales'))
   );
+}
+
+export function linkBonus(run: Run): number {
+  return TUNING.link_bonus + (run.perks.includes('arch') ? TUNING.lessons.arch_link_bonus : 0);
 }
 
 /** what a client is worth per sprint: its subscription at today's prices, whether it pays right now or not */

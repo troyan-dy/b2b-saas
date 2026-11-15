@@ -34,12 +34,11 @@ export async function menu(term: Terminal, meta: Meta, state: MenuState, version
       const last = meta.runs[meta.runs.length - 1];
       term.print(`${L('прошлый стартап', 'previous startup')}: ${pastPitch(last)} — ${ENDING_TITLE[last.ending].toLowerCase()}`, 'dim small');
     }
-    const minutes = Math.round((TUNING.last_sprint * TUNING.sprint_s) / 60);
     const options = [
       ...(saved ? [{ title: L('Продолжить компанию', 'Continue company'), note: `${pitch(saved.idea)} · ${L('спринт', 'sprint')} ${saved.sprint}` }] : []),
       {
         title: meta.runs.length > 0 ? NEW_STARTUP : L('Основать стартап', 'Found a startup'),
-        note: meta.lessons.length > 0 ? L(`тот же основатель, уроков: ${meta.lessons.length}`, `same founder, lessons: ${meta.lessons.length}`) : L(`одна попытка — ${minutes} минут`, `one attempt — ${minutes} minutes`),
+        note: meta.lessons.length > 0 ? L(`тот же основатель, уроков: ${meta.lessons.length}`, `same founder, lessons: ${meta.lessons.length}`) : L('бесконечные спринты · компания сохраняется', 'endless sprints · your company is saved'),
       },
       { title: RESUME, note: meta.runs.length > 0 ? L(`стартапов: ${meta.runs.length}`, `startups: ${meta.runs.length}`) : L('пока пустое', 'empty so far') },
       { title: L(`Звук: ${state.sound ? 'включён' : 'выключен'}`, `Sound: ${state.sound ? 'on' : 'off'}`) },
@@ -171,7 +170,7 @@ export async function mixIdea(term: Terminal, seed: number, meta: Meta): Promise
     CLAUDE,
     L('Звучит как стартап. Инвесторов у нас нет — есть твои сбережения.', 'Sounds like a startup. We have no investors — we have your savings.'),
     L(`Их хватит минут на ${minutes}, если ничего не продадим.`, `They will last about ${minutes} minutes if we sell nothing.`),
-    L(`Цель: выйти в плюс за ${TUNING.last_sprint} спринтов. Или хотя бы красиво закрыться.`, `The goal: turn a profit within ${TUNING.last_sprint} sprints. Or at least shut down gracefully.`),
+    L('Цель: вывести компанию в плюс и развивать дальше — или выгодно продать. Ограничения по спринтам нет.', 'The goal: turn profitable and keep growing — or sell at a good price. There is no sprint limit.'),
   ];
   const last = meta.runs[meta.runs.length - 1];
   // the same founder, a new session of Claude: the past is told to him, not remembered
@@ -191,8 +190,8 @@ export async function mixIdea(term: Terminal, seed: number, meta: Meta): Promise
     term.print('');
     term.print(L('как это устроено:', 'how it works:'), 'dim small');
     term.print(L('1. Справа — блоки. Выбери блок, потом клетку на чертеже.', '1. Blocks are on the right. Pick a block, then a cell on the blueprint.'), 'small');
-    term.print(L('2. Я строю. Клик по стройке или Enter — помочь руками.', '2. I build. Click the site or press Enter to help with your own hands.'), 'small');
-    term.print(L(`3. Каждые ${TUNING.sprint_s} секунды релиз: достроенное начинает работать.`, `3. Every ${TUNING.sprint_s} seconds there is a release: what is finished goes live.`), 'small');
+    term.print(L('2. Задачи идут по очереди. Улучшения остаются в своих зданиях. Enter — помочь руками.', '2. Tasks share one queue. Upgrades stay in their buildings. Enter helps with the work.'), 'small');
+    term.print(L(`3. Каждые ${TUNING.sprint_s} секунды релиз и выбор одной из трёх карт. На выборе время стоит.`, `3. Every ${TUNING.sprint_s} seconds: release and a choice of three cards. Time pauses for the choice.`), 'small');
     term.print(
       L('4. Клиенты придут после ядра и лендинга. Платить начнут после «Приёма оплаты».', '4. Clients come after the core and the landing page. They start paying after “Payments”.'),
       'small',

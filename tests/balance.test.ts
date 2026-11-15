@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { playBot, SENSIBLE, type BotStyle } from '../src/gyms/bot';
-import { answerLastChance, CLIENT_TYPES, createRun, IDEAS, mrr, step, TUNING, type Idea, type Run } from '../src/systems/run/run';
+import { answerLastChance, chooseCard, CLIENT_TYPES, createRun, IDEAS, mrr, netPerS, step, TUNING, type Idea, type Run } from '../src/systems/run/run';
 
 const STEP = 1 / 4;
 
@@ -10,11 +10,15 @@ let closed = 0;
 
 function play(seed: number, idea: Idea, style: BotStyle | null): Run {
   const run = createRun(seed, idea);
+  if (!style) run.agents = [];
   let read = 0;
-  for (let k = 0; k < 60 * 60 * 4 && !run.over; k++) {
+  for (let k = 0; k < TUNING.last_sprint * TUNING.sprint_s / STEP && !run.over; k++) {
     if (style) playBot(run, style);
     // nobody at the desk: the bank's call goes unanswered, the startup closes
-    else if (run.lastChance !== null) answerLastChance(run, false);
+    else {
+      if (run.draft) chooseCard(run, run.draft[0]);
+      if (run.lastChance !== null) answerLastChance(run, false);
+    }
     if (run.offer !== null) run.offer = null; // the bot never sells: we want to see the whole run
     step(run, STEP);
     for (; read < run.events.length; read++) {
@@ -39,7 +43,7 @@ function summary(runs: Run[]): { alive: number; profit: number; peak: number; fi
   const profitRuns = runs.filter((r) => r.stats.profitAt > 0);
   return {
     alive: runs.filter((r) => r.over !== 'broke').length / n,
-    profit: runs.filter((r) => r.over === 'profit').length / n,
+    profit: runs.filter((r) => !r.over && netPerS(r) > 0).length / n,
     peak: runs.reduce((s, r) => s + r.stats.peakMrr, 0) / n,
     first: runs.reduce((s, r) => s + r.stats.firstClientAt, 0) / n / 60,
     profitAt: profitRuns.reduce((s, r) => s + r.stats.profitAt, 0) / Math.max(1, profitRuns.length) / 60,

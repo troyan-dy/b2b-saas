@@ -31,11 +31,11 @@ export function strategyHosting(run: Run): number {
 /** The same values drive the simulation and the building's explanation. */
 export function blockEffectText(_run: Run, kind: string, level: number): string[] {
   const labels: Record<string, string> = {
-    seats: L('мест для клиентов', 'client seats'),
+    seats: L('мест для ключевых договоров', 'key account slots'),
     patience: L('терпение, спринтов', 'patience, sprints'),
     word_of_mouth: L('сарафан', 'word of mouth'),
     corp_pay: L('корпоративный чек', 'corporate bills'),
-    small_pay: L('чек малого бизнеса', 'small business bills'),
+    small_pay: L('чек малого и среднего бизнеса', 'small and medium business bills'),
     promo: L('продвижение', 'promotion'),
     tokens: L('токены', 'tokens'),
   };
