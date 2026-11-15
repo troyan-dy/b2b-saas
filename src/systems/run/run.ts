@@ -1,9 +1,13 @@
+import { L, LANG, worded } from '../../core/lang';
 import { createRng, type Rng } from '../../core/rng';
 import blocksData from '../../data/balance/blocks.json';
 import clientsData from '../../data/balance/clients.json';
+import dilemmasEn from '../../data/balance/dilemmas.en.json';
 import dilemmasData from '../../data/balance/dilemmas.json';
 import effectsData from '../../data/balance/effects.json';
+import eventsEn from '../../data/balance/events.en.json';
 import eventsData from '../../data/balance/events.json';
+import ideasEn from '../../data/balance/ideas.en.json';
 import ideasData from '../../data/balance/ideas.json';
 import tuningData from '../../data/balance/run.json';
 import traitsData from '../../data/balance/traits.json';
@@ -41,7 +45,20 @@ export const RULES = blocksData as Record<string, BlockRule>;
 export const EFFECTS = effectsData as Record<string, Record<string, number>>;
 /** the one object the mechanics read every step: a tuning panel binds to it */
 export const TUNING = tuningData;
-export const IDEAS = ideasData;
+/** the idea decks and the names of the clients; the English words are laid over the cards by id, over the names — in order */
+export const IDEAS: typeof ideasData =
+  LANG === 'en'
+    ? {
+        tech: worded(ideasData.tech, ideasEn.tech),
+        form: worded(ideasData.form, ideasEn.form),
+        aud: worded(ideasData.aud, ideasEn.aud),
+        corp: ideasData.corp.map((c, k) => ({ ...c, name: ideasEn.corp[k] ?? c.name })),
+        startup: ideasData.startup.map((c, k) => ({ ...c, name: ideasEn.startup[k] ?? c.name })),
+        gov: ideasData.gov.map((c, k) => ({ ...c, name: ideasEn.gov[k] ?? c.name })),
+      }
+    : ideasData;
+/** what the industry does to the startup between releases: the news of the run */
+const EVENTS = worded(eventsData, eventsEn);
 
 export type ClientType = 'small' | 'mid' | 'startup' | 'corp' | 'gov';
 interface ClientRule {
@@ -91,7 +108,17 @@ export interface Dilemma {
   /** what a careful founder answers: bots play it */
   bot: number;
 }
-export const DILEMMAS = dilemmasData as Dilemma[];
+/** the English words of a dilemma: its text, then every option with the words of its effects, in the order of the file */
+type DilemmaWords = Record<string, { text: string; options: { label: string; note: string; result: string; fx?: object[] }[] }>;
+export const DILEMMAS: Dilemma[] =
+  LANG === 'en'
+    ? (dilemmasData as Dilemma[]).map((d) => {
+        const w = (dilemmasEn as DilemmaWords)[d.id];
+        // a dilemma nobody has translated yet is asked as it is written
+        if (!w) return d;
+        return { ...d, text: w.text, options: d.options.map((o, k) => ({ ...o, ...w.options[k], fx: o.fx.map((f, m) => ({ ...f, ...w.options[k]?.fx?.[m] }) as Fx) })) };
+      })
+    : (dilemmasData as Dilemma[]);
 
 export interface Agent {
   id: number;
@@ -336,9 +363,9 @@ function trait(run: Run, id: string): number {
   return (run.traits[id] ?? 0) * (TRAIT_STEP[id] ?? 0);
 }
 
-/** «Голосовой ИИ-тиндер для стоматологий» */
+/** «Голосовой ИИ-тиндер для стоматологий», “Voice AI Tinder for dental clinics” */
 export function pitch(idea: Idea): string {
-  return `${idea.tech.adj} ИИ-${idea.form.name} для ${idea.aud.name}`;
+  return L(`${idea.tech.adj} ИИ-${idea.form.name} для ${idea.aud.name}`, `${idea.tech.adj} AI ${idea.form.name} for ${idea.aud.name}`);
 }
 
 export function createRun(seed: number, idea: Idea, perks: readonly string[] = [], traits: Readonly<Record<string, number>> = {}): Run {
@@ -1330,7 +1357,7 @@ function news(run: Run): void {
   run.newsWait--;
   if (run.sprint >= N.from_sprint && run.newsWait <= 0 && run.rng.next() < (run.stage >= 3 ? N.chance_stage3 : N.chance)) {
     const waiting = [...new Set(run.clients.filter((c) => !c.happy).map((c) => c.want))];
-    const pool = eventsData.filter((e) => e.stage <= run.stage && (e.kind !== 'impatience' || waiting.length > 0) && (e.kind !== 'down' || !run.down));
+    const pool = EVENTS.filter((e) => e.stage <= run.stage && (e.kind !== 'impatience' || waiting.length > 0) && (e.kind !== 'down' || !run.down));
     let roll = run.rng.next() * pool.reduce((s, e) => s + e.weight, 0);
     const e = pool.find((x) => (roll -= x.weight) < 0) ?? pool[0];
     let arg = '';

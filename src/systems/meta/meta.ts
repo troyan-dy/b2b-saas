@@ -1,5 +1,8 @@
+import lessonsEn from '../../data/balance/lessons.en.json';
 import lessonsData from '../../data/balance/lessons.json';
+import traitsEn from '../../data/balance/traits.en.json';
 import traitsData from '../../data/balance/traits.json';
+import { L, worded } from '../../core/lang';
 import { createRng } from '../../core/rng';
 import { IDEAS, pitch, type Ending, type Run } from '../run/run';
 
@@ -10,7 +13,10 @@ import { IDEAS, pitch, type Ending, type Run } from '../run/run';
  */
 
 export interface Past {
+  /** the three words as they were said when the startup ended */
   pitch: string;
+  /** the ids of its three cards: the résumé says the words again in the language of today; old records have none */
+  idea?: [string, string, string];
   ending: Ending;
   /** seconds the startup lived */
   lived: number;
@@ -52,8 +58,8 @@ export interface Trait {
   art: string;
 }
 
-export const LESSONS = lessonsData as Lesson[];
-export const TRAITS = traitsData as Trait[];
+export const LESSONS: Lesson[] = worded(lessonsData, lessonsEn);
+export const TRAITS: Trait[] = worded(traitsData, traitsEn);
 const SCHEMA_VERSION = 2;
 const KEY = 'b2b-saas-founder';
 /** how many lessons one startup can teach */
@@ -139,6 +145,7 @@ export function finish(run: Run, meta: Meta): Lesson[] {
   const got = learn(run, meta);
   meta.runs.push({
     pitch: pitch(run.idea),
+    idea: [run.idea.tech.id, run.idea.form.id, run.idea.aud.id],
     ending: run.over ?? 'broke',
     lived: run.t,
     peakMrr: run.stats.peakMrr,
@@ -148,6 +155,13 @@ export function finish(run: Run, meta: Meta): Lesson[] {
   });
   for (const l of got) meta.lessons.push(l.id);
   return got;
+}
+
+/** The three words of a past startup in the language the game runs in now; a record without card ids keeps its own words. */
+export function pastPitch(p: Past): string {
+  const [tech, form, aud] = p.idea ?? [];
+  const idea = { tech: IDEAS.tech.find((c) => c.id === tech), form: IDEAS.form.find((c) => c.id === form), aud: IDEAS.aud.find((c) => c.id === aud) };
+  return idea.tech && idea.form && idea.aud ? pitch({ tech: idea.tech, form: idea.form, aud: idea.aud }) : p.pitch;
 }
 
 /** Three traits to choose one from after a startup: those that can still grow, drawn by the seed of the run. */
@@ -181,6 +195,10 @@ export function traitGives(t: Trait, level: number): string {
 
 /** Cards of the idea decks that the next startup sees for the first time: unlocked by the number of startups behind. */
 export function unlockedNow(runs: number): string[] {
-  const all = [...IDEAS.tech.map((c) => ({ c, name: `${c.adj} ИИ` })), ...IDEAS.form.map((c) => ({ c, name: `ИИ-${c.name}` })), ...IDEAS.aud.map((c) => ({ c, name: `для ${c.name}` }))];
+  const all = [
+    ...IDEAS.tech.map((c) => ({ c, name: L(`${c.adj} ИИ`, `${c.adj} AI`) })),
+    ...IDEAS.form.map((c) => ({ c, name: L(`ИИ-${c.name}`, `AI ${c.name}`) })),
+    ...IDEAS.aud.map((c) => ({ c, name: L(`для ${c.name}`, `for ${c.name}`) })),
+  ];
   return all.filter((x) => (x.c as { unlock?: number }).unlock === runs).map((x) => x.name);
 }

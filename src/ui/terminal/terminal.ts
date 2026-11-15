@@ -1,4 +1,5 @@
 import './terminal.css';
+import { L } from '../../core/lang';
 
 export interface Option {
   title: string;
@@ -134,7 +135,7 @@ export function createTerminal(root: HTMLElement, sound: (name: 'ui' | 'yes') =>
           .map((o, k) => `<div class="tm-opt" data-k="${k}"><u>❯</u><span>${k + 1}.</span><span>${o.title}</span>${o.note ? `<small>${o.note}</small>` : ''}</div>`)
           .join('');
         body.append(box);
-        foot.innerHTML = `<kbd>1</kbd>–<kbd>${options.length}</kbd> выбрать · <kbd>Enter</kbd> подтвердить${hint ? ` · ${hint}` : ''}`;
+        foot.innerHTML = `<kbd>1</kbd>–<kbd>${options.length}</kbd> ${L('выбрать', 'choose')} · <kbd>Enter</kbd> ${L('подтвердить', 'confirm')}${hint ? ` · ${hint}` : ''}`;
         const rows = [...box.querySelectorAll('.tm-opt')] as HTMLElement[];
         let at = 0;
         const mark = (): void => rows.forEach((r, k) => r.classList.toggle('on', k === at));
@@ -193,7 +194,7 @@ export function createTerminal(root: HTMLElement, sound: (name: 'ui' | 'yes') =>
           )
           .join('');
         body.append(box);
-        foot.innerHTML = `<kbd>1</kbd>–<kbd>${cards.length}</kbd> взять карту · <kbd>←</kbd><kbd>→</kbd> и <kbd>Enter</kbd>${hint ? ` · ${hint}` : ''}`;
+        foot.innerHTML = `<kbd>1</kbd>–<kbd>${cards.length}</kbd> ${L('взять карту', 'take a card')} · <kbd>←</kbd><kbd>→</kbd> ${L('и', 'and')} <kbd>Enter</kbd>${hint ? ` · ${hint}` : ''}`;
         const all = [...box.querySelectorAll('.tm-card')] as HTMLElement[];
         let at = -1;
         const mark = (): void => all.forEach((el, k) => el.classList.toggle('on', k === at));

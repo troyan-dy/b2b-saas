@@ -1,3 +1,4 @@
+import { worded } from '../core/lang';
 import { rect, ring, type Stroke } from '../view/iso';
 
 /** What a block is for: decides the rare fill on its side. */
@@ -17,8 +18,32 @@ export interface BlockKind {
   glyph: readonly Stroke[];
 }
 
+/** The English words of the blocks, by id; `short` must fit the side of a module like the Russian one. */
+const EN: Record<string, Pick<BlockKind, 'short' | 'name' | 'note'>> = {
+  core: { short: 'core', name: 'Claude Wrapper', note: 'the product core: an input field and someone else’s model' },
+  landing: { short: 'landing', name: 'Landing Page', note: '“We have reimagined this with AI”' },
+  pay: { short: 'payments', name: 'Payments', note: 'without it clients pay with the word “thanks”' },
+  sso: { short: 'SSO', name: 'Single Sign-On', note: 'procurement calls it SSO and won’t talk without it' },
+  crm: { short: 'CRM', name: 'CRM Integration', note: 'nobody knows why, but it is in the requirements spreadsheet' },
+  dash: { short: 'dashboard', name: 'Dashboard', note: 'charts that get opened once — at the demo' },
+  bot: { short: 'support', name: 'AI Support', note: 'Claude answers the clients on behalf of Claude' },
+  api: { short: 'API', name: 'Public API', note: 'so that other wrappers can wrap yours' },
+  mobile: { short: 'mobile', name: 'Mobile App', note: 'the same website, but you can download it' },
+  shield: { short: 'SOC 2', name: 'Security Certificate', note: 'a PDF with a stamp; opens corporate doors' },
+  dark: { short: 'dark mode', name: 'Dark Mode', note: 'the most requested feature in the history of the industry' },
+  cheap: { short: 'economy', name: 'Cheaper Model', note: 'the clients didn’t notice. The token bill did' },
+  excel: { short: 'Excel', name: 'Excel Export', note: 'the only feature everybody uses' },
+  push: { short: 'push', name: 'Push Notifications', note: '“You haven’t visited in a while” — at three in the morning' },
+  roles: { short: 'roles', name: 'Roles & Permissions', note: 'so that the intern doesn’t delete everything. The intern will anyway' },
+  wait: { short: 'waitlist', name: 'Waitlist', note: '“Leave your email, we’ll let you know”. Nothing to let them know yet' },
+  onb: { short: 'tutorial', name: 'Onboarding Tutorial', note: 'five tips that everyone closes without reading' },
+  ref: { short: 'referrals', name: 'Refer a Friend', note: 'clients bring clients. For a discount, of course' },
+  c1: { short: 'SAP', name: 'SAP Integration', note: 'accounting exists, and it objects' },
+  audit: { short: 'audit log', name: 'Audit Log', note: 'records who broke what. Most often it’s you' },
+};
+
 /** Product blocks: the words and the pictures. The numbers (work, tokens) live in src/data/balance/blocks.json. */
-export const BLOCKS: readonly BlockKind[] = [
+const RU: readonly BlockKind[] = [
   {
     id: 'core',
     short: 'ядро',
@@ -285,5 +310,7 @@ export const BLOCKS: readonly BlockKind[] = [
     ],
   },
 ];
+
+export const BLOCKS: readonly BlockKind[] = worded(RU, EN);
 
 export const BLOCK_BY_ID: Readonly<Record<string, BlockKind>> = Object.fromEntries(BLOCKS.map((b) => [b.id, b]));

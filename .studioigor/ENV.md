@@ -31,6 +31,8 @@ VERIFIED: yes
 - редактора у веб-стека нет: весь проект — код в репозитории
 - тестовые сцены: `http://localhost:5174/?gym=<имя>`; `&debug=1` включает оверлей; клавиша P пишет настройки в `.studioigor/captures/tuning/` через dev-сервер
 - эскизы интерфейса: `node tools/shot.mjs <файл.html> <out.png>`
+- картинки README на двух языках → `docs/img/<lang>/`: `npm run build:gym && node tools/readme.mjs` (плакаты — `art/readme/*.html`, кадры — забег бота `tools/inputs/tour.json`; номера кадров — `FRAMES` в скрипте)
+- язык игры в съёмке: `?lang=ru` или `?lang=en` в адресе (headless Chromium без него открывает английский)
 - две сборки: `npm run build` → `dist/` — релиз без тестовых сцен; `npm run build:gym` → `dist-gym/` — с ними, для съёмки (`tools/capture.mjs --dir dist-gym`)
 
 ## Commands

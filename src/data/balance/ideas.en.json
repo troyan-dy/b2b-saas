@@ -1,0 +1,33 @@
+{
+  "tech": {
+    "chat": { "adj": "Conversational", "note": "a chatbot: an input field and a lot of faith", "does": "by the book, no surprises" },
+    "agent": { "adj": "Agentic", "note": "an AI agent: acts first, asks later", "does": "bill ×1.5, but tokens burn ×1.5 too" },
+    "voice": { "adj": "Voice", "note": "voice AI: calls the clients so you don’t have to", "does": "building costs ×1.25, clients wait a sprint longer" },
+    "gen": { "adj": "Generative", "note": "image generation: a sixth finger on the house", "does": "promotion ×1.6, tokens burn ×1.3" },
+    "copilot": { "adj": "Copilot", "note": "a copilot: gives advice while you do the work", "does": "building costs ×0.85, tokens ×0.8, bill ×0.9" },
+    "rag": { "adj": "Well-read", "note": "AI over your documents: confident even when there is no document", "does": "research twice as fast, tokens burn ×1.2" }
+  },
+  "form": {
+    "tinder": { "name": "Tinder", "note": "swipe right — and the meeting is in the calendar", "does": "word of mouth ×2.2, bill ×0.9" },
+    "apply": { "name": "job applier", "note": "applies to anything that moves", "does": "promotion ×1.5, clients wait a sprint less" },
+    "crm": { "name": "CRM", "note": "a spreadsheet, but with a subscription", "does": "bill ×1.4, building costs ×1.15" },
+    "sec": { "name": "secretary", "note": "reschedules your calls while you sleep", "does": "clients wait a sprint longer, word of mouth ×0.7" },
+    "uber": { "name": "Uber", "note": "connects people who never asked for it", "does": "word of mouth ×1.5, building costs ×1.1, bill ×0.9" },
+    "tracker": { "name": "task tracker", "note": "one more. This one has AI", "does": "building costs ×0.85, bill ×0.85, clients wait a sprint longer" },
+    "market": { "name": "marketplace", "note": "sells other people’s stuff and charges both sides", "does": "bill ×1.2, word of mouth ×1.3, promotion ×0.8, building costs ×1.2" },
+    "mail": { "name": "cold mailer", "note": "writes emails nobody was waiting for", "does": "promotion ×1.3, bill ×1.1, clients wait a sprint less" }
+  },
+  "aud": {
+    "dent": { "name": "dental clinics", "note": "pay well, book by phone", "does": "", "clients": ["Smile", "Dent-Lux", "32 Pearls", "Tooth Fairy", "Cavity & Partners", "The Filling"] },
+    "barber": { "name": "barbershops", "note": "pay modestly, but there is one on every corner", "does": "promotion ×1.25", "clients": ["The Beard", "The Axe", "Peter’s Mustache", "Occam’s Razor", "Fade", "The Fringe"] },
+    "coffee": { "name": "coffee shops", "note": "no margin for them, none for you", "does": "promotion ×1.25", "clients": ["The Bean", "Flat White", "Third Wave", "Caffeine", "Latte, Period", "The Roast"] },
+    "garage": { "name": "auto repair shops", "note": "don’t believe in AI, do believe in a discount", "does": "wait a sprint longer, promotion ×0.9", "clients": ["Garage No. 7", "Tires 24/7", "Driveshaft", "Wheel Alignment", "The Lift", "Spark Plug"] },
+    "school": { "name": "private schools", "note": "the decision is made by the parents’ group chat", "does": "wait a sprint longer, promotion ×0.9", "clients": ["Lyceum No. 2", "School of the Future", "Growth Academy", "Smarty", "Straight A’s", "Recess"] },
+    "pizza": { "name": "pizzerias", "note": "want everything, and by Friday", "does": "wait a sprint less, promotion ×1.2", "clients": ["Margherita", "The Dough", "Pepperoni Club", "Four Cheese", "The Crust", "Wood-Fired"] },
+    "farm": { "name": "farms", "note": "the internet only works by the gate", "does": "wait two sprints longer, promotion ×0.8", "clients": ["Sunrise", "Bessie", "Wheat Ear", "Quiet Homestead", "Three Hectares", "Milk, Period"] },
+    "build": { "name": "property developers", "note": "pay a lot, take half a year to decide", "does": "wait two sprints longer, promotion ×0.6", "clients": ["Monolith", "Storeys", "New Quarter", "The Pit", "Keys on Time", "Tower 2"] }
+  },
+  "corp": ["Bank", "Factory", "Shopping Mall", "Holding", "Logistics", "Corporation"],
+  "startup": ["Wrapper.ai", "NeuroLawyer", "Prompt & Partners", "AI Tinder for Dogs", "GPT Accountant", "Agent.ai"],
+  "gov": ["City Hall", "Dept. of Digitalization"]
+}

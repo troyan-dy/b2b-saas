@@ -24,11 +24,12 @@ import {
   REWORK_SAYS,
   TIER_NAME,
 } from '../content/texts';
+import { L } from '../core/lang';
 import { logEvent, metrics } from '../core/metrics';
 import type { Rng } from '../core/rng';
 import { playSound, unlockSound } from '../core/sound';
 import { PALETTE } from '../data/palette';
-import { money, plural, rate } from '../ui/format';
+import { dec, money, PER_S, plural, rate } from '../ui/format';
 import type { Paper, ShelfItem, ShelfKeys, ShelfSection } from '../ui/paper';
 import {
   answerCall,
@@ -92,6 +93,17 @@ import { Squares } from '../view/squares';
 import { AGENT_SLOTS, BUS_GAP, BUS_Y, CLIENT_SLOTS, DESK, MARKET, MONEY_RECT, STAGE_VIEW, TRUNK_X, VIEW_AT } from './layout';
 
 const STEP = 1 / 60;
+
+const CLAUDE = L('<b>❯ Клод</b>', '<b>❯ Claude</b>');
+/** a name in the quotes of the language: «оплата», “payments” */
+const q = (s: string): string => L(`«${s}»`, `“${s}”`);
+/** «спринтов», short: a client waits «3 спр.» */
+const SPR = L('спр.', 'spr.');
+const OF = L('из', 'of');
+const NO = L('№', '#');
+const ENERGY = L('силы', 'energy');
+const CALL = L('ЗВОНОК', 'CALL');
+const onOff = (on: boolean, ru: [string, string]): string => L(on ? ru[0] : ru[1], on ? 'on' : 'off');
 
 /** How a client of each type stands on the sheet: the height of its picture and how many squares one payment is. */
 export const CLIENT_LOOK: Record<ClientType, { height: number; squares: number }> = {
@@ -192,14 +204,17 @@ export class GameScene extends Phaser.Scene {
 
     for (const b of this.run.blocks) this.landed.set(b.kind, b.done);
     this.newsAt = 6;
-    this.paper.setNews(`${pitch(this.run.idea)}. Пока что это три слова и один человек`, this.newsHint());
-    this.say([
-      '<b>❯ Клод</b>',
-      'Привет. Я твоя команда — вся.',
-      'Выбери справа «Обёртку над Клодом»',
-      'и поставь её на чертёж. Клик по',
-      'стройке или Enter — помочь руками.',
-    ], 600);
+    this.paper.setNews(`${pitch(this.run.idea)}. ${L('Пока что это три слова и один человек', 'So far it is three words and one person')}`, this.newsHint());
+    this.say(
+      [
+        CLAUDE,
+        ...L(
+          ['Привет. Я твоя команда — вся.', 'Выбери справа «Обёртку над Клодом»', 'и поставь её на чертёж. Клик по', 'стройке или Enter — помочь руками.'],
+          ['Hi. I am your team — all of it.', 'Pick “Claude Wrapper” on the right', 'and put it on the blueprint. Click', 'the site or press Enter to help.'],
+        ),
+      ],
+      600,
+    );
     this.syncStage(0);
     this.show();
     window.__GAME__.ready = true;
@@ -286,7 +301,7 @@ export class GameScene extends Phaser.Scene {
       playSound('waste');
       const [x, y] = this.board.onScreen(DESK[0], DESK[1] - 200);
       // on the first clicks of the game an empty site is not news: the goal line already says what to do
-      if (can || lane !== 'build' || run.blocks.length > 0) this.paper.pop(x, y, can ? 'сил нет: подожди' : HAND_IDLE[lane], 'bad');
+      if (can || lane !== 'build' || run.blocks.length > 0) this.paper.pop(x, y, can ? L('сил нет: подожди', 'no energy: wait') : HAND_IDLE[lane], 'bad');
       return;
     }
     this.hands++;
@@ -399,7 +414,18 @@ export class GameScene extends Phaser.Scene {
         this.landed.set(e.kind, 0);
         playSound('buy', 0);
         logEvent(`placed:${e.kind}`);
-        if (run.blocks.length === 2) this.say(['<b>❯ Клод</b>', 'Строю. Пока я занят — выбери', 'следующий блок: без лендинга нас', 'не найдут, без оплаты не заплатят.'], 14);
+        if (run.blocks.length === 2) {
+          this.say(
+            [
+              CLAUDE,
+              ...L(
+                ['Строю. Пока я занят — выбери', 'следующий блок: без лендинга нас', 'не найдут, без оплаты не заплатят.'],
+                ['Building. While I am busy — pick', 'the next block: without a landing', 'page nobody finds us, without', 'payments nobody pays.'],
+              ),
+            ],
+            14,
+          );
+        }
         break;
       case 'work': {
         if (e.idle) {
@@ -420,14 +446,23 @@ export class GameScene extends Phaser.Scene {
           this.board.flow('me', PALETTE.ink, 600);
           if (!this.said.has('t:review') && (this.termUntil === 0 || this.clock > this.termUntil - 4)) {
             this.said.add('t:review');
-            this.say(['<b>❯ Клод</b>', 'Тёмные квадраты от стола — это ты:', 'ты проверяешь одно направление.', 'Там работа идёт быстрее и без долга.', 'Сменить его — клавиши справа внизу.'], 14);
+            this.say(
+              [
+                CLAUDE,
+                ...L(
+                  ['Тёмные квадраты от стола — это ты:', 'ты проверяешь одно направление.', 'Там работа идёт быстрее и без долга.', 'Сменить его — клавиши справа внизу.'],
+                  ['The dark squares from the desk are', 'you: you review one lane. Work there', 'goes faster and leaves no debt.', 'Change it with the keys bottom right.'],
+                ),
+              ],
+              14,
+            );
           }
         }
         break;
       }
       case 'built': {
         const [x, y] = this.board.onScreen(...this.board.top(e));
-        this.paper.pop(x, y - 30, 'готово — ждёт релиза', '');
+        this.paper.pop(x, y - 30, L('готово — ждёт релиза', 'done — waiting for the release'), '');
         this.burst(x, y, 6);
         playSound('buy', 7);
         break;
@@ -439,7 +474,7 @@ export class GameScene extends Phaser.Scene {
       case 'release': {
         metrics.completed = true;
         logEvent(`release:${e.report.sprint}`);
-        const names = e.report.shipped.map((k) => `«${BLOCK_BY_ID[k]?.short ?? k}»`);
+        const names = e.report.shipped.map((k) => q(BLOCK_BY_ID[k]?.short ?? k));
         const reasons = e.report.reasons.map((k) => BLOCK_BY_ID[k]?.short ?? '');
         const perS = { mrr: e.report.mrr / TUNING.sprint_s, tokens: e.report.tokens / TUNING.sprint_s };
         this.say(releaseLines({ ...e.report, ...perS, shipped: names, reasons, unpaid: isLive(run, 'pay') ? 0 : run.clients.length }), 16);
@@ -478,7 +513,7 @@ export class GameScene extends Phaser.Scene {
         ]);
         this.syncStage(1100);
         const [sx, sy] = this.board.onScreen(x, y - 150);
-        this.paper.pop(sx, sy, '+ клиент', 'good');
+        this.paper.pop(sx, sy, L('+ клиент', '+ client'), 'good');
         playSound('all');
         logEvent(`client:${c.type}`);
         if (run.stats.clients === 1) {
@@ -487,7 +522,7 @@ export class GameScene extends Phaser.Scene {
         } else if (CLIENT_TYPE_NOTE[c.type] && !this.said.has(`type:${c.type}`)) {
           // a new kind of client: it says a line of its own, and the news line says once how it pays
           this.said.add(`type:${c.type}`);
-          this.news(`Новый клиент — ${CLIENT_TYPE_NOTE[c.type]}`);
+          this.news(`${L('Новый клиент', 'New client')} — ${CLIENT_TYPE_NOTE[c.type]}`);
           this.quotes.set(c.id, { text: CLIENT_SAYS[c.type], until: this.clock + 9 });
         }
         break;
@@ -513,7 +548,7 @@ export class GameScene extends Phaser.Scene {
         this.newsHold = 16;
         this.newsAt = 16;
         const [x, y] = this.board.onScreen(MARKET[0], MARKET[1]);
-        this.paper.pop(x, y - 20, `тренд: клиенты хотят ${BLOCK_BY_ID[e.kind]?.name ?? e.kind}`, 'good');
+        this.paper.pop(x, y - 20, `${L('тренд: клиенты хотят', 'trend: clients want')} ${BLOCK_BY_ID[e.kind]?.name ?? e.kind}`, 'good');
         playSound('quip');
         logEvent(`trend:${e.kind}`);
         break;
@@ -531,13 +566,22 @@ export class GameScene extends Phaser.Scene {
         logEvent(`rework:${e.kind}`);
         if (!this.said.has('rework')) {
           this.said.add('rework');
-          this.say(['<b>❯ Клод</b>', 'Клиент просит доработку блока.', 'Она вверху полки, с пометкой', '«доработка». Сделаем — заплатит', 'больше. Не сделаем — уйдёт.'], 14);
+          this.say(
+            [
+              CLAUDE,
+              ...L(
+                ['Клиент просит доработку блока.', 'Она вверху полки, с пометкой', '«доработка». Сделаем — заплатит', 'больше. Не сделаем — уйдёт.'],
+                ['A client asks to upgrade a block.', 'It is at the top of the shelf, marked', '“upgrade”. Do it — the client pays', 'more. Don’t — the client leaves.'],
+              ),
+            ],
+            14,
+          );
         }
         break;
       }
       case 'reveal': {
         const [x, y] = this.board.onScreen(MARKET[0], MARKET[1]);
-        this.paper.pop(x, y - 20, `клиенты просят: ${BLOCK_BY_ID[e.kind]?.name ?? e.kind}`, 'good');
+        this.paper.pop(x, y - 20, `${L('клиенты просят', 'clients ask for')}: ${BLOCK_BY_ID[e.kind]?.name ?? e.kind}`, 'good');
         playSound('quip');
         logEvent(`reveal:${e.kind}`);
         break;
@@ -565,21 +609,21 @@ export class GameScene extends Phaser.Scene {
         break;
       case 'hungup': {
         const [x, y] = this.board.onScreen(MARKET[0], MARKET[1]);
-        this.paper.pop(x, y - 20, `${e.name}: не дозвонились и ушли`, 'bad');
+        this.paper.pop(x, y - 20, `${e.name}: ${L('не дозвонились и ушли', 'couldn’t reach you and left')}`, 'bad');
         playSound('waste');
         logEvent('hungup');
         break;
       }
       case 'kept': {
         const [x, y] = this.board.onScreen(...this.nodePos(`c${e.id}`));
-        this.paper.pop(x, y - 170 * this.board.zoom, 'обещание выполнено', 'good');
+        this.paper.pop(x, y - 170 * this.board.zoom, L('обещание выполнено', 'promise kept'), 'good');
         playSound('buy', 9);
         logEvent('kept');
         break;
       }
       case 'refund': {
         const [x, y] = this.board.onScreen(...this.nodePos(`c${e.id}`));
-        this.paper.pop(x, y - 190 * this.board.zoom, `возврат ${money(-e.sum)}`, 'bad');
+        this.paper.pop(x, y - 190 * this.board.zoom, `${L('возврат', 'refund')} ${money(-e.sum)}`, 'bad');
         this.cameras.main.shake(140, 0.003);
         playSound('waste');
         logEvent('refund');
@@ -602,7 +646,7 @@ export class GameScene extends Phaser.Scene {
         break;
       case 'hero': {
         const [x, y] = this.board.onScreen(...this.nodePos(`c${e.id}`));
-        this.paper.pop(x, y - 190 * this.board.zoom, 'героический релиз: платит ×1,5', 'good');
+        this.paper.pop(x, y - 190 * this.board.zoom, L('героический релиз: платит ×1,5', 'heroic release: pays ×1.5'), 'good');
         this.news(NEWS_EVENT.hero);
         playSound('finale');
         logEvent('hero');
@@ -651,7 +695,16 @@ export class GameScene extends Phaser.Scene {
           playSound('waste');
           this.cameras.main.shake(260, 0.005);
         }
-        this.say(['<b>❯ Клод</b>', e.ending === 'broke' ? 'Деньги кончились. Было приятно' : 'На этом всё. Было приятно', 'поработать. Счёт за токены я пришлю.'], 30);
+        this.say(
+          [
+            CLAUDE,
+            ...L(
+              [e.ending === 'broke' ? 'Деньги кончились. Было приятно' : 'На этом всё. Было приятно', 'поработать. Счёт за токены я пришлю.'],
+              [e.ending === 'broke' ? 'The money has run out. It was nice' : 'That is all. It was nice', 'working together. Token bill to follow.'],
+            ),
+          ],
+          30,
+        );
         this.hooks.onEnd(run);
         break;
     }
@@ -716,7 +769,11 @@ export class GameScene extends Phaser.Scene {
         const [tx, ty] = board.onScreen(...board.top(b));
         keep.add(`b:n${b.kind}`);
         // the first site of the run says in words that it can be clicked
-        const call = b.up ? '<i>доработка</i>' : novice && b === blocks.find((x) => !x.built) ? '<i>кликай по блоку: помогай руками</i>' : '';
+        const call = b.up
+          ? L('<i>доработка</i>', '<i>upgrade</i>')
+          : novice && b === blocks.find((x) => !x.built)
+            ? L('<i>кликай по блоку: помогай руками</i>', '<i>click the block: help with your hands</i>')
+            : '';
         this.paper.tag(`b:n${b.kind}`, tx, ty - (call ? 82 : 64) * z, `<b>${b.done}/${b.need}</b>${call}`, 'small hot');
       }
     }
@@ -725,7 +782,7 @@ export class GameScene extends Phaser.Scene {
       for (const c of free.slice(0, 1)) {
         const [x, y] = board.onScreen(...board.cell(c.i, c.j));
         keep.add('b:click');
-        this.paper.tag('b:click', x, y - 12, 'кликни клетку', 'small hot');
+        this.paper.tag('b:click', x, y - 12, L('кликни клетку', 'click a cell'), 'small hot');
       }
     }
     for (const s of slots) {
@@ -733,7 +790,7 @@ export class GameScene extends Phaser.Scene {
       const [x, y] = board.onScreen(...board.cell(s.i, s.j));
       const id = `b:slot${s.i},${s.j}`;
       keep.add(id);
-      this.paper.tag(id, x, y - 9, 'связка', 'small hot');
+      this.paper.tag(id, x, y - 9, L('связка', 'combo'), 'small hot');
     }
     this.paper.pruneTags('b:', keep);
 
@@ -743,8 +800,9 @@ export class GameScene extends Phaser.Scene {
     const full = Math.floor(run.energy);
     const pips = '■'.repeat(full) + '□'.repeat(TUNING.crunch.max - full);
     // on a wide sheet the first laptop stands close to the desk: the caption is cut to the bone
-    const mine = z < 0.8 ? `<b>ты</b>: ${LANE_NAME[run.review]}` : `<b>ты</b> · проверяешь ${LANE_ACC[run.review]}`;
-    this.paper.tag('me', Math.max(10, mx), my, `${mine}<i>силы ${pips}</i>`, 'left');
+    const you = L('<b>ты</b>', '<b>you</b>');
+    const mine = z < 0.8 ? `${you}: ${LANE_NAME[run.review]}` : `${you} · ${L('проверяешь', 'reviewing')} ${LANE_ACC[run.review]}`;
+    this.paper.tag('me', Math.max(10, mx), my, `${mine}<i>${ENERGY} ${pips}</i>`, 'left');
     this.syncAgents();
     const keepA = new Set<string>();
     run.agents.forEach((a, k) => {
@@ -755,7 +813,7 @@ export class GameScene extends Phaser.Scene {
       // an agent with nothing to do on its lane waits for free: the caption says both
       const idle = !busy(run, a);
       // on a wide sheet the laptops stand close: their captions are set smaller
-      this.paper.tag(id, x, y, `<b>${LANE_NAME[a.lane]}</b><i${idle ? ' class="bad"' : ''}>№${a.id} · ${idle ? 'без дела · $0' : TIER_NAME[a.tier]}</i>`, z < 0.8 ? 'small' : '');
+      this.paper.tag(id, x, y, `<b>${LANE_NAME[a.lane]}</b><i${idle ? ' class="bad"' : ''}>${NO}${a.id} · ${idle ? L('без дела · $0', 'idle · $0') : TIER_NAME[a.tier]}</i>`, z < 0.8 ? 'small' : '');
     });
     this.paper.pruneTags('a', keepA);
 
@@ -769,18 +827,26 @@ export class GameScene extends Phaser.Scene {
       // promotion is a funnel with one number: how much of the next client is already there
       const whole = Math.floor(run.leads);
       const part = Math.round((run.leads - whole) * 100);
-      const coming = whole > 0 ? `<b>${whole}</b> ${plural(whole, ['клиент придёт', 'клиента придут', 'клиентов придут'])} на релизе` : `до нового клиента <b>${part}%</b>`;
-      const full = run.clients.length >= places ? ' · <b>мест нет</b>: их добавляют блоки «+ места»' : '';
-      const ask = unknownAsks(run).length > 0 ? `разведка: до ответа <b>${run.insight} из ${researchNeed(run)}</b>` : 'разведка: все запросы известны';
+      const coming =
+        whole > 0
+          ? L(`<b>${whole}</b> ${plural(whole, ['клиент придёт', 'клиента придут', 'клиентов придут'])} на релизе`, `<b>${whole}</b> ${plural(whole, ['client comes', 'clients come', 'clients come'])} at the release`)
+          : L(`до нового клиента <b>${part}%</b>`, `next client <b>${part}%</b>`);
+      const full = run.clients.length >= places ? L(' · <b>мест нет</b>: их добавляют блоки «+ места»', ' · <b>no seats</b>: “+ seats” blocks add them') : '';
+      const ask =
+        unknownAsks(run).length > 0
+          ? L(`разведка: до ответа <b>${run.insight} из ${researchNeed(run)}</b>`, `research: <b>${run.insight} of ${researchNeed(run)}</b> to an answer`)
+          : L('разведка: все запросы известны', 'research: every request is known');
       // big clients that are happy put their logos on the landing page: promotion works better with every one
-      const trust = logos(run) > 0 ? `<i>логотипы на лендинге: ${logos(run)} · продвижение ×${String(1 + TUNING.logos.promo * logos(run)).replace('.', ',')}</i>` : '';
-      this.paper.tag('market', x - 12, y - 16, `<b>рынок</b> · клиентов ${run.clients.length} из ${places}<i>продвижение: ${coming}${full}</i>${trust}<i>${ask}</i>`, 'small corner');
+      const boost = dec(1 + TUNING.logos.promo * logos(run));
+      const trust = logos(run) > 0 ? L(`<i>логотипы на лендинге: ${logos(run)} · продвижение ×${boost}</i>`, `<i>logos on the landing page: ${logos(run)} · promotion ×${boost}</i>`) : '';
+      const head = L(`<b>рынок</b> · клиентов ${run.clients.length} из ${places}`, `<b>market</b> · clients ${run.clients.length} of ${places}`);
+      this.paper.tag('market', x - 12, y - 16, `${head}<i>${L('продвижение', 'promotion')}: ${coming}${full}</i>${trust}<i>${ask}</i>`, 'small corner');
     }
     // the product is down: it is written across the product itself, with the reason
     if (run.down) {
       const [x, y] = board.onScreen(...board.cell(0, 0));
-      const why = run.downWhy === 'supplier' ? 'сбой у поставщика модели' : `техдолг дошёл до ${TUNING.debt.down_at}`;
-      this.paper.tag('down', x, y - 150 * z, `<b>ПРОДУКТ ЛЕЖИТ</b><i>${why} · клиенты не платят до релиза</i>`, 'hot');
+      const why = run.downWhy === 'supplier' ? L('сбой у поставщика модели', 'the model provider is down') : L(`техдолг дошёл до ${TUNING.debt.down_at}`, `tech debt reached ${TUNING.debt.down_at}`);
+      this.paper.tag('down', x, y - 150 * z, L(`<b>ПРОДУКТ ЛЕЖИТ</b><i>${why} · клиенты не платят до релиза</i>`, `<b>THE PRODUCT IS DOWN</b><i>${why} · clients don’t pay until the release</i>`), 'hot');
     } else this.paper.dropTag('down');
 
     // clients
@@ -789,28 +855,30 @@ export class GameScene extends Phaser.Scene {
       const [x, y] = board.onScreen(sx, sy + 6);
       const pay = clientPay(run, c);
       // two short lines: the name, then the money and the mood — twelve of them must fit side by side
-      const paid = pay > 0 ? `<em>${rate(pay / TUNING.sprint_s)}/с</em>` : 'бесплатно';
+      const paid = pay > 0 ? `<em>${rate(pay / TUNING.sprint_s)}${PER_S}</em>` : L('бесплатно', 'free');
       // twelve buildings stand close on the wide sheet: their captions are set tighter
       const cls = z < 0.7 ? 'small tight' : 'small';
       let mood: string;
       // nothing to charge with: this is said on every client, in coral — «free and happy» reads as «all is well»
       if (!isLive(run, 'pay')) {
-        this.paper.tag(`c${c.id}`, x, y, `<b>${c.name}</b><i class="bad">не платит: нет «оплаты»</i>`, cls);
+        this.paper.tag(`c${c.id}`, x, y, `<b>${c.name}</b><i class="bad">${L('не платит: нет «оплаты»', 'doesn’t pay: no “payments”')}</i>`, cls);
         continue;
       }
       // the product is down: said on every client, so that «paid last sprint, not this one» has a reason on the sheet
       if (run.down) {
-        this.paper.tag(`c${c.id}`, x, y, `<b>${c.name}</b><i class="bad">не платит: продукт лежит</i>`, cls);
+        this.paper.tag(`c${c.id}`, x, y, `<b>${c.name}</b><i class="bad">${L('не платит: продукт лежит', 'doesn’t pay: product is down')}</i>`, cls);
         continue;
       }
       const short = BLOCK_BY_ID[c.want]?.short;
       // on the wide sheet a caption has the width of one building: what is awaited and for how long, no verbs
       const tight = z < 0.7;
-      if (c.happy) mood = `<i>${paid} · доволен</i>`;
-      else if (c.wantLevel > 1) mood = `<i class="bad">${tight ? '' : 'просит доработать '}«${short}»${tight ? ` v${c.wantLevel}` : ''} · ${c.patience} спр.</i>`;
-      else if (c.promised) mood = `<i class="bad">обещан «${short}» · ${c.patience} спр.</i>`;
-      else if (run.known.includes(c.want)) mood = `<i class="bad">${tight ? '' : 'ждёт '}«${short}» · ${c.patience} спр.</i>`;
-      else mood = `<i class="bad">ждёт молча · ${c.patience} спр.</i>`;
+      const what = q(short ?? '');
+      const wait = `${c.patience} ${SPR}`;
+      if (c.happy) mood = `<i>${paid} · ${L('доволен', 'happy')}</i>`;
+      else if (c.wantLevel > 1) mood = `<i class="bad">${tight ? '' : L('просит доработать ', 'wants an upgrade of ')}${what}${tight ? ` v${c.wantLevel}` : ''} · ${wait}</i>`;
+      else if (c.promised) mood = `<i class="bad">${L('обещан', 'promised')} ${what} · ${wait}</i>`;
+      else if (run.known.includes(c.want)) mood = `<i class="bad">${tight ? '' : L('ждёт ', 'waits for ')}${what} · ${wait}</i>`;
+      else mood = `<i class="bad">${L('ждёт молча', 'waits silently')} · ${wait}</i>`;
       // a waiting client says what it waits for; the one that pays nothing until then says that too
       this.paper.tag(`c${c.id}`, x, y, `<b>${c.name}</b>${signing(c) ? ' · <u>$0</u>' : ''}${mood}`, cls);
     }
@@ -828,14 +896,19 @@ export class GameScene extends Phaser.Scene {
     // money and time
     const net = netPerS(run);
     let sub: string;
-    if (net >= 0) sub = `<b class="good">+${money(net)}</b> в секунду · в плюсе`;
+    if (net >= 0) sub = `<b class="good">+${money(net)}</b> ${L('в секунду · в плюсе', 'per second · in the black')}`;
     else {
       const left = run.money / -net;
-      sub = `<b class="hot">${money(net)}</b> в секунду · денег на <b>${Math.floor(left / 60)}:${String(Math.floor(left % 60)).padStart(2, '0')}</b>`;
+      sub = `<b class="hot">${money(net)}</b> ${L('в секунду · денег на', 'per second · money for')} <b>${Math.floor(left / 60)}:${String(Math.floor(left % 60)).padStart(2, '0')}</b>`;
     }
     this.paper.setMoney(money(run.money), sub, run.money <= 0);
     const leftS = Math.ceil(TUNING.sprint_s - run.sprintT);
-    this.paper.setSprint(`СПРИНТ ${Math.min(run.sprint, TUNING.last_sprint)} ИЗ ${TUNING.last_sprint} · ${isDemo(run) && run.clients.length > 0 ? 'ДЕМО-ДЕНЬ' : 'РЕЛИЗ'} ЧЕРЕЗ ${leftS} С`, run.sprintT / TUNING.sprint_s);
+    const sprint = Math.min(run.sprint, TUNING.last_sprint);
+    const demo = isDemo(run) && run.clients.length > 0;
+    this.paper.setSprint(
+      L(`СПРИНТ ${sprint} ИЗ ${TUNING.last_sprint} · ${demo ? 'ДЕМО-ДЕНЬ' : 'РЕЛИЗ'} ЧЕРЕЗ ${leftS} С`, `SPRINT ${sprint} OF ${TUNING.last_sprint} · ${demo ? 'DEMO DAY' : 'RELEASE'} IN ${leftS} S`),
+      run.sprintT / TUNING.sprint_s,
+    );
     // the goal is always on the sheet: three frames taken at random must say what to do
     this.paper.setGoal(this.nextStep(net));
     this.paper.setLedger(this.ledger());
@@ -844,42 +917,47 @@ export class GameScene extends Phaser.Scene {
     this.paper.setShelf(this.shelfView());
     if (this.pauseCard) {
       this.paper.call({
-        who: 'ПАУЗА',
-        text: 'Деньги не горят, пока ты думаешь. В жизни так не бывает.',
+        who: L('ПАУЗА', 'PAUSE'),
+        text: L('Деньги не горят, пока ты думаешь. В жизни так не бывает.', 'Money doesn’t burn while you think. Real life doesn’t work that way.'),
         options: this.pauseOptions(),
       });
     } else if (run.lastChance !== null) {
-      this.paper.call({ who: 'ЗВОНОК · БАНК', text: BANK_TEXT.replace('%s', money(run.lastChance)).replace('%t', String(mortgageSeconds(run))), options: BANK_ANSWERS });
+      this.paper.call({ who: `${CALL} · ${L('БАНК', 'THE BANK')}`, text: BANK_TEXT.replace('%s', money(run.lastChance)).replace('%t', String(mortgageSeconds(run))), options: BANK_ANSWERS });
     } else if (run.call) {
+      const name = BLOCK_BY_ID[run.call.want]?.name;
       this.paper.call({
-        who: `ЗВОНОК · ${run.call.name.toUpperCase()}`,
-        text: CALL_ASK[run.call.want] ?? `А «${BLOCK_BY_ID[run.call.want]?.name}» у вас есть? Нам без этого никак.`,
+        who: `${CALL} · ${run.call.name.toUpperCase()}`,
+        text: CALL_ASK[run.call.want] ?? L(`А «${name}» у вас есть? Нам без этого никак.`, `Do you have “${name}”? We can’t do without it.`),
         options: callAnswers(honestMult(run), TUNING.call.sure_mult, promiseSprints(run)),
       });
     } else if (run.offer !== null) {
-      const full = valuation(run);
+      const full = money(valuation(run));
+      const offer = money(run.offer);
+      const chance = Math.round(haggleChance(run) * 100);
       this.paper.call({
-        who: 'ЗВОНОК · ПОКУПАТЕЛЬ',
-        text: `Ваш продукт стоит <em>${money(full)}</em>, но мы видели код. Даём <em>${money(run.offer)}</em>. Продукт, правда, закроем.`,
+        who: `${CALL} · ${L('ПОКУПАТЕЛЬ', 'A BUYER')}`,
+        text: L(
+          `Ваш продукт стоит <em>${full}</em>, но мы видели код. Даём <em>${offer}</em>. Продукт, правда, закроем.`,
+          `Your product is worth <em>${full}</em>, but we have seen the code. We offer <em>${offer}</em>. We will shut the product down, though.`,
+        ),
         // short answers: the card must not lie over half of the product
-        options: [
-          `Продать за ${money(run.offer)}`,
-          `Торговаться: всё или ничего <span>— шанс ${Math.round(haggleChance(run) * 100)}%, выше при малом техдолге</span>`,
-          'Отказаться',
-        ],
+        options: L(
+          [`Продать за ${offer}`, `Торговаться: всё или ничего <span>— шанс ${chance}%, выше при малом техдолге</span>`, 'Отказаться'],
+          [`Sell for ${offer}`, `Haggle: all or nothing <span>— ${chance}% chance, higher with low tech debt</span>`, 'Decline'],
+        ),
       });
     } else if (dilemmaOf(run) && run.dilemma) {
       // a choice with a price: Claude offers to cut a corner, or someone calls and wants an answer
       const d = dilemmaOf(run)!;
       const name = run.dilemma.name.toUpperCase();
       const who: Record<string, string> = {
-        claude: 'КЛОД ПРЕДЛАГАЕТ',
-        client: `ЗВОНОК · ${name}`,
-        blogger: 'ЗВОНОК · БЛОГЕР',
-        rival: `КОНКУРЕНТ · ЦЕЛЬ: ${name}`,
-        press: 'ЗВОНОК · ПРЕССА',
+        claude: L('КЛОД ПРЕДЛАГАЕТ', 'CLAUDE SUGGESTS'),
+        client: `${CALL} · ${name}`,
+        blogger: `${CALL} · ${L('БЛОГЕР', 'A BLOGGER')}`,
+        rival: L(`КОНКУРЕНТ · ЦЕЛЬ: ${name}`, `A COMPETITOR · TARGET: ${name}`),
+        press: `${CALL} · ${L('ПРЕССА', 'THE PRESS')}`,
       };
-      this.paper.call({ who: who[d.who] ?? 'ЗВОНОК', text: d.text, options: d.options.map((o) => `${o.label} <span>— ${o.note}</span>`) });
+      this.paper.call({ who: who[d.who] ?? CALL, text: d.text, options: d.options.map((o) => `${o.label} <span>— ${o.note}</span>`) });
     } else this.paper.call(null);
 
     if (this.termUntil > 0 && this.clock > this.termUntil) {
@@ -892,9 +970,13 @@ export class GameScene extends Phaser.Scene {
   private pauseOptions(): string[] {
     const audio = this.hooks.audio;
     const switches = audio
-      ? [`Музыка: ${audio.music ? 'включена' : 'выключена'}`, `Трек: ${audio.track} <span>— следующий</span>`, `Звук: ${audio.sound ? 'включён' : 'выключен'}`]
+      ? [
+          `${L('Музыка', 'Music')}: ${onOff(audio.music, ['включена', 'выключена'])}`,
+          `${L('Трек', 'Track')}: ${audio.track} <span>— ${L('следующий', 'next')}</span>`,
+          `${L('Звук', 'Sound')}: ${onOff(audio.sound, ['включён', 'выключен'])}`,
+        ]
       : [];
-    return ['Вернуться к стартапу', ...switches, 'Бросить стартап и выйти в меню'];
+    return [L('Вернуться к стартапу', 'Back to the startup'), ...switches, L('Бросить стартап и выйти в меню', 'Abandon the startup and go to the menu')];
   }
 
   /** The ledger next to the money: every line of income and spending per second, and the debt with its limit. */
@@ -904,17 +986,25 @@ export class GameScene extends Phaser.Scene {
     const limit = TUNING.debt.down_at;
     const part = Math.min(1, run.debt / limit);
     let income: string;
-    if (run.down) income = `<p class="bad"><span>подписки: продукт лежит</span><b>$0</b></p>`;
-    else if (run.clients.length > 0 && !isLive(run, 'pay')) income = `<p class="bad"><span>подписки: нет «оплаты»</span><b>$0</b></p>`;
-    else income = `<p class="in"><span>подписки · ${run.clients.length} ${plural(run.clients.length, ['клиент', 'клиента', 'клиентов'])}</span><b>+${rate(f.income)}</b></p>`;
-    const note = part >= 0.66 ? 'почти предел: ставь агента на починку' : run.debt < 1 ? 'долг копят агенты без твоей проверки' : `при ${limit} продукт упадёт; снимает починка`;
+    const subs = L('подписки', 'subscriptions');
+    const clients = `${run.clients.length} ${plural(run.clients.length, L(['клиент', 'клиента', 'клиентов'], ['client', 'clients', 'clients']))}`;
+    if (run.down) income = `<p class="bad"><span>${subs}: ${L('продукт лежит', 'product is down')}</span><b>$0</b></p>`;
+    else if (run.clients.length > 0 && !isLive(run, 'pay')) income = `<p class="bad"><span>${subs}: ${L('нет «оплаты»', 'no “payments”')}</span><b>$0</b></p>`;
+    else income = `<p class="in"><span>${subs} · ${clients}</span><b>+${rate(f.income)}</b></p>`;
+    const note =
+      part >= 0.66
+        ? L('почти предел: ставь агента на починку', 'almost at the limit: put an agent on fixes')
+        : run.debt < 1
+          ? L('долг копят агенты без твоей проверки', 'agents pile up debt without your review')
+          : L(`при ${limit} продукт упадёт; снимает починка`, `at ${limit} the product goes down; fixes remove it`);
+    const blocks = `${run.live.size} ${plural(run.live.size, L(['блок', 'блока', 'блоков'], ['block', 'blocks', 'blocks']))}`;
     return (
       income +
-      `<p><span>ты: еда и жильё</span><b>${rate(-f.living)}</b></p>` +
-      `<p><span>агенты · ${run.agents.length}</span><b>${rate(-f.agents)}</b></p>` +
-      `<p><span>хостинг · ${run.live.size} ${plural(run.live.size, ['блок', 'блока', 'блоков'])}</span><b>${rate(-f.hosting)}</b></p>` +
-      `<p><span>токены клиентов</span><b>${rate(-f.tokens)}</b></p>` +
-      `<p class="debt${part >= 0.66 ? ' bad' : ''}"><span>техдолг</span><u><s style="width:${Math.round(part * 100)}%"></s></u><b>${Math.floor(run.debt)} из ${limit}</b></p>` +
+      `<p><span>${L('ты: еда и жильё', 'you: food and rent')}</span><b>${rate(-f.living)}</b></p>` +
+      `<p><span>${L('агенты', 'agents')} · ${run.agents.length}</span><b>${rate(-f.agents)}</b></p>` +
+      `<p><span>${L('хостинг', 'hosting')} · ${blocks}</span><b>${rate(-f.hosting)}</b></p>` +
+      `<p><span>${L('токены клиентов', 'clients’ tokens')}</span><b>${rate(-f.tokens)}</b></p>` +
+      `<p class="debt${part >= 0.66 ? ' bad' : ''}"><span>${L('техдолг', 'tech debt')}</span><u><s style="width:${Math.round(part * 100)}%"></s></u><b>${Math.floor(run.debt)} ${OF} ${limit}</b></p>` +
       `<small>${note}</small>`
     );
   }
@@ -927,40 +1017,90 @@ export class GameScene extends Phaser.Scene {
     const run = this.run;
     const has = (kind: string): boolean => run.blocks.some((b) => b.kind === kind);
     const pay = run.blocks.find((b) => b.kind === 'pay');
-    if (run.blocks.length === 0) return this.picked ? 'что делать: теперь <b>кликни клетку</b> на чертеже — блок встанет туда' : 'что делать: <b>кликни</b> справа <b>«Обёртку над Клодом»</b>, потом клетку на чертеже';
-    if (run.blocks.length === 1 && !run.blocks[0].built && this.hands < 3) return 'что делать: <b>кликай по блоку</b> на чертеже (или жми Enter) — помогай Клоду строить';
-    if (!has('landing')) return 'что делать: поставь <b>«Лендинг»</b> — без него клиенты не найдут продукт';
-    if (!pay) return run.clients.length > 0 ? '<strong>клиенты не платят</strong> — поставь <b>«Приём оплаты»</b>: выбери его справа' : 'что делать: поставь <b>«Приём оплаты»</b> — без него клиенты будут пользоваться бесплатно';
+    const todo = L('что делать: ', 'what to do: ');
+    const unpaid = L('<strong>клиенты не платят</strong> — ', '<strong>clients don’t pay</strong> — ');
+    if (run.blocks.length === 0) {
+      return this.picked
+        ? todo + L('теперь <b>кликни клетку</b> на чертеже — блок встанет туда', 'now <b>click a cell</b> on the blueprint — the block goes there')
+        : todo + L('<b>кликни</b> справа <b>«Обёртку над Клодом»</b>, потом клетку на чертеже', '<b>click “Claude Wrapper”</b> on the right, then a cell on the blueprint');
+    }
+    if (run.blocks.length === 1 && !run.blocks[0].built && this.hands < 3) {
+      return todo + L('<b>кликай по блоку</b> на чертеже (или жми Enter) — помогай Клоду строить', '<b>click the block</b> on the blueprint (or press Enter) — help Claude build');
+    }
+    if (!has('landing')) return todo + L('поставь <b>«Лендинг»</b> — без него клиенты не найдут продукт', 'place the <b>“Landing Page”</b> — without it clients won’t find the product');
+    if (!pay) {
+      return run.clients.length > 0
+        ? unpaid + L('поставь <b>«Приём оплаты»</b>: выбери его справа', 'place <b>“Payments”</b>: pick it on the right')
+        : todo + L('поставь <b>«Приём оплаты»</b> — без него клиенты будут пользоваться бесплатно', 'place <b>“Payments”</b> — without it clients will use the product for free');
+    }
     if (!isLive(run, 'pay')) {
-      if (!pay.built) return `${run.clients.length > 0 ? '<strong>клиенты не платят</strong> — ' : 'что делать: '}дострой <b>«Приём оплаты»</b>: клик по стройке или Enter — помочь руками`;
-      return '«Приём оплаты» готов: клиенты начнут платить с ближайшего релиза';
+      if (!pay.built) {
+        return (run.clients.length > 0 ? unpaid : todo) + L('дострой <b>«Приём оплаты»</b>: клик по стройке или Enter — помочь руками', 'finish <b>“Payments”</b>: click the site or press Enter to help');
+      }
+      return L('«Приём оплаты» готов: клиенты начнут платить с ближайшего релиза', '“Payments” is ready: clients start paying from the next release');
     }
     if (run.down) {
       return run.downWhy === 'supplier'
-        ? '<strong>продукт лежит</strong> до релиза: сбой у поставщика модели — клиенты не платят, от тебя это не зависит'
-        : '<strong>продукт лежит</strong> до релиза: слишком много техдолга — клиенты не платят; поставь агента на <b>починку</b>';
+        ? L(
+            '<strong>продукт лежит</strong> до релиза: сбой у поставщика модели — клиенты не платят, от тебя это не зависит',
+            '<strong>the product is down</strong> until the release: model provider outage — clients don’t pay; not your fault',
+          )
+        : L(
+            '<strong>продукт лежит</strong> до релиза: слишком много техдолга — клиенты не платят; поставь агента на <b>починку</b>',
+            '<strong>the product is down</strong> until the release: too much tech debt — nobody pays; put an agent on <b>fixes</b>',
+          );
     }
-    if (run.stats.clients === 0) return 'жди релиза: первый клиент придёт сам, когда выйдут <b>ядро</b> и <b>лендинг</b>';
+    if (run.stats.clients === 0) {
+      return L('жди релиза: первый клиент придёт сам, когда выйдут <b>ядро</b> и <b>лендинг</b>', 'wait for the release: the first client comes by itself once the <b>core</b> and the <b>landing page</b> ship');
+    }
     // the demo day: the release of this sprint is watched — it must ship something
     if (isDemo(run) && run.clients.length > 0) {
       const ready = run.blocks.some((b) => (b.built && !b.live) || (b.up && b.done >= b.need));
       return ready
-        ? '<em>демо-день</em>: есть что показать — на релизе придут новые клиенты'
-        : '<strong>демо-день</strong>: дострой к релизу блок или доработку — придут 3 клиента; покажешь пустоту — один уйдёт';
+        ? L('<em>демо-день</em>: есть что показать — на релизе придут новые клиенты', '<em>demo day</em>: there is something to show — new clients come at the release')
+        : L(
+            '<strong>демо-день</strong>: дострой к релизу блок или доработку — придут 3 клиента; покажешь пустоту — один уйдёт',
+            '<strong>demo day</strong>: finish a block or an upgrade by the release — 3 clients come; show nothing — one leaves',
+          );
     }
     // the sheet is full and a client waits for what is not on it: something has to go
     if (run.blocks.length >= cellsMax(run)) {
       const want = run.clients.find((c) => !c.happy && run.known.includes(c.want) && shelf(run).includes(c.want));
-      if (want) return `<strong>чертёж полон</strong>, а клиент ждёт <b>«${BLOCK_BY_ID[want.want]?.name}»</b> — освободи клетку: <b>«Снести блок»</b> в конце полки`;
+      if (want) {
+        const name = BLOCK_BY_ID[want.want]?.name;
+        return L(
+          `<strong>чертёж полон</strong>, а клиент ждёт <b>«${name}»</b> — освободи клетку: <b>«Снести блок»</b> в конце полки`,
+          `<strong>blueprint full</strong>, a client waits for <b>“${name}”</b> — free a cell: <b>“Demolish a block”</b>, end of the shelf`,
+        );
+      }
     }
     // no room for one more client: the way to grow is written out
     if (run.clients.length >= clientsMax(run) && run.clients.length < TUNING.clients.slots) {
-      return `<strong>мест для клиентов нет</strong> (${run.clients.length} из ${clientsMax(run)}) — построй блок с пометкой <b>«+ места»</b>: поддержку, обучение, пуши`;
+      return L(
+        `<strong>мест для клиентов нет</strong> (${run.clients.length} из ${clientsMax(run)}) — построй блок с пометкой <b>«+ места»</b>: поддержку, обучение, пуши`,
+        `<strong>no seats for clients</strong> (${run.clients.length} of ${clientsMax(run)}) — build a block marked <b>“+ seats”</b>: support, tutorial, push`,
+      );
     }
-    if (net < 0) return `цель: выйти в плюс — не хватает <b>${money(-net)}</b> в секунду; клиентов приводит <b>продвижение</b>, удерживает <b>разведка</b>`;
-    if (run.stage < 3) return `<em>в плюсе</em> · расти до подписок <b>${rate(TUNING.stage3_mrr / TUNING.sprint_s)}/с</b>: тогда у компании появится оценка и покупатель`;
+    if (net < 0) {
+      return L(
+        `цель: выйти в плюс — не хватает <b>${money(-net)}</b> в секунду; клиентов приводит <b>продвижение</b>, удерживает <b>разведка</b>`,
+        `goal: get into the black — <b>${money(-net)}</b> per second short; <b>promotion</b> brings clients, <b>research</b> keeps them`,
+      );
+    }
+    if (run.stage < 3) {
+      const target = `${rate(TUNING.stage3_mrr / TUNING.sprint_s)}${PER_S}`;
+      return L(
+        `<em>в плюсе</em> · расти до подписок <b>${target}</b>: тогда у компании появится оценка и покупатель`,
+        `<em>in the black</em> · grow subscriptions to <b>${target}</b>: then the company gets a valuation and a buyer`,
+      );
+    }
     // the third stage is played for the price tag of the company
-    return `оценка компании <em>${money(valuation(run))}</em> · подписки ×${Math.round(valueMult(run))}: множитель растят <b>связки</b> и <b>доработки</b>, роняет <b>техдолг</b>`;
+    const worth = money(valuation(run));
+    const mult = Math.round(valueMult(run));
+    return L(
+      `оценка компании <em>${worth}</em> · подписки ×${mult}: множитель растят <b>связки</b> и <b>доработки</b>, роняет <b>техдолг</b>`,
+      `valuation <em>${worth}</em> · subscriptions ×${mult}: <b>combos</b> and <b>upgrades</b> raise the multiplier, <b>tech debt</b> drops it`,
+    );
   }
 
   /**
@@ -974,51 +1114,97 @@ export class GameScene extends Phaser.Scene {
     const tell = (key: string, lines: string[]): boolean => {
       if (this.said.has(key)) return false;
       this.said.add(key);
-      this.say(['<b>❯ Клод</b>', ...lines], 13);
+      this.say([CLAUDE, ...lines], 13);
       playSound('quip');
       return true;
     };
     if (run.clients.length > 0 && !isLive(run, 'pay') && this.clock >= this.nagAt) {
       const pay = run.blocks.find((b) => b.kind === 'pay');
       const lines = !pay
-        ? ['Клиенты пользуются бесплатно:', 'нам нечем брать с них деньги.', 'Выбери справа «Приём оплаты»', 'и поставь его на чертёж.']
+        ? L(
+            ['Клиенты пользуются бесплатно:', 'нам нечем брать с них деньги.', 'Выбери справа «Приём оплаты»', 'и поставь его на чертёж.'],
+            ['Clients use the product for free:', 'we have nothing to charge them with.', 'Pick “Payments” on the right', 'and put it on the blueprint.'],
+          )
         : !pay.built
-          ? ['«Приём оплаты» ещё строится —', 'до него клиенты не платят.', 'Клик по стройке или Enter: помоги.']
-          : ['«Приём оплаты» готов. Клиенты', 'начнут платить с ближайшего релиза.'];
-      this.say(['<b>❯ Клод</b>', ...lines], 16);
+          ? L(
+              ['«Приём оплаты» ещё строится —', 'до него клиенты не платят.', 'Клик по стройке или Enter: помоги.'],
+              ['“Payments” is still being built —', 'until then clients don’t pay.', 'Click the site or press Enter: help.'],
+            )
+          : L(['«Приём оплаты» готов. Клиенты', 'начнут платить с ближайшего релиза.'], ['“Payments” is ready. Clients start', 'paying from the next release.']);
+      this.say([CLAUDE, ...lines], 16);
       playSound('quip');
       this.nagAt = this.clock + 34;
       return;
     }
     if (run.blocks.length >= cellsMax(run) && run.stage >= 2) {
-      if (tell('t:full', ['Чертёж полон: всё построить нельзя.', 'Лишний блок можно снести — «Снести', 'блок» в конце полки. Клиенты, которым', 'он был нужен, начнут ждать снова.'])) return;
+      const lines = L(
+        ['Чертёж полон: всё построить нельзя.', 'Лишний блок можно снести — «Снести', 'блок» в конце полки. Клиенты, которым', 'он был нужен, начнут ждать снова.'],
+        ['The blueprint is full: you can’t build', 'everything. A spare block can go —', '“Demolish a block” ends the shelf.', 'Clients who needed it will wait again.'],
+      );
+      if (tell('t:full', lines)) return;
     }
     if (run.stage >= 2 && run.sprintT > 3) {
-      if (tell('t:grow', ['Как расти. Больше клиентов —', 'продвижение и блоки «+ места».', 'Дороже клиент — блоки «чек ×»,', 'связки соседних блоков и доработки.'])) return;
+      const lines = L(
+        ['Как расти. Больше клиентов —', 'продвижение и блоки «+ места».', 'Дороже клиент — блоки «чек ×»,', 'связки соседних блоков и доработки.'],
+        ['How to grow. More clients —', 'promotion and “+ seats” blocks.', 'Bigger bills — “bill ×” blocks,', 'combos of neighbours and upgrades.'],
+      );
+      if (tell('t:grow', lines)) return;
     }
     if (run.stage >= 2 && run.agents.length === 1 && run.sprintT > 6) {
-      if (tell('t:hire', ['Можно нанять второго агента.', 'Он стоит денег каждую секунду —', 'смотри на «денег на…» под счётчиком.'])) return;
+      const lines = L(
+        ['Можно нанять второго агента.', 'Он стоит денег каждую секунду —', 'смотри на «денег на…» под счётчиком.'],
+        ['You can hire a second agent.', 'An agent costs money every second —', 'watch “money for…” under the counter.'],
+      );
+      if (tell('t:hire', lines)) return;
     }
     if (run.stage >= 2 && run.clients.some((c) => !c.happy && !run.known.includes(c.want)) && !run.agents.some((a) => a.lane === 'research')) {
-      if (tell('t:ask', ['Клиент чего-то ждёт и молчит.', 'Переведи агента на разведку —', 'он выяснит, какой блок им нужен.'])) return;
+      const lines = L(
+        ['Клиент чего-то ждёт и молчит.', 'Переведи агента на разведку —', 'он выяснит, какой блок им нужен.'],
+        ['A client waits for something and', 'says nothing. Move an agent to', 'research to find out which block.'],
+      );
+      if (tell('t:ask', lines)) return;
     }
     if (run.debt >= 10) {
-      if (tell('t:debt', ['Техдолг растёт: счётчик справа от', 'денег, серые квадраты на блоках.', `Дойдёт до ${TUNING.debt.down_at} — продукт упадёт, и спринт`, 'никто не платит. Починка его снимает.'])) return;
+      const lines = L(
+        ['Техдолг растёт: счётчик справа от', 'денег, серые квадраты на блоках.', `Дойдёт до ${TUNING.debt.down_at} — продукт упадёт, и спринт`, 'никто не платит. Починка его снимает.'],
+        ['Tech debt is growing: the counter is', 'right of the money, grey squares on', `the blocks. At ${TUNING.debt.down_at} the product goes down`, 'and nobody pays for a sprint.', 'Fixes remove it.'],
+      );
+      if (tell('t:debt', lines)) return;
     }
     if (run.agents.some((a) => a.lane === 'promo') && run.stats.clients > 0) {
-      if (tell('t:promo', ['Продвижение копит нового клиента:', 'смотри «до нового клиента» у рынка.', 'Набралось 100% — он придёт на релизе,', 'если есть место.'])) return;
+      const lines = L(
+        ['Продвижение копит нового клиента:', 'смотри «до нового клиента» у рынка.', 'Набралось 100% — он придёт на релизе,', 'если есть место.'],
+        ['Promotion builds up the next client:', 'see “next client” at the market.', 'At 100% the client comes at the', 'release, if there is a seat.'],
+      );
+      if (tell('t:promo', lines)) return;
     }
     if (run.stage >= 2 && run.energy >= TUNING.crunch.max && run.sprintT > 10) {
-      if (tell('t:hands', ['Силы — не только на код. Справа внизу,', 'в строке «руками»: напиши пост', 'или позвони клиенту сам.'])) return;
+      const lines = L(
+        ['Силы — не только на код. Справа внизу,', 'в строке «руками»: напиши пост', 'или позвони клиенту сам.'],
+        ['Energy is not only for code. Bottom', 'right, in the “by hand” row: write', 'a post or call a client yourself.'],
+      );
+      if (tell('t:hands', lines)) return;
     }
     if (run.agents.some((a) => a.lane === 'build' && !busy(run, a)) && shelf(run).length > 0 && run.blocks.length > 0) {
-      if (tell('t:idle', ['Агенту на стройке нечего делать.', 'Без дела он денег не берёт, но и', 'пользы нет: выбери блок справа.'])) return;
+      const lines = L(
+        ['Агенту на стройке нечего делать.', 'Без дела он денег не берёт, но и', 'пользы нет: выбери блок справа.'],
+        ['The agent on the build has nothing', 'to do. An idle agent costs nothing,', 'but is no use: pick a block.'],
+      );
+      if (tell('t:idle', lines)) return;
     }
     if (netPerS(run) >= 0 && run.clients.length > 0) {
-      if (tell('t:profit', ['Мы в плюсе. Дальше — расти:', 'на третьем этапе у компании появится', 'оценка, и покупатель начнёт звонить.', 'Чем она выше к концу — тем лучше.'])) return;
+      const lines = L(
+        ['Мы в плюсе. Дальше — расти:', 'на третьем этапе у компании появится', 'оценка, и покупатель начнёт звонить.', 'Чем она выше к концу — тем лучше.'],
+        ['We are in the black. Next — grow:', 'at stage three the company gets a', 'valuation, and a buyer starts calling.', 'The higher it is by the end, the better.'],
+      );
+      if (tell('t:profit', lines)) return;
     }
     if (run.clients.length > 0 && isDemo(run, run.sprint + 1)) {
-      tell('t:demo', ['Следующий релиз после этого —', 'демо-день: его смотрят все.', 'Выйдет блок или доработка — придут', 'три клиента. Не выйдет — один уйдёт.']);
+      const lines = L(
+        ['Следующий релиз после этого —', 'демо-день: его смотрят все.', 'Выйдет блок или доработка — придут', 'три клиента. Не выйдет — один уйдёт.'],
+        ['The release after this one is demo', 'day: everybody watches it. Ship a', 'block or an upgrade — three clients', 'come. Ship nothing — one leaves.'],
+      );
+      tell('t:demo', lines);
     }
   }
 
@@ -1041,9 +1227,9 @@ export class GameScene extends Phaser.Scene {
     const note = (kind: string): string => {
       // what it gives stands first, in coral: more clients or a bigger cheque is why a block is built
       const [main, ...rest] = benefits(kind);
-      const friends = arch ? `дружит: ${RULES[kind].friends.map((f) => BLOCK_BY_ID[f]?.short ?? f).join(', ')}` : '';
+      const friends = arch ? `${L('дружит', 'friends')}: ${RULES[kind].friends.map((f) => BLOCK_BY_ID[f]?.short ?? f).join(', ')}` : '';
       // every shipped block is paid for every second: the shelf says how much before it is built
-      const host = `хост ${rate(RULES[kind].host)}/с`;
+      const host = `${L('хост', 'host')} ${rate(RULES[kind].host)}${PER_S}`;
       return [main ? `<i>${main}</i>` : '', ...rest, host, friends].filter((x) => x !== '').join(' · ');
     };
     const items: ShelfItem[] = shelf(run).map((kind) => ({
@@ -1051,7 +1237,7 @@ export class GameScene extends Phaser.Scene {
       title: BLOCK_BY_ID[kind].name,
       // clients are here and there is nothing to charge them with: the shelf says so on the block itself
       // next to the name — why to build it: someone asks for it, or what it gives (more clients, a bigger cheque)
-      mark: kind === 'pay' && run.clients.length > 0 ? 'нужен сейчас' : run.known.includes(kind) ? 'просят' : '',
+      mark: kind === 'pay' && run.clients.length > 0 ? L('нужен сейчас', 'needed now') : run.known.includes(kind) ? L('просят', 'wanted') : '',
       note: note(kind),
       // the joke of the block is said when the pointer rests on its tile
       tip: BLOCK_BY_ID[kind].note,
@@ -1067,9 +1253,11 @@ export class GameScene extends Phaser.Scene {
     const ups: ShelfItem[] = reworks(run).map((r) => ({
       id: `up:${r.kind}`,
       // a short name: the tile must say «rework» and of what, in one line
-      title: `Доработка: ${BLOCK_BY_ID[r.kind].short} v${r.level}`,
+      title: `${L('Доработка', 'Upgrade')}: ${BLOCK_BY_ID[r.kind].short} v${r.level}`,
       mark: '',
-      note: `${r.who[0]}${r.who.length > 1 ? ` и ещё ${r.who.length - 1}` : ''}: +${more}% к чеку · хостинг +${rate(RULES[r.kind].host * TUNING.rework.host_mult)}/с`,
+      note:
+        `${r.who[0]}${r.who.length > 1 ? L(` и ещё ${r.who.length - 1}`, ` and ${r.who.length - 1} more`) : ''}: ` +
+        `${L(`+${more}% к чеку · хостинг`, `+${more}% to the bill · hosting`)} +${rate(RULES[r.kind].host * TUNING.rework.host_mult)}${PER_S}`,
       price: `<u></u>${reworkNeed(run, run.blocks.find((b) => b.kind === r.kind)!)}`,
       state: full ? 'off' : 'can',
     }));
@@ -1079,24 +1267,31 @@ export class GameScene extends Phaser.Scene {
     const packed = run.blocks.length >= cap;
     if (packed) for (const it of items) if (!it.id.startsWith('up:')) it.state = 'off';
     if (run.blocks.some((b) => b.live && RULES[b.kind].role !== 'base')) {
-      items.push({ id: 'x', title: 'Снести блок', note: this.razing ? '<i>кликни блок на чертеже</i> · Esc — отмена' : 'освободить клетку под другой блок', price: '', state: this.razing ? 'on' : 'can' });
+      items.push({
+        id: 'x',
+        title: L('Снести блок', 'Demolish a block'),
+        note: this.razing ? L('<i>кликни блок на чертеже</i> · Esc — отмена', '<i>click a block on the blueprint</i> · Esc — cancel') : L('освободить клетку под другой блок', 'free a cell for another block'),
+        price: '',
+        state: this.razing ? 'on' : 'can',
+      });
     }
     const rule = TUNING.stages[run.stage - 1];
     // what opens the stronger agents and more desks is written out: it is a goal, not a secret
+    const stage3 = `${rate(TUNING.stage3_mrr / TUNING.sprint_s)}${PER_S}`;
     const unlock =
       run.stage === 1
-        ? 'обычный и думающий агенты и ещё два места — после первого платящего клиента'
+        ? L('обычный и думающий агенты и ещё два места — после первого платящего клиента', 'regular and thinking agents and two more desks — after the first paying client')
         : run.stage === 2
-          ? `ещё два места для агентов — когда подписки дойдут до ${rate(TUNING.stage3_mrr / TUNING.sprint_s)}/с`
+          ? L(`ещё два места для агентов — когда подписки дойдут до ${stage3}`, `two more desks for agents — when subscriptions reach ${stage3}`)
           : '';
     const rows: ShelfKeys[] = [
       {
         owner: 'hire',
-        keys: TIERS.map((t) => ({ id: t, title: `+ ${TIER_NAME[t]} $${TUNING.tiers[t].cost_per_s}/с`, off: !canHire(run, t) })),
+        keys: TIERS.map((t) => ({ id: t, title: `+ ${TIER_NAME[t]} $${TUNING.tiers[t].cost_per_s}${PER_S}`, off: !canHire(run, t) })),
       },
       ...run.agents.map((a) => ({
         owner: `a${a.id}`,
-        label: `<b>№${a.id}</b> ${TIER_NAME[a.tier]}`,
+        label: `<b>${NO}${a.id}</b> ${TIER_NAME[a.tier]}`,
         keys: [...LANES.map((l) => ({ id: l as string, title: LANE_NAME[l] })), { id: 'drop', title: '×' }],
         on: a.lane as string,
       })),
@@ -1104,8 +1299,16 @@ export class GameScene extends Phaser.Scene {
     return [
       {
         id: 'blocks',
-        title: `БЛОКИ · НА ЧЕРТЕЖЕ ${run.blocks.length} ИЗ ${cap}`,
-        hint: this.razing ? 'кликни блок, который снести' : this.picked ? 'теперь клетка на чертеже' : packed ? 'чертёж полон' : full ? `стройка занята: ${TUNING.sites_max} из ${TUNING.sites_max}` : '',
+        title: L(`БЛОКИ · НА ЧЕРТЕЖЕ ${run.blocks.length} ИЗ ${cap}`, `BLOCKS · PLACED ${run.blocks.length} OF ${cap}`),
+        hint: this.razing
+          ? L('кликни блок, который снести', 'click the block to demolish')
+          : this.picked
+            ? L('теперь клетка на чертеже', 'now a cell on the blueprint')
+            : packed
+              ? L('чертёж полон', 'the blueprint is full')
+              : full
+                ? L(`стройка занята: ${TUNING.sites_max} из ${TUNING.sites_max}`, `sites are busy: ${TUNING.sites_max} of ${TUNING.sites_max}`)
+                : '',
         items,
         grid: true,
         // the list takes all the height the agents leave: at best every block is seen without scrolling
@@ -1113,20 +1316,26 @@ export class GameScene extends Phaser.Scene {
       },
       {
         id: 'agents',
-        title: `АГЕНТЫ · ${run.agents.length} ИЗ ${rule.agents_max}`,
-        hint: `${rate(-flows(run).agents)}/с · без дела — бесплатно`,
+        title: L(`АГЕНТЫ · ${run.agents.length} ИЗ ${rule.agents_max}`, `AGENTS · ${run.agents.length} OF ${rule.agents_max}`),
+        hint: `${rate(-flows(run).agents)}${PER_S} · ${L('без дела — бесплатно', 'idle — free')}`,
         note: unlock,
         rows,
       },
       {
         id: 'me',
-        title: 'ТЫ · ОДИН ЧЕЛОВЕК',
-        hint: `силы ${'■'.repeat(Math.floor(run.energy))}${'□'.repeat(TUNING.crunch.max - Math.floor(run.energy))}`,
+        title: L('ТЫ · ОДИН ЧЕЛОВЕК', 'YOU · ONE PERSON'),
+        hint: `${ENERGY} ${'■'.repeat(Math.floor(run.energy))}${'□'.repeat(TUNING.crunch.max - Math.floor(run.energy))}`,
         rows: [
           // what the founder checks: no debt there, and the work goes faster; chosen once a sprint
-          { owner: 'me', label: run.reviewLocked ? 'проверяю <b>до релиза</b>' : 'проверяю', keys: LANES.map((l) => ({ id: l as string, title: LANE_NAME[l] })), on: run.review, lock: run.reviewLocked },
+          {
+            owner: 'me',
+            label: run.reviewLocked ? L('проверяю <b>до релиза</b>', 'review <b>set</b>') : L('проверяю', 'I review'),
+            keys: LANES.map((l) => ({ id: l as string, title: LANE_NAME[l] })),
+            on: run.review,
+            lock: run.reviewLocked,
+          },
           // what he does with his own hands: one point of strength a square, on any lane
-          { owner: 'hand', label: 'руками', keys: LANES.map((l) => ({ id: l as string, title: HAND_NAME[l], off: run.energy < 1 || !handy(run, l) })) },
+          { owner: 'hand', label: L('руками', 'by hand'), keys: LANES.map((l) => ({ id: l as string, title: HAND_NAME[l], off: run.energy < 1 || !handy(run, l) })) },
         ],
       },
     ];
@@ -1233,8 +1442,8 @@ export class GameScene extends Phaser.Scene {
 
   /** the right end of the news line: what the news has done and for how long, then the pause key */
   private newsHint(): string {
-    const parts = this.run.mods.map((m) => `${m.tag} · ещё ${m.left} спр.`);
-    return [...parts, 'Esc — пауза, звук'].join('   ');
+    const parts = this.run.mods.map((m) => L(`${m.tag} · ещё ${m.left} ${SPR}`, `${m.tag} · ${m.left} more ${SPR}`));
+    return [...parts, L('Esc — пауза, звук', 'Esc — pause, sound')].join('   ');
   }
 
   /** an event of the run takes the news line and holds it for a while */
@@ -1270,5 +1479,5 @@ export class GameScene extends Phaser.Scene {
 
 /** «3 спринта» */
 export function sprints(n: number): string {
-  return `${n} ${plural(n, ['спринт', 'спринта', 'спринтов'])}`;
+  return `${n} ${plural(n, L(['спринт', 'спринта', 'спринтов'], ['sprint', 'sprints', 'sprints']))}`;
 }

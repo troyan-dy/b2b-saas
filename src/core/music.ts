@@ -1,3 +1,5 @@
+import { L } from './lang';
+
 export interface Track {
   id: string;
   title: string;
@@ -9,10 +11,10 @@ export interface Track {
 
 /** The background music: one loop out of a list, started by the first key press or click. All of it is CC0 from OpenGameArt. */
 export const TRACKS: readonly Track[] = [
-  { id: 'chip', title: 'Чиптюн', mood: '8 бит · ровный ритм', author: 'iamoneabe', file: 'assets/audio/chiploop.ogg' },
-  { id: 'path', title: 'Забытая тропа', mood: '8 бит · задумчиво', author: 'johndekale', file: 'assets/audio/forgotten_path.ogg' },
-  { id: 'bossa', title: 'Босса-нова для лифта', mood: 'иронично · 8 бит · бодро', author: 'Joth', file: 'assets/audio/bossa_nova.ogg' },
-  { id: 'lofi', title: 'Лоу-фай', mood: 'бит для работы · тепло', author: 'omfgdude, qubodup', file: 'assets/audio/chill_lofi.ogg' },
+  { id: 'chip', title: L('Чиптюн', 'Chiptune'), mood: L('8 бит · ровный ритм', '8-bit · steady beat'), author: 'iamoneabe', file: 'assets/audio/chiploop.ogg' },
+  { id: 'path', title: L('Забытая тропа', 'Forgotten Path'), mood: L('8 бит · задумчиво', '8-bit · thoughtful'), author: 'johndekale', file: 'assets/audio/forgotten_path.ogg' },
+  { id: 'bossa', title: L('Босса-нова для лифта', 'Elevator Bossa Nova'), mood: L('иронично · 8 бит · бодро', 'ironic · 8-bit · upbeat'), author: 'Joth', file: 'assets/audio/bossa_nova.ogg' },
+  { id: 'lofi', title: L('Лоу-фай', 'Lo-fi'), mood: L('бит для работы · тепло', 'beats to work to · warm'), author: 'omfgdude, qubodup', file: 'assets/audio/chill_lofi.ogg' },
 ];
 const VOLUME = 0.3;
 

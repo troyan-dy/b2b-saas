@@ -3,6 +3,8 @@ export interface Settings {
   music: boolean;
   /** the id of the background loop, see TRACKS in music.ts */
   track: string;
+  /** chosen in the menu; absent — the browser decides */
+  lang?: 'ru' | 'en';
 }
 
 const KEY = 'b2b-saas-settings';
@@ -15,6 +17,7 @@ export function loadSettings(): Settings {
     if (typeof raw.sound === 'boolean') s.sound = raw.sound;
     if (typeof raw.music === 'boolean') s.music = raw.music;
     if (typeof raw.track === 'string') s.track = raw.track;
+    if (raw.lang === 'ru' || raw.lang === 'en') s.lang = raw.lang;
   } catch {
     // no storage or a broken record: the defaults will do
   }

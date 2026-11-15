@@ -1,0 +1,14 @@
+{
+  "price_up": { "text": "The model provider raised prices “due to increased value”. Tokens cost 40% more — for three sprints", "tag": "tokens ×1.4" },
+  "free_rival": { "text": "A giant released the same product for free. Clients haggle: bills are 20% smaller — for three sprints", "tag": "bill −20%" },
+  "new_model": { "text": "A new version of the model is out. Half of your prompts no longer work: +8 debt" },
+  "rival_demo": { "text": "A competitor showed “%s” at a conference. Those who waited for it from you are tired of waiting: patience −1" },
+  "outage": { "text": "The model provider is down. Your product is down together with everyone else’s — until the release" },
+  "viral": { "text": "Your post “we are not a wrapper” went viral. Two companies came to take a look: +2 leads" },
+  "hype": { "text": "AI is in fashion again this week. Promotion works one and a half times better — for three sprints", "tag": "promotion ×1.5" },
+  "refund": { "text": "A tax refund you didn’t know about has arrived: +$400. Accounting is a product too" },
+  "launch_day": { "text": "You got featured on a launch platform. Three companies came to look, one — to criticize the fonts: +3 leads" },
+  "price_war": { "text": "Model providers started a price war. You got caught in it, in a good way: tokens cost 30% less — for three sprints", "tag": "tokens ×0.7" },
+  "data_law": { "text": "A new data law has passed. You needed a lawyer yesterday: +6 debt" },
+  "bubble_post": { "text": "A famous blogger called AI wrappers a bubble. Promotion works 40% worse — for three sprints", "tag": "promotion ×0.6" }
+}

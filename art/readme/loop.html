@@ -1,0 +1,108 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>README: how it works</title>
+    <link rel="stylesheet" href="../concepts-ydd/fonts.css" />
+    <link rel="stylesheet" href="readme.css" />
+    <style>
+      /* one sprint: five stations on one line */
+      .flow { display: grid; grid-template-columns: repeat(5, 1fr); margin-top: 44px; position: relative; }
+      .flow::before { content: ''; position: absolute; left: 150px; right: 150px; top: 96px; border-top: 2px solid var(--ink); }
+      .st { position: relative; text-align: center; padding: 0 14px; }
+      .st .pic { position: relative; height: 190px; display: flex; align-items: center; justify-content: center; }
+      .st .pic img { max-height: 176px; max-width: 200px; }
+      .st .pad { position: absolute; left: 50%; top: 20px; width: 196px; height: 152px; margin-left: -98px; background: var(--paper); }
+      .st b { display: block; margin-top: 10px; font: 700 23px 'JetBrains Mono', monospace; letter-spacing: 0.06em; }
+      .st > span { display: block; margin-top: 6px; font-size: 23px; line-height: 1.3; color: var(--dim); }
+      .keycap { padding: 12px 22px 14px; border: 2px solid var(--ink); border-bottom-width: 7px; border-radius: 12px; background: #fff; font: 700 28px 'JetBrains Mono', monospace; white-space: nowrap; }
+      .cash { padding: 0 10px; font: 600 108px/1 'Source Serif 4', serif; color: var(--money); }
+      /* a module of the product, drawn the way the sheet draws it */
+      .block { position: relative; width: 150px; height: 118px; }
+      .block i { position: absolute; left: 0; top: 0; width: 150px; height: 75px; background: var(--card); border: 2px solid var(--ink); clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%); }
+      .block svg { position: absolute; inset: 0; }
+      .dot { position: absolute; top: 88px; width: 16px; height: 16px; background: var(--coral); }
+      .dot.g { background: var(--money); }
+      /* what eats the money, and what cures it */
+      .necks { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; margin-top: 46px; }
+      .neck { padding: 22px 28px 24px; }
+      .neck .kicker { color: var(--coral); }
+      .neck h3 { margin: 6px 0 8px; font-size: 32px; font-weight: 600; line-height: 1.15; }
+      .neck p { margin: 0; font-size: 23px; line-height: 1.35; color: #4a4946; }
+    </style>
+  </head>
+  <body>
+    <div class="sheet">
+      <div class="kicker" data-en="How it works" data-ru="Как это работает"></div>
+      <h1 data-en="One founder. One Claude. A release every 32 seconds." data-ru="Один основатель. Один Клод. Релиз каждые 32 секунды."></h1>
+
+      <div class="flow">
+        <div class="st">
+          <div class="pad"></div>
+          <div class="pic"><img src="../../public/assets/img/nodes/desk.webp" /></div>
+          <b data-en="YOU" data-ru="ТЫ"></b>
+          <span data-en="pick a block, pick a cell; review one lane, help by hand" data-ru="выбираешь блок и клетку; проверяешь одно направление, помогаешь руками"></span>
+        </div>
+        <div class="st">
+          <div class="pad"></div>
+          <div class="pic"><img src="../../public/assets/img/nodes/laptop.webp" /></div>
+          <b data-en="CLAUDE" data-ru="КЛОД"></b>
+          <span data-en="agents build, fix, promote and research — for money every second" data-ru="агенты строят, чинят, продвигают и разведывают — за деньги каждую секунду"></span>
+        </div>
+        <div class="st">
+          <div class="pad"></div>
+          <div class="pic">
+            <svg width="190" height="150" viewBox="0 0 190 150">
+              <g fill="#faf9f5" stroke="#262624" stroke-width="2.4" stroke-linejoin="round">
+                <path d="M95 14 L175 54 L95 94 L15 54 Z" />
+                <path d="M15 54 L95 94 L95 132 L15 92 Z" fill="#bcd1ca" />
+                <path d="M175 54 L95 94 L95 132 L175 92 Z" />
+              </g>
+              <path d="M95 34 L133 53 L95 72 L57 53 Z" fill="#d97757" />
+            </svg>
+          </div>
+          <b data-en="PRODUCT" data-ru="ПРОДУКТ"></b>
+          <span data-en="blocks on a blueprint; what is finished ships at the release" data-ru="блоки на чертеже; достроенное выходит на релизе"></span>
+        </div>
+        <div class="st">
+          <div class="pad"></div>
+          <div class="pic"><img src="../../public/assets/img/nodes/clinic.webp" /></div>
+          <b data-en="CLIENTS" data-ru="КЛИЕНТЫ"></b>
+          <span data-en="come for the landing page, wait for their block, leave without it" data-ru="приходят на лендинг, ждут свой блок, без него уходят"></span>
+        </div>
+        <div class="st">
+          <div class="pad"></div>
+          <div class="pic"><span class="cash">$</span></div>
+          <b data-en="MONEY" data-ru="ДЕНЬГИ"></b>
+          <span data-en="subscriptions in; tokens, hosting, agents and rent out" data-ru="подписки приходят; токены, хостинг, агенты и жильё уходят"></span>
+        </div>
+        <i class="dot" style="left: 262px"></i>
+        <i class="dot" style="left: 300px"></i>
+        <i class="dot" style="left: 574px"></i>
+        <i class="dot" style="left: 608px"></i>
+        <i class="dot" style="left: 880px"></i>
+        <i class="dot g" style="left: 1184px"></i>
+        <i class="dot g" style="left: 1222px"></i>
+      </div>
+
+      <div class="necks">
+        <div class="neck cardbox">
+          <div class="kicker" data-en="eats the money: tokens" data-ru="ест деньги: токены"></div>
+          <h3 data-en="Every client burns tokens" data-ru="Каждый клиент жжёт токены"></h3>
+          <p data-en="Growth without a cheaper model is a loss with extra steps." data-ru="Рост без модели подешевле — это убыток с дополнительными шагами."></p>
+        </div>
+        <div class="neck cardbox">
+          <div class="kicker" data-en="eats the product: tech debt" data-ru="ест продукт: техдолг"></div>
+          <h3 data-en="Fast agents write fast" data-ru="Быстрые агенты пишут быстро"></h3>
+          <p data-en="At 30 the product goes down, and for a sprint nobody pays." data-ru="На отметке 30 продукт падает, и целый спринт никто не платит."></p>
+        </div>
+        <div class="neck cardbox">
+          <div class="kicker" data-en="eats the clients: waiting" data-ru="ест клиентов: ожидание"></div>
+          <h3 data-en="“Already in prod”" data-ru="«Уже в проде»"></h3>
+          <p data-en="Promise a block on a call and build it in two sprints. Or refund." data-ru="Пообещай блок на звонке и построй его за два спринта. Или верни деньги."></p>
+        </div>
+      </div>
+    </div>
+    <script src="readme.js"></script>
+  </body>
+</html>

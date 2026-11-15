@@ -9,10 +9,11 @@ import '@fontsource/source-serif-4/latin-400.css';
 import '@fontsource/source-serif-4/latin-600.css';
 import './ui/style.css';
 import { readArgs } from './core/args';
+import { L, LANG } from './core/lang';
 import { installMetrics } from './core/metrics';
 import { nextTrack, setMusicOn, setTrack, startMusic, trackTitle } from './core/music';
 import { createRng } from './core/rng';
-import { loadSettings, saveSettings } from './core/settings';
+import { loadSettings, saveSettings, type Settings } from './core/settings';
 import { playSound, setSoundOn, unlockSound } from './core/sound';
 import { ending, menu, mixIdea } from './game/flow';
 import { GameScene } from './game/GameScene';
@@ -30,6 +31,11 @@ import { createTerminal } from './ui/terminal/terminal';
 import { HelloScene } from './view/HelloScene';
 
 const args = readArgs(window.location.search);
+// the page speaks the language of the game: index.html is written in English
+document.documentElement.lang = LANG;
+document
+  .querySelector('meta[name="description"]')
+  ?.setAttribute('content', L('B2B SaaS — тайкун про то, как в одиночку собрать свой стартап на ИИ', 'B2B SaaS — a tycoon about building your own AI startup single-handedly'));
 installMetrics();
 
 const rng = createRng(args.seed);
@@ -51,10 +57,10 @@ mountUiScale(stage, top);
 
 // text needs the web fonts before the first frame
 await Promise.all([
-  document.fonts.load('700 32px "JetBrains Mono"', 'Клод $0'),
-  document.fonts.load('400 24px "JetBrains Mono"', 'Клод $0'),
-  document.fonts.load('600 64px "Source Serif 4"', 'Блок $0'),
-  document.fonts.load('400 24px "Source Serif 4"', 'Блок $0'),
+  document.fonts.load('700 32px "JetBrains Mono"', L('Клод $0', 'Claude $0')),
+  document.fonts.load('400 24px "JetBrains Mono"', L('Клод $0', 'Claude $0')),
+  document.fonts.load('600 64px "Source Serif 4"', L('Блок $0', 'Block $0')),
+  document.fonts.load('400 24px "Source Serif 4"', L('Блок $0', 'Block $0')),
 ]).catch(() => undefined);
 
 function start(scene: Phaser.Scene): void {
@@ -89,6 +95,17 @@ function reload(again: boolean): void {
     // no storage: the menu will be shown again
   }
   window.location.reload();
+}
+
+/** The other language: the choice is kept and the page starts over in it, on the menu again. */
+function switchLanguage(settings: Settings): void {
+  settings.lang = LANG === 'en' ? 'ru' : 'en';
+  saveSettings(settings);
+  // an address that asks for a language would overrule the menu
+  const url = new URL(window.location.href);
+  url.searchParams.delete('lang');
+  if (url.href === window.location.href) window.location.reload();
+  else window.location.replace(url.href);
 }
 
 /** The whole game: the terminal with the menu and the idea, the run on the sheet, the ending in the terminal. */
@@ -126,11 +143,16 @@ async function play(): Promise<void> {
     playSound(name);
   });
 
-  term.open('терминал основателя');
+  term.open(L('терминал основателя', 'the founder’s terminal'));
   if (!takeAgain() || args.menu) {
     for (;;) {
       const choice = await menu(term, meta, audio, __VERSION__);
       if (choice === 'start') break;
+      if (choice === 'lang') {
+        switchLanguage(settings);
+        // the page is leaving: nothing more is asked on this one
+        return;
+      }
       audio.toggle(choice);
     }
   }

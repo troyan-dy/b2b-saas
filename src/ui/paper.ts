@@ -1,4 +1,5 @@
 import './paper.css';
+import { L } from '../core/lang';
 
 export interface ShelfItem {
   id: string;
@@ -94,7 +95,7 @@ export function createPaper(under: HTMLElement, over: HTMLElement): Paper {
     '<div class="bl-cells"></div><div class="bl-tags"></div><div class="bl-pops"></div>' +
     '<div class="bl-term"><i></i><div></div></div><div class="bl-call"></div>' +
     // the shelf and the news stand above the canvas: nothing drawn on the sheet may cover them
-    '<div class="bl-shop"></div><div class="bl-news"><i>НОВОСТИ</i><span></span><em></em></div>';
+    `<div class="bl-shop"></div><div class="bl-news"><i>${L('НОВОСТИ', 'NEWS')}</i><span></span><em></em></div>`;
   over.append(top);
 
   const hud = sheet.querySelector('.bl-hud') as HTMLElement;

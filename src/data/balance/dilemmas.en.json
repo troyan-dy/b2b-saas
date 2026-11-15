@@ -1,0 +1,81 @@
+{
+  "tests": {
+    "text": "I can delete the tests: they are blocking the release. We’ll get more done.",
+    "options": [
+      { "label": "Delete them", "note": "+5 squares of build work · +6 tech debt", "result": "The tests are deleted. The release got closer, the conscience — further away" },
+      { "label": "Leave the tests alone", "note": "everything stays as it is", "result": "" }
+    ]
+  },
+  "copy": {
+    "text": "I’ll copy a competitor’s landing page. They copied it from someone too.",
+    "options": [
+      { "label": "Copy it", "note": "+2 leads · +4 tech debt", "result": "The landing page now looks suspiciously like someone else’s. But it works" },
+      { "label": "We’ll make our own", "note": "everything stays as it is", "result": "" }
+    ]
+  },
+  "free": {
+    "text": "Let’s open a free plan. Everyone who didn’t want to pay will come.",
+    "options": [
+      { "label": "Open it", "note": "+3 leads · tokens ×1.3 for three sprints", "result": "The free plan is open. It was found faster than the paid one", "fx": [{}, { "tag": "tokens ×1.3" }] },
+      { "label": "We don’t work for free", "note": "everything stays as it is", "result": "" }
+    ]
+  },
+  "refactor": {
+    "text": "I’ll rewrite everything in a new framework. The old one is already three months old.",
+    "options": [
+      { "label": "Rewrite it", "note": "−12 tech debt · −$400 for tokens", "result": "Everything is rewritten. It works the same, but now it’s trendy" },
+      { "label": "If it works, don’t touch it", "note": "everything stays as it is", "result": "" }
+    ]
+  },
+  "price": {
+    "text": "Let’s raise prices by 15%. Some will leave, the rest will pay for them.",
+    "options": [
+      { "label": "Raise them", "note": "every client’s bill ×1.15 · each leaves with a 15% chance", "result": "Prices went up “due to increased value”", "fx": [{}, { "say": "left: “too expensive”" }] },
+      { "label": "Prices stay", "note": "everything stays as it is", "result": "" }
+    ]
+  },
+  "night": {
+    "text": "You haven’t slept in a while. I can stop reminding you: you’ll work through the night.",
+    "options": [
+      { "label": "Stop reminding me", "note": "full energy · +4 tech debt: the code was written half asleep", "result": "The founder didn’t sleep. The commits show it" },
+      { "label": "I’m going to bed", "note": "everything stays as it is", "result": "" }
+    ]
+  },
+  "haggle": {
+    "text": "Give us a 30% discount. Or we leave for a competitor — it’s the same wrapper.",
+    "options": [
+      { "label": "Give the discount", "note": "their bill ×0.7 forever", "result": "A discount “just for you” has been granted. For the fourth time this month" },
+      { "label": "Refuse", "note": "leaves with a 50% chance", "result": "", "fx": [{ "say": "left for a competitor: there’s a discount" }] }
+    ]
+  },
+  "blogger": {
+    "text": "I have forty thousand followers. I’ll write about you for $400. Natively.",
+    "options": [
+      { "label": "Pay", "note": "−$400 · +3 leads", "result": "The post came out labelled “not an ad”. The ad worked" },
+      { "label": "Decline", "note": "everything stays as it is", "result": "" }
+    ]
+  },
+  "poach": {
+    "text": "A competitor is poaching a client: the same thing, but 20% cheaper.",
+    "options": [
+      { "label": "Lower their price", "note": "their bill ×0.8 forever", "result": "The client stayed. And learned that prices are negotiable" },
+      { "label": "Call them yourself", "note": "−3 energy · stays with a 70% chance", "result": "The founder called the client in person. The client was surprised the company has a founder", "fx": [{}, { "say": "left for a competitor: cheaper" }] },
+      { "label": "Let them go", "note": "the client leaves", "result": "", "fx": [{ "say": "left for a competitor: cheaper" }] }
+    ]
+  },
+  "press": {
+    "text": "Is it true that your product is just a wrapper around Claude?",
+    "options": [
+      { "label": "“Yes. And proud of it”", "note": "+1 lead", "result": "The founder honestly called the product a wrapper. The market rewarded the courage with one lead" },
+      { "label": "“We have our own model”", "note": "+3 leads · may be exposed: 35% chance, two clients leave", "result": "The startup claimed to have its own model. The model is suspiciously polite", "fx": [{}, { "say": "left: “you lied to us”", "text": "A journalist found the phrase “as an AI assistant made by Anthropic” in the product’s answers. Two clients left" }] },
+      { "label": "No comment", "note": "everything stays as it is", "result": "" }
+    ]
+  },
+  "conf": {
+    "text": "We invite you to speak at the “AI Transformation of Business” conference. We need a forty-minute talk.",
+    "options": [
+      { "label": "Go", "note": "+4 leads · no energy left", "result": "The founder gave a talk called “How We Reimagined Everything”. There were sixty slides" },
+      { "label": "Stay and work", "note": "everything stays as it is", "result": "" }
+    ]
+  }
+}
