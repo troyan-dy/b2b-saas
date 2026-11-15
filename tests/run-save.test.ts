@@ -291,7 +291,8 @@ describe('company save', () => {
     }));
     refreshRun(run);
     step(run, TUNING.sprint_s);
-    expect(run.call?.slot).toBe(-1);
+    run.call = {id: run.nextId++, type: 'corp', name: 'Waiting buyer', texture: IDEAS.corp[0].texture, pay: 100, want: 'core', wantLevel: 1, patience: 5, happy: false, slot: -1, deal: 1, promised: false};
+    expect(run.call.slot).toBe(-1);
     expect(saveRun(run)).toBe(true);
     const loaded = loadRun()!;
     expect(snapshot(loaded)).toEqual(snapshot(run));

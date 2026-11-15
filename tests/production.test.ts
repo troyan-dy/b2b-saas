@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { BLOCKS } from '../src/content/blocks';
 import { blockEffects } from '../src/systems/run/product';
 import { dealDraft, DRAFT_CARDS, releaseCard } from '../src/systems/run/draft';
 import { enqueueTask } from '../src/systems/run/production';
@@ -330,9 +331,9 @@ describe('production queue and sprint choices', () => {
     expect(run.events.filter((event) => event.type === 'card-applied')).toHaveLength(4);
   });
 
-  it('gives all twenty blocks a growing independent effect and restores derived effects', () => {
+  it('gives every catalog block a growing independent effect and restores derived effects', () => {
     const run = fresh(['core', 'bot']);
-    expect(Object.keys(RULES)).toHaveLength(20);
+    expect(Object.keys(RULES).sort()).toEqual(BLOCKS.map((block) => block.id).sort());
     for (const kind of Object.keys(RULES)) {
       expect(Object.keys(blockEffects(kind, 1)).length).toBeGreaterThan(0);
       expect(blockEffects(kind, 2)).not.toEqual(blockEffects(kind, 1));

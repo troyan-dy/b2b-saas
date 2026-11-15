@@ -13,7 +13,7 @@ import {
   type MarketContext,
 } from '../systems/company/market';
 import { DRAFT_CARDS, draftCards } from '../systems/run/draft';
-import { blockEffects, PRODUCTION } from '../systems/run/product';
+import { blockEffects, PRODUCTION, STRATEGY_IDS, strategyCount } from '../systems/run/product';
 import { activeWork, apiWorkQuote, remainingBuildCapacity } from '../systems/run/production';
 import {
   cellsMax,
@@ -175,13 +175,6 @@ function moduleLinks(run: Run, kind: string): string[] {
         `CRM v2 next to support v2: request of ${premiumShare}% of large companies`,
       ),
     );
-  if (allowed.has('onb') && allowed.has('bot') && (kind === 'onb' || kind === 'bot'))
-    result.push(
-      L(
-        'Обучение + поддержка: массовая специализация удваивает мощность поддержки',
-        'Onboarding + support: mass specialization doubles support capacity',
-      ),
-    );
   return result;
 }
 
@@ -209,10 +202,7 @@ function moduleView(
           : L('Сначала ядро', 'Core first');
   const specializations =
     kind === 'core'
-      ? [
-          `${L('Поддержка', 'Support')} ${run.strategy.support ? (DRAFT_CARDS.find((card) => card.id === run.strategy.support)?.title ?? run.strategy.support) : '0/1'}`,
-          `${L('Обработка', 'Processing')} ${run.strategy.processing ? (DRAFT_CARDS.find((card) => card.id === run.strategy.processing)?.title ?? run.strategy.processing) : '0/1'}`,
-        ].join(' · ')
+      ? STRATEGY_IDS.filter((id) => strategyCount(run, id) > 0).map((id) => `${DRAFT_CARDS.find((card) => card.id === id)?.title} ×${strategyCount(run, id)}`).join(' · ')
       : undefined;
   return {
     id: kind,
@@ -455,9 +445,9 @@ export function workbenchView(run: Run, selection: WorkbenchSelection): Workbenc
     clientAnchor: selection.clientAnchor,
     selectedModule: selection.selectedModule,
     applied: selection.applied,
-    perks: [run.strategy.support, run.strategy.processing].flatMap((id) => {
+    perks: STRATEGY_IDS.filter((id) => strategyCount(run, id) > 0).flatMap((id) => {
       const card = DRAFT_CARDS.find((entry) => entry.id === id);
-      return card ? [{ id: card.id, title: card.title, impact: card.impact }] : [];
+      return card ? [{ id: card.id, title: `${card.title} ×${strategyCount(run, id)}`, impact: card.impact }] : [];
     }),
     tasks,
     modules,
