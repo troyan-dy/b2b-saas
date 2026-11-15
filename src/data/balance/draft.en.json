@@ -1,27 +1,27 @@
 {
   "mass": {
     "title": "The client served itself",
-    "description": "Mass support takes effect now. Linking onboarding to AI support doubles company support capacity; compute capacity remains a separate limit.",
-    "impact": "Now: promotion ×2 · +4 seats",
-    "tradeoff": "Replaces personal support. Hosting +$32 per sprint."
+    "description": "Clients serve themselves. Link onboarding to AI support to double support capacity. Compute can still be the bottleneck.",
+    "impact": "Promotion ×2 · +4 named contract slots",
+    "tradeoff": "Hosting +$32 per sprint. Cannot run alongside personal support."
   },
   "premium": {
     "title": "Now that is enterprise",
-    "description": "Personal support takes effect now. CRM v2 linked to AI support lets large companies accept a price up to ×2 without a price penalty. You set the price yourself.",
-    "impact": "Now: named corporate contracts ×2 · patience +2",
-    "tradeoff": "Replaces mass support. With batch processing, the penalty-free price limit is ×1.25. Hosting +$96 per sprint."
+    "description": "Large clients get a personal manager. CRM v2 linked to AI support lets large companies accept a price up to ×2 without a penalty. You set the price yourself.",
+    "impact": "Named corporate bills ×2 · patience +2",
+    "tradeoff": "Hosting +$96 per sprint. With batch processing, the penalty-free price limit is only ×1.25."
   },
   "batch": {
     "title": "Your answer was ready yesterday",
-    "description": "Start batching requests now: the model processes the whole group in one run.",
-    "impact": "Now: tokens −50%",
-    "tradeoff": "Large companies: satisfaction −12. Companies needing instant answers become less satisfied and stop joining. Replaces instant answers; contract patience −1."
+    "description": "Requests run in batches: the model processes a whole group at once. Cheaper, but answers take longer.",
+    "impact": "Token cost −50%",
+    "tradeoff": "Large-company satisfaction −12, named-client patience −1. Clients needing fast answers stop joining."
   },
   "instant": {
     "title": "While you were typing",
-    "description": "Enable instant answers now. Clients recommend the product and wait longer for improvements.",
-    "impact": "Now: promotion ×1.5 · patience +2",
-    "tradeoff": "Replaces batches. Tokens +20%, hosting +$48 per sprint."
+    "description": "Every request is processed immediately. Clients recommend the product and wait longer for improvements.",
+    "impact": "Promotion ×1.5 · patience +2",
+    "tradeoff": "Tokens +20%, hosting +$48 per sprint. Cannot run alongside batch processing."
   },
   "leads": {
     "title": "Someone noticed us in a chat",
