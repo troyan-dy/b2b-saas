@@ -22,6 +22,7 @@ export interface WorkbenchTask {
 export interface WorkbenchModule {
   readonly id: string;
   readonly title: string;
+  readonly shortTitle?: string;
   readonly level: number;
   readonly current: string;
   readonly next: string;
@@ -173,7 +174,7 @@ function button(
 }
 
 function moduleCard(module: WorkbenchModule): string {
-  const title = esc(module.title) + (module.level ? ` v${module.level + 1}` : '');
+  const title = esc(module.shortTitle ?? module.title) + (module.level ? ` v${module.level + 1}` : '');
   const effect = esc(
     primary(module.next || module.current).replace('мест именных договоров', 'договоры'),
   );
