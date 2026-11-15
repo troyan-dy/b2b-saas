@@ -103,7 +103,18 @@ export interface WorkbenchView {
     readonly label: string;
     readonly detail: string;
     readonly disabled?: boolean;
+    readonly load?: number;
+    readonly capacity?: number;
+    readonly nextCapacity?: number;
+    readonly utilization?: number;
+    readonly cost?: number;
+    readonly work?: number;
+    readonly progress?: number;
+    readonly level?: number;
+    readonly status?: 'queued' | 'active' | 'ready' | 'backlog';
+    readonly taskId?: string;
   };
+  readonly clientAnchor?: { readonly x: number; readonly y: number };
   readonly selectedSegment?: SegmentId;
   readonly panel?: 'module' | 'clients' | null;
   readonly selectedModule?: string;
@@ -124,6 +135,7 @@ export type WorkbenchAction =
   | { type: 'preview-price'; segment: SegmentId; value: number }
   | { type: 'confirm-price'; segment: SegmentId }
   | { type: 'expand-infrastructure' }
+  | { type: 'cancel-task'; task: string }
   | { type: 'select-segment'; segment: SegmentId };
 
 const esc = (value: string): string =>
@@ -285,6 +297,81 @@ function moduleDetail(module: WorkbenchModule): string {
   );
 }
 
+function infrastructureCard(infra: NonNullable<WorkbenchView['infrastructure']>): string {
+  const utilization = Math.max(0, infra.utilization ?? 0);
+  const percent = Math.round(utilization * 100);
+  const state = utilization > 1 ? 'overloaded' : utilization >= 0.8 ? 'busy' : 'spare';
+  const stateText =
+    utilization > 1
+      ? L('Перегруз · клиенты уходят', 'Overloaded · clients leave')
+      : utilization >= 0.8
+        ? L('Почти заполнено', 'Nearly full')
+        : L('Есть запас', 'Room to grow');
+  const status =
+    infra.status === 'ready'
+      ? L('Готово · включится на релизе', 'Ready · goes live at release')
+      : infra.status === 'active'
+        ? L(
+            `Строится · ${Math.round((infra.progress ?? 0) * 100)}%`,
+            `Building · ${Math.round((infra.progress ?? 0) * 100)}%`,
+          )
+        : infra.status === 'queued'
+          ? L('В очереди на стройку', 'Waiting for construction')
+          : infra.status === 'backlog'
+            ? L('Отложено', 'Deferred')
+            : '';
+  const effect =
+    infra.nextCapacity !== undefined
+      ? L(
+          `Мощность ${whole(infra.capacity ?? 0)} → ${whole(infra.nextCapacity)}`,
+          `Capacity ${whole(infra.capacity ?? 0)} → ${whole(infra.nextCapacity)}`,
+        )
+      : L('Больше клиентов без перегруза', 'More clients without overload');
+  return (
+    `<article class="wb-build wb-infrastructure-card wb-load-${state}">` +
+    '<div class="wb-capacity" role="img" aria-label="' +
+    esc(
+      L(
+        `Загрузка инфраструктуры ${percent}%. ${stateText}`,
+        `Infrastructure load ${percent}%. ${stateText}`,
+      ),
+    ) +
+    '">' +
+    '<div><span>' +
+    L('ЗАГРУЗКА', 'LOAD') +
+    `</span><b>${percent}%</b></div>` +
+    `<div class="wb-capacity-track"><i style="width:${Math.min(100, percent)}%"></i></div>` +
+    `<span class="wb-capacity-numbers">${whole(infra.load ?? 0)} / ${whole(infra.capacity ?? 0)}</span>` +
+    '<span class="wb-capacity-state">' +
+    stateText +
+    '</span></div>' +
+    button(
+      'expand-infrastructure',
+      '',
+      '<strong>' +
+        L('Инфраструктура', 'Infrastructure') +
+        ` v${(infra.level ?? 0) + 1}</strong>` +
+        `<span class="wb-build-work"><i aria-hidden="true"></i>${whole(infra.work ?? 0)}</span>` +
+        '<span class="wb-build-effect">' +
+        esc(status || effect) +
+        '</span>' +
+        '<span class="wb-build-price">' +
+        (infra.cost === undefined ? esc(infra.label) : money(infra.cost)) +
+        '</span>',
+      infra.disabled,
+      'wb-build-main wb-infrastructure-buy',
+      infra.detail,
+    ) +
+    (infra.taskId
+      ? '<div class="wb-infrastructure-progress">' +
+        `<progress max="1" value="${infra.progress ?? 0}" aria-label="${esc(status)}"></progress>` +
+        button('cancel-task', infra.taskId, L('Отменить', 'Cancel'), false, 'wb-text-button') +
+        '</div>'
+      : '') +
+    '</article>'
+  );
+}
+
 function needHtml(need: WorkbenchNeed): string {
   return (
     '<li><div class="wb-need-title">' +
@@ -298,9 +385,7 @@ function needHtml(need: WorkbenchNeed): string {
     esc(need.effect) +
     '</p>' +
     (need.action === 'none'
-      ? '<span class="wb-muted">' +
-        esc(need.actionLabel ?? L('Нужный уровень выпущен', 'Required level shipped')) +
-        '</span>'
+      ? ''
       : button(
           need.action,
           need.block,
@@ -308,63 +393,6 @@ function needHtml(need: WorkbenchNeed): string {
           need.disabled,
         )) +
     '</li>'
-  );
-}
-
-function draftHtml(draft: WorkbenchDraft): string {
-  return (
-    '<section class="wb-draft-panel" role="dialog" aria-modal="true" aria-labelledby="wb-draft-title">' +
-    '<header><span class="wb-kicker">' +
-    L('Пауза · время не идёт', 'Paused · time is stopped') +
-    '</span>' +
-    '<h2 id="wb-draft-title">' +
-    L(
-      'Спринт ' + draft.sprint + '. Выбери усиление',
-      'Sprint ' + draft.sprint + '. Choose a boost',
-    ) +
-    '</h2></header><details class="wb-release"><summary>' +
-    L('Как прошёл спринт', 'Sprint recap') +
-    '</summary><p>' +
-    esc(draft.summary) +
-    '</p>' +
-    (draft.news
-      ? '<div class="wb-draft-news"><strong>' +
-        esc(draft.news.title) +
-        '</strong><span>' +
-        esc(draft.news.text) +
-        '</span></div>'
-      : '') +
-    '</details><div class="wb-draft-cards">' +
-    draft.cards
-      .slice(0, 3)
-      .map(
-        (card, index) =>
-          '<article class="wb-draft-card"><h3>' +
-          esc(card.title) +
-          '</h3>' +
-          '<strong class="wb-impact">' +
-          esc(primary(card.impact)) +
-          '</strong>' +
-          '<p class="wb-tradeoff">' +
-          esc(card.tradeoff) +
-          '</p>' +
-          '<span class="wb-immediate">' +
-          L('Действует сразу', 'Takes effect immediately') +
-          '</span>' +
-          button(
-            'choose-card',
-            card.id,
-            '<kbd>' + (index + 1) + '</kbd> ' + L('Выбрать', 'Choose'),
-          ) +
-          '</article>',
-      )
-      .join('') +
-    '</div><footer>' +
-    L(
-      'Один выбор. Спринт продолжится, когда решишь.',
-      'One choice. The sprint continues when you decide.',
-    ) +
-    '</footer></section>'
   );
 }
 
@@ -387,21 +415,36 @@ export function createWorkbench(
     '<section class="wb-catalog"><header><h2 tabindex="-1">' +
     L('БЛОКИ', 'BLOCKS') +
     '</h2></header>' +
-    '<div class="wb-builds"></div><ul class="wb-perks" aria-label="' +
-    L('Активные эффекты', 'Active effects') +
-    '" hidden></ul></section>' +
+    '<div class="wb-builds"></div></section>' +
     '<section class="wb-detail wb-module-panel" aria-label="' +
     L('Постройка', 'Building') +
     '" hidden>' +
     '<header>' +
     back +
-    '</header><div class="wb-panel-scroll wb-module-content"></div></section>' +
-    '<section class="wb-detail wb-client-panel" aria-label="' +
-    L('Клиенты', 'Clients') +
-    '" hidden><header>' +
-    back +
-    '</header><div class="wb-panel-scroll wb-client-content"><h2></h2><p class="wb-client-count"></p>' +
+    '</header><div class="wb-panel-scroll wb-module-content"></div></section>';
+  shop.prepend(root);
+  const clientPanel = document.createElement('section');
+  clientPanel.className = 'wb-main wb-client-panel wb-client-popup';
+  clientPanel.hidden = true;
+  clientPanel.setAttribute('role', 'dialog');
+  clientPanel.setAttribute('aria-modal', 'false');
+  clientPanel.setAttribute('aria-labelledby', 'wb-client-title');
+  clientPanel.innerHTML =
+    '<header><h2 id="wb-client-title"></h2>' +
+    button(
+      'close-panel',
+      '',
+      '<span aria-hidden="true">×</span><span class="wb-sr-only">' +
+        L('Закрыть сведения о клиентах', 'Close client details') +
+        '</span>',
+      false,
+      'wb-back wb-client-close',
+    ) +
+    '</header><div class="wb-panel-scroll wb-client-content"><p class="wb-client-count"></p>' +
     '<div class="wb-happiness"><span></span><meter min="0" max="100"></meter></div>' +
+    '<section class="wb-client-needs"><h3>' +
+    L('Что им нужно', 'What they need') +
+    '</h3><ul class="wb-needs"></ul></section>' +
     '<section class="wb-price"><label for="wb-price">' +
     L('Тариф', 'Tariff') +
     '<output for="wb-price"></output></label>' +
@@ -415,53 +458,27 @@ export function createWorkbench(
       'wb-primary',
     ) +
     '</section>' +
-    '<section class="wb-client-needs"><h3>' +
-    L('Что им нужно', 'What they need') +
-    '</h3><ul class="wb-needs"></ul></section>' +
-    '<details class="wb-market-detail"><summary>' +
-    L('Рынок и удовлетворённость', 'Market and satisfaction') +
-    '</summary><p class="wb-market-numbers"></p><p class="wb-reasons"></p></details>' +
-    '<details class="wb-contracts"><summary>' +
-    L('Ключевые договоры', 'Key contracts') +
-    '</summary><p>' +
+    '<section class="wb-contracts"><h3>' +
+    L('Именные договоры', 'Named contracts') +
+    '</h3><p>' +
     L(
       'Их фиксированные тарифы считаются отдельно. Ползунок выше на них не влияет.',
       'Their fixed tariffs are counted separately. The slider above does not affect them.',
     ) +
-    '</p><ul></ul></details>' +
-    '<details class="wb-infrastructure"><summary>' +
-    L('Расширить инфраструктуру', 'Expand infrastructure') +
-    '</summary><p></p>' +
-    button('expand-infrastructure', '', L('Расширить', 'Expand')) +
-    '</details></div></section>';
-  shop.prepend(root);
-
-  const draft = document.createElement('div');
-  draft.className = 'wb-draft';
-  draft.hidden = true;
-  const applied = document.createElement('div');
-  applied.className = 'wb-applied';
-  applied.hidden = true;
-  applied.setAttribute('role', 'status');
-  applied.setAttribute('aria-live', 'polite');
-  over.append(draft, applied);
+    '</p><ul></ul></section>' +
+    '<p class="wb-market-numbers"></p><p class="wb-reasons"></p></div>';
+  over.append(clientPanel);
 
   const find = <T extends HTMLElement = HTMLElement>(selector: string): T =>
-    root.querySelector<T>(selector)!;
+    (root.querySelector<T>(selector) ?? clientPanel.querySelector<T>(selector))!;
   const catalog = find('.wb-catalog');
   const modulePanel = find('.wb-module-panel');
-  const clientPanel = find('.wb-client-panel');
   const client = find('.wb-client-content');
   const signatures = new WeakMap<HTMLElement, string>();
   let view: WorkbenchView | null = null;
   let panelKey = '';
   let clientId: SegmentId | null = null;
-  let draftKey = '';
-  let chosenDraft = false;
-  let beforeDraft: HTMLElement | null = null;
   let beforePanel: HTMLElement | null = null;
-  let appliedKey = '';
-  let appliedTimer = 0;
 
   const text = (node: HTMLElement, value: string): void => {
     if (node.textContent !== value) node.textContent = value;
@@ -477,23 +494,11 @@ export function createWorkbench(
         .find((el) => el.dataset.wbKey === key)
         ?.focus({ preventScroll: true });
   };
-  const chooseCard = (id: string): void => {
-    if (!view?.draft || chosenDraft || !view.draft.cards.some((card) => card.id === id)) return;
-    chosenDraft = true;
-    draft.querySelectorAll<HTMLButtonElement>('button').forEach((el) => {
-      el.disabled = true;
-    });
-    send({ type: 'choose-card', id });
-  };
   const click = (event: MouseEvent): void => {
     const target = (event.target as HTMLElement).closest<HTMLButtonElement>('button');
     if (!target || target.disabled || !view) return;
     const action = target.dataset.wbAction;
     const id = target.dataset.wbId ?? '';
-    if (action === 'choose-card') {
-      chooseCard(id);
-      return;
-    }
     if (view.draft) return;
     switch (action) {
       case 'place':
@@ -511,11 +516,14 @@ export function createWorkbench(
       case 'expand-infrastructure':
         send({ type: 'expand-infrastructure' });
         break;
+      case 'cancel-task':
+        send({ type: 'cancel-task', task: id });
+        break;
     }
   };
   root.addEventListener('click', click);
-  draft.addEventListener('click', click);
-  root.addEventListener('input', (event) => {
+  clientPanel.addEventListener('click', click);
+  clientPanel.addEventListener('input', (event) => {
     const input = event.target as HTMLInputElement;
     if (!input.matches('[data-wb-price]') || !view || view.draft || input.disabled) return;
     const value = Number(input.value);
@@ -524,6 +532,9 @@ export function createWorkbench(
   });
   root.addEventListener('keydown', (event) => {
     if ((event.target as HTMLElement).closest('button, input, summary')) event.stopPropagation();
+  });
+  clientPanel.addEventListener('keydown', (event) => {
+    if ((event.target as HTMLElement).closest('button, input')) event.stopPropagation();
   });
   window.addEventListener(
     'keydown',
@@ -536,28 +547,11 @@ export function createWorkbench(
         event.metaKey
       )
         return;
-      if (!view.draft) {
-        if (view.panel && event.code === 'Escape') {
-          event.preventDefault();
-          event.stopImmediatePropagation();
-          send({ type: 'close-panel' });
-        }
-        return;
+      if (!view.draft && view.panel && event.code === 'Escape') {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        send({ type: 'close-panel' });
       }
-      event.stopImmediatePropagation();
-      const digit = /^(?:Digit|Numpad)([1-3])$/.exec(event.code);
-      if (digit) {
-        event.preventDefault();
-        if (!event.repeat) {
-          const card = view.draft.cards[Number(digit[1]) - 1];
-          if (card) chooseCard(card.id);
-        }
-      } else if (event.code === 'Tab') {
-        event.preventDefault();
-        const buttons = [...draft.querySelectorAll<HTMLElement>('button:not(:disabled), summary')];
-        const at = buttons.indexOf(document.activeElement as HTMLButtonElement);
-        buttons[(at + (event.shiftKey ? -1 : 1) + buttons.length) % buttons.length]?.focus();
-      } else if (event.code === 'Escape') event.preventDefault();
     },
     true,
   );
@@ -565,13 +559,8 @@ export function createWorkbench(
   function updateSegment(segment: WorkbenchSegment): void {
     const changed = clientId !== segment.id;
     clientId = segment.id;
-    if (changed) {
-      client.scrollTop = 0;
-      client.querySelectorAll<HTMLDetailsElement>('details').forEach((details) => {
-        details.open = false;
-      });
-    }
-    text(client.querySelector('h2')!, segment.title);
+    if (changed) client.scrollTop = 0;
+    text(clientPanel.querySelector('h2')!, segment.title);
     text(
       find('.wb-client-count'),
       L(
@@ -642,30 +631,24 @@ export function createWorkbench(
         ? L('Назначено на релиз', 'Scheduled for release')
         : L('На следующий релиз', 'Apply next release'),
     );
-    const infrastructure = find('.wb-infrastructure');
-    infrastructure.hidden = !view?.infrastructure;
-    if (view?.infrastructure) {
-      text(infrastructure.querySelector('p')!, view.infrastructure.detail);
-      const expand = infrastructure.querySelector('button')!;
-      text(expand, view.infrastructure.label);
-      expand.disabled = Boolean(view.draft || view.infrastructure.disabled);
-    }
   }
 
-  function updateApplied(value: WorkbenchView['applied']): void {
-    const key = value ? value.title + '\n' + value.impact : '';
-    if (key === appliedKey) return;
-    appliedKey = key;
-    window.clearTimeout(appliedTimer);
-    applied.hidden = !value;
-    if (!value) return;
-    html(
-      applied,
-      '<span>' + esc(value.title) + '</span><strong>' + esc(value.impact) + '</strong>',
+  function positionClients(): void {
+    const anchor = view?.clientAnchor ?? { x: 1110, y: 910 };
+    const left = Math.min(
+      1320 - clientPanel.offsetWidth,
+      Math.max(20, anchor.x - clientPanel.offsetWidth / 2),
     );
-    appliedTimer = window.setTimeout(() => {
-      applied.hidden = true;
-    }, 4500);
+    const top = Math.min(
+      1004 - clientPanel.offsetHeight,
+      Math.max(272, anchor.y - clientPanel.offsetHeight - 20),
+    );
+    clientPanel.style.left = `${left}px`;
+    clientPanel.style.top = `${top}px`;
+    clientPanel.style.setProperty(
+      '--client-pointer-x',
+      `${Math.max(24, Math.min(clientPanel.offsetWidth - 24, anchor.x - left))}px`,
+    );
   }
 
   return {
@@ -676,35 +659,18 @@ export function createWorkbench(
       view = next;
       root.hidden = !view;
       root.inert = Boolean(view?.draft);
+      clientPanel.inert = Boolean(view?.draft);
       shop.classList.toggle('wb-enabled', Boolean(view));
       if (!view) {
-        draft.hidden = true;
-        draftKey = '';
+        clientPanel.hidden = true;
         panelKey = '';
-        chosenDraft = false;
-        updateApplied(null);
         return;
       }
-      const perks = find('.wb-perks');
-      perks.hidden = !view.perks?.length;
-      html(
-        perks,
-        (view.perks ?? [])
-          .map(
-            (perk) =>
-              '<li title="' +
-              esc(perk.title + ': ' + perk.impact) +
-              '">' +
-              esc(primary(perk.impact) || perk.title) +
-              '</li>',
-          )
-          .join(''),
-      );
       const panel = view.panel ?? null;
-      root.classList.toggle('wb-context', panel !== null);
-      catalog.hidden = panel !== null;
+      root.classList.toggle('wb-context', panel === 'module');
+      catalog.hidden = panel === 'module';
       modulePanel.hidden = panel !== 'module';
-      clientPanel.hidden = panel !== 'clients';
+      clientPanel.hidden = panel !== 'clients' || Boolean(view.draft);
       if (!view.draft) {
         const builds = view.modules
           .filter((module) => module.action === 'place' && !module.disabled)
@@ -719,14 +685,15 @@ export function createWorkbench(
         ];
         html(
           find('.wb-builds'),
-          available.length
-            ? available.map(moduleCard).join('')
-            : '<p class="wb-empty">' +
+          (view.infrastructure ? infrastructureCard(view.infrastructure) : '') +
+            (available.length
+              ? available.map(moduleCard).join('')
+              : '<p class="wb-empty">' +
                 L(
                   'Всё доступное уже на чертеже.<br>Кликни здание, чтобы улучшить его.',
                   'Everything available is on the blueprint.<br>Click a building to improve it.',
                 ) +
-                '</p>',
+                '</p>'),
         );
       }
       if (panel === 'module') {
@@ -742,7 +709,10 @@ export function createWorkbench(
       }
       const segment =
         view.segments.find((entry) => entry.id === view?.selectedSegment) ?? view.segments[0];
-      if (panel === 'clients' && segment) updateSegment(segment);
+      if (panel === 'clients' && segment) {
+        updateSegment(segment);
+        positionClients();
+      }
       const nextPanelKey =
         panel === 'module'
           ? 'module:' + (view.selectedModule ?? '')
@@ -761,21 +731,6 @@ export function createWorkbench(
         }
         if (panel === 'module') find('.wb-module-content').scrollTop = 0;
         panelKey = nextPanelKey;
-      }
-      updateApplied(view.applied);
-      draft.hidden = !view.draft;
-      const key = view.draft
-        ? view.draft.sprint + ':' + view.draft.cards.map((card) => card.id).join(',')
-        : '';
-      if (key !== draftKey) {
-        const wasDraft = draftKey !== '';
-        draftKey = key;
-        chosenDraft = false;
-        if (view.draft) {
-          if (!wasDraft) beforeDraft = document.activeElement as HTMLElement | null;
-          html(draft, draftHtml(view.draft));
-          draft.querySelector<HTMLButtonElement>('button')?.focus({ preventScroll: true });
-        } else if (beforeDraft?.isConnected) beforeDraft.focus({ preventScroll: true });
       }
     },
   };

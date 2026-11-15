@@ -1,15 +1,11 @@
-.wb-main,
-.wb-draft,
-.wb-applied {
+.wb-main {
   box-sizing: border-box;
   font: 400 16px/1.45 var(--mono);
   font-variant-numeric: tabular-nums;
   color: var(--ink);
 }
 .wb-main[hidden],
-.wb-main [hidden],
-.wb-draft[hidden],
-.wb-applied[hidden] {
+.wb-main [hidden] {
   display: none;
 }
 /* The block shelf keeps the dimensions and flow of paper.css at 28053a4. */
@@ -28,10 +24,7 @@
 .wb-main h2,
 .wb-main h3,
 .wb-main p,
-.wb-main ul,
-.wb-draft h2,
-.wb-draft h3,
-.wb-draft p {
+.wb-main ul {
   margin: 0;
   padding: 0;
 }
@@ -47,8 +40,7 @@
 .wb-main h3 {
   font: 400 19px/1.25 var(--serif);
 }
-.wb-main button,
-.wb-draft button {
+.wb-main button {
   box-sizing: border-box;
   font: inherit;
   color: inherit;
@@ -63,19 +55,16 @@
   border-color: var(--ink);
   background: #fff;
 }
-.wb-main button:active:not(:disabled),
-.wb-draft button:active:not(:disabled) {
+.wb-main button:active:not(:disabled) {
   transform: translateY(1px);
 }
 .wb-main button:focus-visible,
 .wb-main input:focus-visible,
-.wb-main summary:focus-visible,
-.wb-draft button:focus-visible {
+.wb-main summary:focus-visible {
   outline: 2px solid var(--blue);
   outline-offset: 2px;
 }
-.wb-main button:disabled,
-.wb-draft button:disabled {
+.wb-main button:disabled {
   color: var(--dim);
   border-color: var(--rule);
   background: var(--paper);
@@ -105,19 +94,6 @@
 .wb-market-detail,
 .wb-contracts {
   color: var(--dim);
-}
-.wb-perks {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 2px 10px;
-  list-style: none;
-  margin-top: 7px !important;
-  font: 400 13px/1.3 var(--mono);
-  color: var(--dim);
-}
-.wb-perks li + li::before {
-  content: '·';
-  margin-right: 10px;
 }
 .wb-catalog {
   display: block;
@@ -211,6 +187,89 @@
 .wb-main .wb-build-info:hover {
   color: var(--ink);
   background: transparent;
+}
+.wb-infrastructure-card {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: 42% minmax(0, 1fr);
+  border-color: var(--rule);
+  margin-bottom: 3px;
+}
+.wb-capacity {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 5px;
+  padding: 9px 12px;
+  border-right: 1px solid var(--rule);
+  font: 400 12px/1.25 var(--mono);
+}
+.wb-capacity > div:first-child {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  white-space: nowrap;
+}
+.wb-capacity b {
+  font-weight: 700;
+}
+.wb-capacity-track {
+  height: 8px;
+  border: 1px solid var(--ink-soft);
+  background: var(--paper);
+}
+.wb-capacity-track i {
+  display: block;
+  height: 100%;
+  background: var(--sage);
+}
+.wb-capacity-state {
+  color: var(--dim);
+}
+.wb-load-busy .wb-capacity-track i {
+  background: var(--sand, #d4a27f);
+}
+.wb-load-overloaded {
+  border-color: var(--ink);
+}
+.wb-load-overloaded .wb-capacity-track i {
+  background: var(--ink);
+}
+.wb-load-overloaded .wb-capacity-state {
+  color: var(--ink);
+  font-weight: 700;
+}
+.wb-main .wb-infrastructure-buy {
+  align-content: center;
+  padding: 8px 10px;
+  min-height: 70px;
+}
+.wb-infrastructure-buy strong {
+  font-size: 16px;
+}
+.wb-infrastructure-progress {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 10px 7px;
+  font: 400 12px var(--mono);
+}
+.wb-infrastructure-progress progress {
+  flex: 1;
+  height: 5px;
+  appearance: none;
+  border: 0;
+  background: var(--paper);
+}
+.wb-infrastructure-progress progress::-webkit-progress-bar {
+  background: var(--paper);
+}
+.wb-infrastructure-progress progress::-webkit-progress-value {
+  background: var(--coral);
+}
+.wb-infrastructure-progress progress::-moz-progress-bar {
+  background: var(--coral);
 }
 .wb-sr-only {
   position: absolute;
@@ -425,177 +484,130 @@
 .wb-infrastructure button {
   font-size: 15px;
 }
-.wb-draft {
+.wb-main.wb-client-popup {
   position: absolute;
-  left: 0;
-  top: 268px;
-  bottom: 58px;
-  width: 1340px;
-  padding: 26px 36px;
-  background: rgba(240, 238, 230, 0.93);
-  pointer-events: auto;
-  z-index: 20;
-  overflow-y: auto;
-}
-.wb-draft-panel {
-  border: 1px solid var(--term-rule);
-  border-radius: 12px;
-  padding: 24px;
-  background: var(--term-panel);
-  color: var(--term-text);
-}
-.wb-kicker {
-  display: block;
-  font-size: 14px;
-  letter-spacing: 0.1em;
-  color: var(--dim);
-}
-.wb-draft header > .wb-kicker::before {
-  content: '';
-  display: inline-block;
-  height: 9px;
-  width: 9px;
-  margin-right: 9px;
-  background: var(--coral);
-}
-.wb-draft h2 {
-  font: 400 28px/1.25 var(--serif);
-  margin: 8px 0 12px;
-}
-.wb-draft header p {
-  font-size: 16px;
-  line-height: 1.5;
-}
-.wb-draft-news {
-  border-top: 1px solid var(--term-rule);
-  border-bottom: 1px solid var(--term-rule);
-  margin: 14px 0;
-  padding: 10px 0;
-  display: flex;
-  align-items: baseline;
-  gap: 14px;
-  font-size: 16px;
-}
-.wb-draft-news strong {
-  flex-shrink: 0;
-  max-width: 28%;
-  font-weight: 400;
-}
-.wb-release {
-  margin-top: 12px;
-  color: var(--term-text);
-}
-.wb-release summary {
-  width: fit-content;
-  cursor: pointer;
-  font: 400 15px var(--mono);
-  color: var(--dim);
-}
-.wb-release > p {
-  padding-top: 12px;
-}
-.wb-draft-cards {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 26px;
-  margin-top: 22px;
-}
-.wb-draft-card {
-  padding: 20px 24px;
-  border: 2px solid var(--ink);
-  border-radius: 16px;
-  background: var(--paper);
-  color: var(--ink);
+  z-index: 14;
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  min-width: 0;
-}
-.wb-draft h3 {
-  font: 400 25px/1.2 var(--serif);
-  min-height: 60px;
-}
-.wb-impact {
-  font: 600 22px/1.35 var(--mono);
-  min-height: 60px;
-}
-.wb-draft-card .wb-tradeoff {
-  font: 400 18px/1.4 var(--serif);
-  color: var(--dim);
-}
-.wb-immediate {
-  margin-top: auto;
-  padding-top: 8px;
-  color: var(--ink-soft);
-  font-size: 14px;
-}
-.wb-draft-card button {
-  width: 100%;
-  color: var(--ink);
-  background: transparent;
-  border-color: var(--ink);
-  padding: 7px 10px;
+  width: 510px;
+  max-height: 710px;
+  padding: 17px 20px 15px;
+  border: 1.5px solid var(--ink);
+  border-radius: 10px;
+  background: var(--card);
+  pointer-events: auto;
   font-size: 16px;
 }
-.wb-draft-card button:hover:not(:disabled) {
-  color: var(--term-bg);
-  background: var(--coral);
+.wb-main.wb-client-popup[hidden] {
+  display: none;
 }
-.wb-draft-card kbd {
-  font: inherit;
-  border: 1px solid currentColor;
-  padding: 0 5px;
-  margin-right: 8px;
-}
-.wb-draft footer {
-  text-align: center;
-  font-size: 16px;
-  margin-top: 16px;
-  color: var(--dim);
-}
-.wb-applied {
-  position: absolute;
-  left: 380px;
-  top: 280px;
-  width: 580px;
-  padding: 14px 20px 16px 46px;
-  border: 1px solid var(--term-rule);
-  border-radius: 12px;
-  background: var(--term-panel);
-  color: var(--term-text);
-  pointer-events: none;
-  z-index: 10;
-  animation: wb-applied-in 180ms ease-out;
-}
-.wb-applied::before {
+.wb-client-popup::after {
   content: '';
   position: absolute;
-  left: 21px;
-  top: 25px;
-  height: 11px;
-  width: 11px;
-  background: var(--coral);
+  left: var(--client-pointer-x, 50%);
+  bottom: -8px;
+  width: 13px;
+  height: 13px;
+  border-right: 1.5px solid var(--ink);
+  border-bottom: 1.5px solid var(--ink);
+  background: var(--card);
+  transform: translateX(-50%) rotate(45deg);
 }
-.wb-applied span,
-.wb-applied strong {
-  display: block;
+.wb-client-popup > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 9px;
 }
-.wb-applied strong {
-  font: 600 24px/1.35 var(--mono);
-  margin-top: 5px;
+.wb-client-popup > header h2 {
+  color: var(--ink);
+  margin: 0;
+  height: auto;
+  letter-spacing: 0;
+  font: 400 26px/1.2 var(--serif);
 }
-@keyframes wb-applied-in {
-  from {
-    opacity: 0;
-    transform: translateY(5px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+.wb-client-popup .wb-client-close {
+  width: 30px;
+  height: 30px;
+  text-align: center;
+  font: 400 26px/1 var(--serif);
 }
-@media (prefers-reduced-motion: reduce) {
-  .wb-applied {
-    animation: none;
-  }
+.wb-client-popup .wb-client-content {
+  padding: 0 7px 0 0;
+  margin-right: -7px;
+}
+.wb-client-popup .wb-client-count {
+  font: 400 17px/1.35 var(--mono);
+}
+.wb-client-popup .wb-happiness {
+  margin: 10px 0 13px;
+}
+.wb-client-popup .wb-client-needs {
+  margin-bottom: 14px;
+}
+.wb-client-popup .wb-client-needs > h3,
+.wb-client-popup .wb-contracts h3 {
+  font: 400 19px/1.25 var(--serif);
+  margin-bottom: 7px;
+}
+.wb-client-popup .wb-needs {
+  max-height: 192px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--rule) transparent;
+  padding-right: 5px;
+}
+.wb-client-popup .wb-needs li {
+  padding: 7px 0;
+}
+.wb-client-popup .wb-need-title .wb-text-button {
+  font-size: 19px;
+}
+.wb-client-popup .wb-needs p {
+  margin: 4px 0 5px;
+  font-size: 14px;
+  line-height: 1.35;
+}
+.wb-client-popup .wb-needs li > button {
+  padding: 3px 9px;
+  font-size: 14px;
+}
+.wb-client-popup .wb-price {
+  padding: 10px 0 12px;
+  margin-bottom: 13px;
+}
+.wb-client-popup .wb-price input {
+  margin: 5px 0 3px;
+}
+.wb-client-popup .wb-forecast {
+  margin: 6px 0 9px;
+  font-size: 14px;
+  line-height: 1.4;
+}
+.wb-client-popup .wb-current-price {
+  font-size: 14px;
+}
+.wb-client-popup .wb-contracts {
+  margin-top: 13px;
+}
+.wb-client-popup .wb-contracts > p {
+  font-size: 13px;
+  line-height: 1.35;
+}
+.wb-client-popup .wb-contracts ul {
+  max-height: 135px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+.wb-client-popup .wb-contracts li {
+  font-size: 14px;
+  line-height: 1.4;
+  margin: 8px 0;
+}
+.wb-client-popup .wb-market-numbers,
+.wb-client-popup .wb-reasons {
+  margin-top: 9px;
+  color: var(--dim);
+  font-size: 12px;
+  line-height: 1.35;
 }
