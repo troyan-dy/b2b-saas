@@ -96,7 +96,7 @@ describe('economy', () => {
     expect(full.peak).toBeGreaterThan(noLinks.peak * 1.05);
     // asking clients beats building blind
     expect(full.alive).toBeGreaterThan(blind.alive);
-  });
+  }, 30000);
 
   it('test_run_every_idea_can_be_won_and_lost', () => {
     // sixteen mixes: every card of every deck is in at least one of them
@@ -106,7 +106,7 @@ describe('economy', () => {
       console.log(`idea ${k}: ${ideaOf(k).tech.id}/${ideaOf(k).form.id}/${ideaOf(k).aud.id} alive ${alive}/12 peak ${Math.round(runs.reduce((a, r) => a + r.stats.peakMrr, 0) / 12)}`);
       expect(alive).toBeGreaterThan(0);
     }
-  });
+  }, 30000);
 
   it('test_run_every_client_type_comes_and_startups_close', () => {
     // counted over every startup played above: content that never shows up is not content

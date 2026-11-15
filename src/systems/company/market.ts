@@ -42,6 +42,7 @@ export interface MarketContext {
   segmentPrice?: Readonly<Record<SegmentId, number>>;
   tokenMult: number;
   promotionMult: number;
+  referralMult?: number;
 }
 export interface MarketNeed extends Need { count: number; share: number; potential: number; fulfilled: boolean }
 export interface SegmentView {
@@ -231,7 +232,7 @@ export function advanceMarket(state: MarketState, ctx: MarketContext, leads: num
       const pool = Math.floor(available * p.share / 100), room = Math.max(0, pool - p.count);
       if (!canReach) continue;
       const promotion = Math.max(0, leads) * data.acquisition.per_lead * cfg.weight * p.share / 100 * ctx.promotionMult;
-      const referral = p.count * data.acquisition.referral_rate * Math.max(0, happy - 50) / 50;
+      const referral = p.count * data.acquisition.referral_rate * (ctx.referralMult ?? 1) * Math.max(0, happy - 50) / 50;
       const starting = first && group.id === 'small' ? data.acquisition.first_leads * p.share / 100 : 0;
       const saturation = Math.max(0, 1 - p.count / Math.max(1, pool));
       p.leads = Math.min(room, p.leads + (promotion + referral + starting) * saturation);

@@ -1,7 +1,7 @@
 {
   "sales": { "title": "Sales", "note": "You learned to name the price without blinking", "gives": "client bills +%s" },
   "marketing": { "title": "Marketing", "note": "People read your posts. Sometimes even to the end", "gives": "promotion +%s" },
-  "engineering": { "title": "Engineering", "note": "You know which half of the code not to write", "gives": "blocks cost %s less" },
+  "engineering": { "title": "Engineering", "note": "You know which half of the code not to write", "gives": "%s less building work" },
   "thrift": { "title": "Thrift", "note": "You found a cheaper plan. And then another one", "gives": "living and hosting cost %s less" },
   "network": { "title": "Connections", "note": "Some of your past clients still pick up the phone", "gives": "starting savings +%s" }
 }

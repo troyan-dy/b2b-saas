@@ -2,6 +2,7 @@
   "sprint_s": 32,
   "last_sprint": 30,
   "start_money": 3600,
+  "min_work_mult": 0.2,
   "living_per_s": 4,
   "sites_max": 2,
   "link_bonus": 0.08,

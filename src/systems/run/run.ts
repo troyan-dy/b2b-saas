@@ -633,7 +633,7 @@ export function workNeed(run: Run, kind: string): number {
     RULES[kind].work *
       run.idea.tech.work *
       run.idea.form.work *
-      Math.max(0.5, 1 - trait(run, 'engineering')),
+      Math.max(TUNING.min_work_mult, 1 - trait(run, 'engineering')),
   );
 }
 
