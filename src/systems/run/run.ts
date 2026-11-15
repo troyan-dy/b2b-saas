@@ -635,6 +635,7 @@ function refresh(run: Run): void {
 /** Rebuilds derived values after loading; does not advance time or consume randomness. */
 export function refreshRun(run: Run): void {
   run.tasks ??= [];
+  run.apiShipped ??= [];
   run.nextTask ??= 1;
   run.draft ??= null;
   run.claimedGrants ??= [];

@@ -386,6 +386,10 @@ export class GameScene extends Phaser.Scene {
   private onCell(id: string): void {
     if (this.paused || this.run.draft || this.ended) return;
     this.workbenchAt = -Infinity;
+    if (id.startsWith('agent:')) {
+      this.onKey('info', id.slice(6));
+      return;
+    }
     if (id.startsWith('inspect:')) {
       this.onWorkbench({ type: 'inspect-module', block: id.slice(8) });
       return;
@@ -1014,7 +1018,7 @@ export class GameScene extends Phaser.Scene {
       // an agent with nothing to do on its lane waits for free: the caption says both
       const idle = !busy(run, a);
       // on a wide sheet the laptops stand close: their captions are set smaller
-      this.paper.tag(id, x, y, `<b>${LANE_NAME[a.lane]}</b><i${idle ? ' class="bad"' : ''}>${NO}${a.id} · ${idle ? L('без дела · $0', 'idle · $0') : TIER_NAME[a.tier]}</i>`, z < 0.8 ? 'small' : '');
+      this.paper.tag(id, x, y, `<button class="map-agent" data-map="agent:${a.id}" title="${L('Производительность агента', 'Agent performance')}"><b>${LANE_NAME[a.lane]}</b><i${idle ? ' class="bad"' : ''}>${NO}${a.id} · ${idle ? '$0' : TIER_NAME[a.tier]}</i></button>`, z < 0.8 ? 'small act' : 'act');
     });
     this.paper.pruneTags('a', keepA);
 

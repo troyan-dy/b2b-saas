@@ -39,8 +39,10 @@ export function buildReason(run: Run, kind: string): BuildReason | undefined {
   }
   if (level < 3 && ['core', 'bot', 'onb', 'crm'].includes(kind)) {
     const load = companyTotals(run).load;
-    const capacity = marketCapacity(companyContext(run));
-    if (load >= capacity * .8) return {
+    const context = companyContext(run);
+    const capacity = marketCapacity(context);
+    const next = marketCapacity({...context, levels: {...context.levels, [kind]: level + 1}});
+    if (load >= capacity * .8 && next > capacity) return {
       label: L('Больше места клиентам', 'Room for more clients'),
       detail: L('Мощность почти заполнена: этот блок добавит вместимость', 'Capacity is nearly full: this building adds room'), tone: 'capacity',
     };
