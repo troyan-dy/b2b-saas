@@ -187,6 +187,8 @@ export class GameScene extends Phaser.Scene {
   private citySignature = '';
   private cityProductSignature = '';
   private cityNodes: { id: string; segment: 'small' | 'medium' | 'large'; texture: string; title: string; x: number; y: number; height: number; chain: boolean }[] = [];
+  private infrastructureArea: { x: number; y: number; height: number } | null = null;
+  private infrastructurePoint: Pt = INFRASTRUCTURE;
 
   constructor(run: Run, rng: Rng, paper: Paper, hooks: GameHooks) {
     super('game');
@@ -463,7 +465,7 @@ export class GameScene extends Phaser.Scene {
     this.hands++;
     playSound('yes', this.hands % 6);
     const [fx, fy] = this.board.onScreen(DESK[0] - 40, DESK[1] - 130);
-    const to: Pt = lane === 'build' ? site ? this.board.top(site) : task?.kind === 'infrastructure' ? INFRASTRUCTURE : [DESK[0] + 100, DESK[1] - 150] : lane === 'fix' ? this.board.cell(0, 0) : MARKET;
+    const to: Pt = lane === 'build' ? site ? this.board.top(site) : this.infrastructurePoint : lane === 'fix' ? this.board.cell(0, 0) : MARKET;
     const [tx, ty] = this.board.onScreen(...to);
     // code is Claude's colour; a post, a call and a fix are the human's own ink
     this.squares.fly({ x: fx - 10, y: fy - 10, w: 20, h: 20 }, { x: tx - 20, y: ty - 10, w: 40, h: 20 }, 1, lane === 'build' ? PALETTE.coral : PALETTE.ink, 160, [0.35, 0.45]);
@@ -651,16 +653,7 @@ export class GameScene extends Phaser.Scene {
           if (block) this.landed.set(block.kind, (this.landed.get(block.kind) ?? 0) + 1);
         };
         if (e.agent === 0 || this.speed > 2) land();
-        else if (e.lane === 'build' && !block) {
-          // A card or infrastructure project is work at the founder's desk, not at a phantom cell.
-          const agent = this.board.node(key);
-          if (agent) {
-            const [sx, sy] = this.board.onScreen(agent.x, agent.y - 100);
-            const project = activeWork(run) ?? run.tasks.find(task => task.status === 'queued');
-            const [tx, ty] = this.board.onScreen(...(project?.kind === 'infrastructure' ? INFRASTRUCTURE : [DESK[0] + 100, DESK[1] - 150] as Pt));
-            this.squares.fly({ x: sx, y: sy, w: 10, h: 10 }, { x: tx, y: ty, w: 20, h: 16 }, 1, PALETTE.coral, 60, [0.4, 0.65]);
-          }
-        } else if (this.board.hasRoute(key)) this.board.flow(key, PALETTE.coral, 620, land);
+        else if (this.board.hasRoute(key)) this.board.flow(key, PALETTE.coral, 620, land);
         else land();
         if (this.speed <= 2 && e.agent !== 0) playSound('auto');
         // the founder checks this lane: for every square of work an ink square leaves his desk
@@ -1007,20 +1000,7 @@ export class GameScene extends Phaser.Scene {
       this.paper.tag(id, x, y - 9, L(`чек +${bonus}% после выпуска`, `bill +${bonus}% after release`), 'small hot');
     }
     this.paper.pruneTags('b:', keep);
-    const offMapTasks = run.tasks.filter((task) => !task.block && task.kind !== 'infrastructure');
-    const keepTasks = new Set<string>();
-    offMapTasks.forEach((task, index) => {
-      const id = `task:${task.id}`;
-      keepTasks.add(id);
-      const [x, y] = board.onScreen(DESK[0] + 120, DESK[1] - 230);
-      this.paper.tag(id, Math.max(130, x), y - index * 54, `${projectName(task.card ?? task.kind)} ${this.taskCaption(task)}`, 'map-task');
-    });
-    this.paper.pruneTags('task:', keepTasks);
-    const infraTask = run.tasks.find(task => task.kind === 'infrastructure');
-    const [ix, iy] = board.onScreen(...INFRASTRUCTURE);
-    this.paper.tag('infrastructure', Math.max(130, ix), iy,
-      `<div class="map-infrastructure"><button data-map="infrastructure" ${infraTask ? 'disabled' : ''} title="${L('Общая инфраструктура · не занимает клетку продукта', 'Shared infrastructure · uses no product cell')}"><span class="infra-rack" aria-hidden="true">▰<br>▰<br>▰</span><b>${L('Инфраструктура', 'Infrastructure')} v${run.infrastructure}</b></button>` +
-      (infraTask ? this.taskCaption(infraTask) : `<small>${L('Расширить', 'Expand')} · ${money(Math.round(PRODUCTION.infrastructure.cost * PRODUCTION.infrastructure.cost_growth ** run.infrastructure))}</small>`) + '</div>', 'map-task');
+    this.syncSharedWork();
 
     // the founder and the agents
     // the founder's caption starts at the left edge of the desk: the desk stands at the edge of the sheet
@@ -1165,6 +1145,56 @@ export class GameScene extends Phaser.Scene {
       (task.kind === 'infrastructure' && task.status === 'queued' ? `<button data-map="later:${task.id}" ${this.run.tasks.filter(entry => entry.status === 'queued').at(-1)?.id === task.id ? 'disabled' : ''} title="${L('Делать позже', 'Do later')}">↓</button><button data-map="defer:${task.id}" title="${L('Отложить', 'Defer')}">Ⅱ</button>` : '') +
       (api ? `<button class="task-api" data-map="rush:${task.id}" ${api.affordable ? '' : 'disabled'} title="${L('Ускорить строителей вдвое. Нужен агент на стройке; выпуск на релизе.', 'Double builder speed. Requires a builder; ships at release.')}">⚡ ×2 ${money(api.cost)}</button>` : '') +
       `<button class="task-cancel" data-map="cancel:${task.id}" title="${L('Отменить.', 'Cancel.')}${refund}" aria-label="${L('Отменить работу', 'Cancel work')}">×</button>`;
+  }
+
+  private syncSharedWork(): void {
+    const board = this.board, run = this.run, z = board.zoom;
+    const areas = run.blocks.map(block => {
+      const [x, y] = board.onScreen(...board.cell(block.i, block.j));
+      return { left: x - 110 * z, right: x + 110 * z, top: y - ((BLOCK_BY_ID[block.kind]?.height ?? 40) + 95) * z, bottom: y + 60 * z };
+    });
+    for (const key of ['me', ...run.agents.map(agent => `a${agent.id}`)]) {
+      const node = board.node(key);
+      if (!node) continue;
+      const [x, y] = board.onScreen(node.x, node.y);
+      areas.push({ left: x - node.displayWidth * z / 2 - 10, right: x + node.displayWidth * z / 2 + 10, top: y - node.displayHeight * z, bottom: y + 70 });
+    }
+    for (const node of this.cityNodes) {
+      const [x, y] = board.onScreen(node.x, node.y);
+      areas.push({ left: x - 110 * z, right: x + 110 * z, top: y - node.height * z, bottom: y + 70 });
+    }
+    // Reserve the full control area, so progress, price and ready-state changes never move it.
+    const fits = ({ x, y, height }: { x: number; y: number; height: number }): boolean => areas.every(area => x + 138 < area.left || x - 138 > area.right || y + height < area.top || y > area.bottom);
+    const anchors = [...(this.infrastructureArea ? [this.infrastructureArea] : []), { x: 160, y: 310, height: 180 }, { x: 1180, y: 350, height: 180 }, { x: 1180, y: 810, height: 180 }];
+    // A full city can occupy all three anchors. Use its remaining vertical gap and scroll the rows.
+    const gaps: { x: number; y: number; height: number }[] = [];
+    for (const x of [160, 1180]) {
+      let top = 290;
+      const obstacles = areas.filter(area => x + 138 >= area.left && x - 138 <= area.right).sort((a, b) => a.top - b.top);
+      for (const area of [...obstacles, { top: 1010, bottom: 1010 }]) {
+        const height = Math.min(180, area.top - 10 - top);
+        if (height >= 110) gaps.push({ x, y: top, height });
+        top = Math.max(top, area.bottom + 10);
+      }
+    }
+    const area = anchors.find(fits) ?? gaps.sort((a, b) => b.height - a.height)[0];
+    if (!area) return;
+    const { x, y, height } = area;
+    this.infrastructureArea = area;
+    const [ox, oy] = board.onScreen(0, 0);
+    const infra = run.tasks.find(task => task.kind === 'infrastructure');
+    const current = activeWork(run) ?? run.tasks.find(task => task.status === 'queued');
+    const tasks = [...(infra ? [infra] : []), ...run.tasks.filter(task => !task.block && task.kind !== 'infrastructure')].sort((a, b) => Number(b.id === current?.id) - Number(a.id === current?.id));
+    const rows = tasks.map(task => `<div data-work-id="${task.id}" class="map-work-item${task.status === 'ready' ? ' is-ready' : ''}"><span class="map-work-name" title="${projectName(task.card ?? task.kind)}">${task.kind === 'infrastructure' ? L('Расширение', 'Expansion') + ` v${run.infrastructure + 1}` : projectName(task.card ?? task.kind)}</span><div class="map-work-actions">${this.taskCaption(task)}</div></div>`).join('');
+    this.paper.pruneTags('task:', new Set());
+    const group = this.paper.tag('infrastructure', x, y,
+      `<div class="map-infrastructure" style="--work-height:${height}px"><button data-map="infrastructure" ${infra ? 'disabled' : ''} title="${L('Общая инфраструктура · не занимает клетку продукта', 'Shared infrastructure · uses no product cell')}"><span class="infra-rack" aria-hidden="true">▰<br>▰<br>▰</span><b>${L('Инфраструктура', 'Infrastructure')} v${run.infrastructure}` +
+      (!infra ? `<small>${L('Расширить', 'Expand')} · ${money(Math.round(PRODUCTION.infrastructure.cost * PRODUCTION.infrastructure.cost_growth ** run.infrastructure))}</small>` : '') + `</b></button><div class="map-work-list">${rows}</div></div>`, 'map-task map-shared-work');
+    const bounds = group.getBoundingClientRect();
+    const action = current && group.querySelector(`[data-work-id="${current.id}"] .task-progress`);
+    const row = action ? action.getBoundingClientRect() : null;
+    const targetY = row ? y + (row.top + row.height / 2 - bounds.top) / (bounds.width / 276) : y + 26;
+    this.infrastructurePoint = [(x - 140 - ox) / z, (targetY - oy) / z];
   }
 
   /** what the pause card offers: back to the startup, the two switches of the sound, out to the menu */
@@ -1383,7 +1413,7 @@ export class GameScene extends Phaser.Scene {
     const targetOf = (lane: Lane): Pt | null => {
       if (!handy(run, lane)) return null;
       if (lane === 'build') {
-        if (!site) return task ? task.kind === 'infrastructure' ? INFRASTRUCTURE : [DESK[0] + 100, DESK[1] - 150] : null;
+        if (!site) return task ? this.infrastructurePoint : null;
         const [cx, cy] = board.cell(site.i, site.j);
         return [cx, cy + 56];
       }
@@ -1431,7 +1461,10 @@ export class GameScene extends Phaser.Scene {
         this.addFace(key, x + 14 * s, y - 128 * s, 14 * s, 12 * s, 0.37);
       }
       const target = targets[a.lane];
-      if (target) board.route(key, agentRoute(k, target), true, activity(a.lane));
+      if (target) {
+        const points = a.lane === 'build' && !site ? [...agentRoute(k, [target[0] - 20, target[1]]), target] : agentRoute(k, target);
+        board.route(key, points, true, activity(a.lane));
+      }
       else board.dropRoute(key);
     });
   }

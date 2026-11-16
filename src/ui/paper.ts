@@ -65,7 +65,7 @@ export interface Paper {
   /** a row of the shelf answers a click */
   flash(section: string, item: string, how: 'bought' | 'denied'): void;
   /** a caption of a node; coordinates are screen pixels of the 1920×1080 layer */
-  tag(id: string, x: number, y: number, html: string, cls?: string): void;
+  tag(id: string, x: number, y: number, html: string, cls?: string): HTMLElement;
   dropTag(id: string): void;
   /** drops every caption whose id starts with `prefix` and is not in `keep` */
   pruneTags(prefix: string, keep: ReadonlySet<string>): void;
@@ -271,8 +271,13 @@ export function createPaper(under: HTMLElement, over: HTMLElement): Paper {
         t.el.className = `bl-tag ${cls}`;
       }
       if (t.html !== html) {
+        const scrollTop = t.el.querySelector('.map-work-list')?.scrollTop ?? 0;
+        const focused = t.el.contains(document.activeElement) ? (document.activeElement as HTMLElement).dataset.map : undefined;
         t.html = html;
         t.el.innerHTML = html;
+        const list = t.el.querySelector('.map-work-list');
+        if (list) list.scrollTop = scrollTop;
+        if (focused) t.el.querySelector<HTMLElement>(`[data-map="${CSS.escape(focused)}"]`)?.focus({ preventScroll: true });
       }
       const rx = Math.round(x);
       const ry = Math.round(y);
@@ -282,6 +287,7 @@ export function createPaper(under: HTMLElement, over: HTMLElement): Paper {
         t.el.style.left = `${rx}px`;
         t.el.style.top = `${ry}px`;
       }
+      return t.el;
     },
     dropTag(id) {
       const t = tags.get(id);
