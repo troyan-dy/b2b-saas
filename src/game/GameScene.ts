@@ -1469,6 +1469,8 @@ export class GameScene extends Phaser.Scene {
             const desk = board.node('me')!;
             const above: Pt = [DESK[0] + desk.displayWidth / 2 + 24, DESK[1] - desk.displayHeight - 24];
             points = [...agentRoute(k, above), [outside[0], above[1]], outside, target];
+          } else if (target[1] > BUS_Y && target[0] > AGENT_SLOTS[5][0] + 100) {
+            points = [...agentRoute(k, [AGENT_SLOTS[5][0] + 100, target[1]]), target];
           } else points = [...agentRoute(k, outside), target];
         }
         board.route(key, points, true, activity(a.lane));
