@@ -27,6 +27,7 @@ const SEATS = L<[string, string, string]>(['место', 'места', 'мест
 function effectWords(k: string, v: number): string {
   if (k === 'seats') return L(`+${v} ${plural(v, SEATS)} для клиентов`, `+${v} client ${plural(v, SEATS)}`);
   if (k === 'patience') return L(`клиенты терпеливее на ${v} спр.`, `clients wait ${v} spr. longer`);
+  if (k === 'small_pay' || k === 'corp_pay') return `${EFFECT_NAME[k]} +${Math.round((v - 1) * 100)}% ${L('базы', 'base')}`;
   return `${EFFECT_NAME[k] ?? k} ×${dec(v)}`;
 }
 
@@ -42,9 +43,9 @@ export function benefits(kind: string): string[] {
       case 'patience':
         return L(`терпение +${v}`, `patience +${v}`);
       case 'small_pay':
-        return L(`чек малых ${x(v)}`, `small bill ${x(v)}`);
+        return L(`чек малых +${Math.round((v - 1) * 100)}%`, `small bill +${Math.round((v - 1) * 100)}%`);
       case 'corp_pay':
-        return L(`чек крупных ${x(v)}`, `big bill ${x(v)}`);
+        return L(`чек крупных +${Math.round((v - 1) * 100)}%`, `big bill +${Math.round((v - 1) * 100)}%`);
       case 'promo':
         return L(`промо ${x(v)}`, `promo ${x(v)}`);
       case 'word_of_mouth':
@@ -61,7 +62,7 @@ export function benefit(kind: string): string {
   const e = (effects as Record<string, Record<string, number>>)[kind];
   if (!e) return '';
   const [k, v] = Object.entries(e)[0];
-  return k === 'seats' ? `+${v} ${plural(v, SEATS)}` : k === 'small_pay' || k === 'corp_pay' ? L(`чек ×${dec(v)}`, `bill ×${dec(v)}`) : effectWords(k, v);
+  return k === 'seats' ? `+${v} ${plural(v, SEATS)}` : k === 'small_pay' || k === 'corp_pay' ? L(`чек +${Math.round((v - 1) * 100)}%`, `bill +${Math.round((v - 1) * 100)}%`) : effectWords(k, v);
 }
 
 /** What a shipped block gives, in the words of the shelf: «продвижение ×1,5». Empty for a block that only stands there. */
@@ -90,8 +91,8 @@ export const LANE_ACC: Record<Lane, string> = L(
 
 /** What the founder does with his own hands on each lane: a founder codes least of all. */
 export const HAND_NAME: Record<Lane, string> = L(
-  { build: 'кодить', fix: 'чинить', promo: 'пост', research: 'звонок' },
-  { build: 'code', fix: 'fix', promo: 'post', research: 'call' },
+  { build: 'кодить', fix: 'чинить', promo: 'пост', research: 'изучить' },
+  { build: 'code', fix: 'fix', promo: 'post', research: 'study' },
 );
 
 /** said over the desk when there is nothing for the hands to do there */
@@ -100,20 +101,20 @@ export const HAND_IDLE: Record<Lane, string> = L(
     build: 'строить нечего: выбери блок',
     fix: 'долга нет: чинить нечего',
     promo: 'показывать нечего: нужны ядро и лендинг',
-    research: 'спрашивать некого или всё уже известно',
+    research: 'выбери клиентов или рынок в исследованиях',
   },
   {
     build: 'nothing to build: pick a block',
     fix: 'no debt: nothing to fix',
     promo: 'nothing to show: needs the core and a landing page',
-    research: 'nobody to ask, or everything is known already',
+    research: 'choose customers or market in Research',
   },
 );
 
 /** said where the square lands */
 export const HAND_DONE: Record<Lane, string> = L(
-  { build: '', fix: 'починил сам', promo: 'пост написан', research: 'позвонил клиенту' },
-  { build: '', fix: 'fixed it yourself', promo: 'post written', research: 'called a client' },
+  { build: '', fix: 'починил сам', promo: 'пост написан', research: 'собрал данные' },
+  { build: '', fix: 'fixed it yourself', promo: 'post written', research: 'collected data' },
 );
 
 export const TIER_NAME: Record<Tier, string> = L({ fast: 'базовый', normal: 'опытный', think: 'эксперт' }, { fast: 'basic', normal: 'experienced', think: 'expert' });
@@ -124,8 +125,8 @@ export const TIER_TITLE: Record<Tier, string> = L(
 );
 
 export const TIER_NOTE: Record<Tier, string> = L(
-  { fast: 'дешёвая работа · долг копится быстро', normal: 'в 1,4 раза быстрее · в 4 раза меньше долга', think: 'вдвое быстрее базового · без нового долга' },
-  { fast: 'cheap work · debt builds up quickly', normal: '1.4× faster · 4× less debt', think: 'twice as fast as basic · no new debt' },
+  { fast: 'дешёвая работа · долг копится быстро', normal: 'в 1,8 раза быстрее · в 4 раза меньше долга', think: 'в 3,2 раза быстрее базового · без нового долга' },
+  { fast: 'cheap work · debt builds up quickly', normal: '1.8× faster · 4× less debt', think: '3.2× as fast as basic · no new debt' },
 );
 
 export const STAGE_NAME = L(['', 'кухня', 'первые клиенты', 'город клиентов'], ['', 'the kitchen', 'first clients', 'a city of clients']);

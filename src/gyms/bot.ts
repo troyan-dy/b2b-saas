@@ -3,12 +3,13 @@ import {
   MARKET,
   marketCapacity,
   marketTotals,
-  priceForecast,
   schedulePrice,
   segmentView,
   type MarketContext,
+  type SegmentId,
 } from '../systems/company/market';
-import { blockEffects, PRODUCTION } from '../systems/run/product';
+import { blockEffects, PRODUCTION, projectCost } from '../systems/run/product';
+import { researchAvailable } from '../systems/company/research';
 import {
   answerCall,
   answerDilemma,
@@ -22,6 +23,9 @@ import {
   DRAFT_CARDS,
   draftCards,
   expandInfrastructure,
+  expandOffice,
+  officeQuote,
+  startResearch,
   flows,
   freeCells,
   friendsAt,
@@ -52,6 +56,8 @@ export interface BotStyle {
   links: boolean;
   /** reads customer needs and interviews named accounts; otherwise builds blind */
   research: boolean;
+  researchOnce?: boolean;
+  focus?: SegmentId;
   /** pays down debt before the product falls */
   fix: boolean;
   /** answers clients and the bank; otherwise the cards wait for the player */
@@ -83,7 +89,8 @@ export function playBot(run: Run, style: BotStyle = SENSIBLE): void {
     return;
   lastDecision.set(run, run.t);
   if (run.draft) {
-    const cards = draftCards(run).sort((a, b) => cardValue(run, b) - cardValue(run, a));
+    const preference = (card: DraftCard) => cardValue(run, card) * (style.focus && PRODUCTION.segment_revenue[style.focus].card === card.id ? 1.5 : 1);
+    const cards = draftCards(run).sort((a, b) => preference(b) - preference(a));
     if (!cards[0] || !chooseCard(run, cards[0].id)) return;
   }
   if (run.lastChance !== null) {
@@ -113,7 +120,15 @@ export function playBot(run: Run, style: BotStyle = SENSIBLE): void {
   const ctx = companyContext(run);
   const market = marketTotals(run.market, ctx);
   const growth = sellable(run) && market.utilization < 1;
-  if (run.sprintT === 0 && run.live.has('pay')) adjustPrices(run, ctx);
+  if (style.research && run.live.has('pay')) {
+    if (!run.research.active) {
+      const topic = (['clients','market'] as const).find(kind => researchAvailable(run.research, kind, run.market) && (!style.researchOnce || !run.research.reports[kind]));
+      if (topic) startResearch(run, topic);
+    }
+    if (run.sprintT === 0) adjustPrices(run);
+  }
+  const landCost = officeQuote(run, 'land');
+  if (landCost !== null && !freeCells(run).length && canFund(run, landCost, 0)) expandOffice(run, 'land');
 
   // A card is a plan, not a command to spend the last cash or delay a useful release.
   for (const task of run.tasks) {
@@ -148,8 +163,7 @@ export function playBot(run: Run, style: BotStyle = SENSIBLE): void {
   const building = handy(run, 'build');
   const interview =
     style.research &&
-    handy(run, 'research') &&
-    run.clients.some((c) => !c.happy && !run.known.includes(c.want));
+    handy(run, 'research');
   // The founder can research without taking the only agent away from shipping or sales.
   if (run.energy >= TUNING.crunch.max) {
     const lane: Lane =
@@ -172,6 +186,8 @@ export function playBot(run: Run, style: BotStyle = SENSIBLE): void {
   }
 
   // A new wage needs recurring income, not the one-time consulting grant.
+  const deskCost = officeQuote(run, 'desks');
+  if (deskCost !== null && run.agents.length < 4 && !canHire(run, 'fast') && netPerS(run) > TUNING.tiers.fast.cost_per_s * 2 && canFund(run, deskCost, 0)) expandOffice(run, 'desks');
   if (
     run.agents.length < 3 &&
     canHire(run, 'fast') &&
@@ -179,11 +195,12 @@ export function playBot(run: Run, style: BotStyle = SENSIBLE): void {
     run.money > burnPerS(run) * TUNING.sprint_s * 6 &&
     (building || growth)
   )
-    hire(run, 'fast');
+    hire(run, canHire(run, 'think') && netPerS(run) > TUNING.tiers.think.cost_per_s * 3 ? 'think' : canHire(run, 'normal') && netPerS(run) > TUNING.tiers.normal.cost_per_s * 3 ? 'normal' : 'fast');
 
   const lanes: Lane[] = [];
   if (style.fix && run.debt >= 18) lanes.push('fix');
   if (building) lanes.push('build');
+  if (interview && run.agents.length > 1) lanes.push('research');
   if (growth) lanes.push('promo');
   if (lanes.length === 0) lanes.push(style.fix && run.debt > 0 ? 'fix' : 'build');
   run.agents.forEach((agent, i) => setLane(run, agent.id, lanes[i % lanes.length]));
@@ -222,15 +239,18 @@ function cardValue(run: Run, card: DraftCard | undefined): number {
       canFund(run, card.cost, card.work, PRODUCTION.strategy_host.mass)
       ? 25
       : -1;
-  if (card.id === 'premium') {
+  if (['premium','small_sales','medium_sales'].includes(card.id)) {
+    const segment = card.id === 'premium' ? 'large' : card.id === 'medium_sales' ? 'medium' : 'small';
+    const rule = PRODUCTION.segment_revenue[segment];
     const corp =
-      segmentView(run.market, ctx, 'large').income +
+      segmentView(run.market, ctx, segment).income +
       run.clients
-        .filter((c) => c.type === 'corp' || c.type === 'gov')
+        .filter((c) => segment === 'large' ? c.type === 'corp' || c.type === 'gov' : segment === 'medium' ? c.type === 'mid' : c.type === 'small' || c.type === 'startup')
         .reduce((sum, c) => sum + c.pay * c.deal, 0);
-    return corp * 3 > card.cost &&
-      canFund(run, card.cost, card.work, PRODUCTION.strategy_host.premium)
-      ? 35
+    const hosting = PRODUCTION.strategy_host[rule.card as keyof typeof PRODUCTION.strategy_host];
+    const gain = corp * rule.bonus_per_copy / (1 + rule.bonus_per_copy * (run.cardStacks[rule.card as keyof typeof run.cardStacks] ?? 0)) - hosting * TUNING.sprint_s;
+    return gain > 0 && canFund(run, card.cost, card.work, hosting)
+      ? gain / 20
       : -1;
   }
   return run.strategy.processing === null && market.utilization < 0.8 && tokens(run) < mrr(run) / 4
@@ -255,15 +275,13 @@ function nextProject(run: Run, style: BotStyle, ctx: MarketContext): Project | u
         kind: 'build',
         block,
         work,
-        cost: work * PRODUCTION.construction_cost_per_work,
+        cost: projectCost(run, work),
         score: Infinity,
       };
     }
   }
   const market = marketTotals(run.market, ctx);
-  const views = run.market.groups
-    .filter((group) => group.id === 'small' || run.stage >= 2)
-    .map((group) => segmentView(run.market, ctx, group.id));
+  const views = style.research ? run.research.reports.clients?.segments ?? [] : [];
   const projects: Project[] = [];
   const kinds = [
     ...(cells.length ? available : []),
@@ -280,8 +298,7 @@ function nextProject(run: Run, style: BotStyle, ctx: MarketContext): Project | u
     const own = run.blocks.find((b) => b.kind === block);
     const level = own ? own.level + 1 : 1;
     const work = own ? reworkNeed(run, own) : workNeed(run, block);
-    const cost =
-      work * (own ? PRODUCTION.upgrade_cost_per_work : PRODUCTION.construction_cost_per_work);
+    const cost = projectCost(run, work, level);
     const hosting = RULES[block].host * (own ? TUNING.rework.host_mult : 1);
     if (!canFund(run, cost, work, hosting)) continue;
     const before = own ? blockEffects(block, own.level) : {},
@@ -298,19 +315,23 @@ function nextProject(run: Run, style: BotStyle, ctx: MarketContext): Project | u
       },
     };
     const future = marketTotals(run.market, projected);
-    let benefit =
-      future.income - future.tokens - market.income + market.tokens - hosting * TUNING.sprint_s;
+    // Estimate only the published block effects and observed income, not hidden customer fit.
+    let benefit = market.tokens * (1 - ratio('tokens')) - hosting * TUNING.sprint_s;
+    for (const group of run.market.groups) {
+      const effect = group.id === 'large' ? 'corp_pay' : 'small_pay';
+      benefit += segmentView(run.market, ctx, group.id).income * ((after[effect] ?? 1) - (before[effect] ?? 1)) / run.eff[effect];
+    }
     // Capacity is useful before overload begins, while customers are already arriving.
     if (market.count > 0 && market.utilization > 0.65)
       benefit += Math.max(0, future.capacity - market.capacity) * market.utilization * 2;
     if (style.research) {
       for (const view of views) {
-        for (const need of view.needs.filter((need) => need.block === block && !need.fulfilled)) {
+        for (const need of view.needs.filter((need) => need.block === block && (ctx.levels[block] ?? 0) < need.level)) {
           const progress =
             Math.min(1, level / need.level) - Math.min(1, (own?.level ?? 0) / need.level);
           benefit +=
             (need.count + ((Math.min(10, view.leads) + 1) * need.share) / 100) *
-            view.unitPrice *
+            view.unitPrice * (style.focus ? view.id === style.focus ? 2 : .5 : 1) *
             progress;
         }
       }
@@ -356,19 +377,11 @@ function nextProject(run: Run, style: BotStyle, ctx: MarketContext): Project | u
   return projects.filter((project) => project.score > 0).sort((a, b) => b.score - a.score)[0];
 }
 
-function adjustPrices(run: Run, ctx: MarketContext): void {
+function adjustPrices(run: Run): void {
   for (const group of run.market.groups) {
     if (group.pendingPrice !== null) continue;
-    const current = priceForecast(run.market, ctx, group.id, group.price);
-    let chosen = group.price;
-    for (let price = MARKET.price.min; price <= MARKET.price.max; price += MARKET.price.step) {
-      const forecast = priceForecast(run.market, ctx, group.id, price);
-      if (
-        forecast.after.reasons.price <= 1 &&
-        forecast.after.satisfaction >= current.before.satisfaction - 1
-      )
-        chosen = price;
-    }
+    const forecasts = run.research.reports.market?.forecasts.filter(f => f.id === group.id && f.satisfaction >= 65).sort((a,b) => b.income - a.income || a.price - b.price) ?? [];
+    const chosen = forecasts[0]?.price ?? group.price;
     if (Math.abs(chosen - group.price) >= MARKET.price.step / 2)
       schedulePrice(run.market, group.id, chosen);
   }

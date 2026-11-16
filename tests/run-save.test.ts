@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createRng } from '../src/core/rng';
+import { segmentRevenueMultiplier } from '../src/systems/run/product';
 import {
   createMarket,
   MARKET,
@@ -236,7 +237,8 @@ describe('company save', () => {
     expect(loaded.host).toBe(run.host);
     expect(chooseCard(loaded, 'premium')).toBe(true);
     expect(loaded.cardStacks.premium).toBe(6);
-    expect(loaded.eff.corp_pay).toBeCloseTo(run.eff.corp_pay * 1.5);
+    expect(loaded.eff.corp_pay).toBe(run.eff.corp_pay);
+    expect(segmentRevenueMultiplier(loaded, 'large') - segmentRevenueMultiplier(run, 'large')).toBeCloseTo(.12);
     expect(loaded.cardStacks.mass).toBe(5);
   });
 

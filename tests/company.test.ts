@@ -124,7 +124,7 @@ describe('company integration', () => {
     refreshRun(run);
     const ctx = companyContext(run);
     const after = segmentView(run.market, ctx, 'large');
-    expect(after.income).toBeCloseTo(before.income * 1.5);
+    expect(after.income).toBeCloseTo(before.income * 1.12);
     expect(after.tokens).toBe(before.tokens);
     expect(after.price).toBe(1);
     const proposal = priceForecast(run.market, ctx, 'large', 2);

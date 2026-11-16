@@ -1,6 +1,10 @@
 {
   "construction_cost_per_work": 12,
   "upgrade_cost_per_work": 16,
+  "level_cost_mult": [1, 1, 1.5, 3, 6],
+  "scale_free_clients": 40,
+  "cost_per_client": 0.2,
+  "minimum_token_mult": 0.12,
   "max_level": 5,
   "upgrade_work_mult": [0, 0.6, 1.2, 2, 3.2],
   "upgrade_effect_steps": [0, 1, 1, 0.6, 0.4],

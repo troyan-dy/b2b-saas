@@ -1,5 +1,6 @@
 import workforce from '../../data/balance/agents.json';
 import tuning from '../../data/balance/run.json';
+import api from '../../data/balance/api.json';
 import type { Agent, Run, Tier } from './run';
 
 export const WORKFORCE = workforce;
@@ -10,7 +11,9 @@ export function agentWorkRate(run: Run, agent: Agent): number {
     agent.lane === 'build'
       ? 1 - Math.min(tuning.debt.slow_max, run.debt * tuning.debt.slow_per_point)
       : 1;
-  return tuning.tiers[agent.tier].work_per_s * review * slow;
+  const task = run.tasks.find((task) => task.status === 'active') ?? run.tasks.find((task) => task.status === 'queued');
+  const boost = agent.lane === 'build' && task?.apiBoost ? api.speed_multiplier : 1;
+  return tuning.tiers[agent.tier].work_per_s * review * slow * boost;
 }
 
 export function agentDebtPerWork(run: Run, agent: Agent): number {

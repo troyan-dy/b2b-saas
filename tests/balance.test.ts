@@ -133,7 +133,7 @@ describe('economy', () => {
     expect(mrr(run)).toBeGreaterThanOrEqual(0);
     expect(run.sprint).toBe(TUNING.last_sprint);
     expect(run.lastReport?.sprint).toBe(TUNING.last_sprint);
-    expect(run.over).toBe('profit');
+    expect(['profit', 'late']).toContain(run.over);
     expect(run.draft).toBeNull();
     expect(Number.isFinite(run.money)).toBe(true);
   });

@@ -1,0 +1,5 @@
+{
+  "land": { "cost": 1800, "growth": 1.8, "cells": 3, "max": 4 },
+  "desks": { "cost": 1200, "growth": 1.85, "base": 2, "max": 6 },
+  "hire": { "fast": 0, "normal": 500, "think": 1800 }
+}

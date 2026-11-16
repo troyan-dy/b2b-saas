@@ -50,6 +50,10 @@ import {
   cancelTask,
   canHire,
   cellsMax,
+  agentSlots,
+  expandOffice,
+  OFFICE,
+  startResearch,
   clientPay,
   crunch,
   chooseCard,
@@ -310,6 +314,16 @@ export class GameScene extends Phaser.Scene {
     unlockSound();
     let changed = true;
     switch (action.type) {
+      case 'open-research': this.workbenchSelection.panel = 'research'; break;
+      case 'start-research': changed = startResearch(run, action.kind); break;
+      case 'research-hand': this.byHand('research'); break;
+      case 'research-agent': {
+        const agent = run.agents.find(a => a.lane === 'research') ?? run.agents[0];
+        changed = Boolean(agent && run.research.active);
+        if (changed) setLane(run, agent.id, 'research');
+        break;
+      }
+      case 'expand-office': changed = expandOffice(run, action.kind); break;
       case 'inspect-module':
         this.workbenchSelection.selectedModule = action.block;
         this.workbenchSelection.panel = 'module';
@@ -329,7 +343,7 @@ export class GameScene extends Phaser.Scene {
       case 'cancel-task': changed = cancelTask(run, action.task); break;
       case 'rush-task':
         changed = rushTask(run, action.task);
-        if (changed) this.paper.pop(1120, 360, L('API: выпущено и работает', 'API: shipped and active'), 'good');
+        if (changed) this.paper.pop(1120, 360, L('Ускорение: строители работают ×2', 'Boost: builders work ×2'), 'good');
         break;
       case 'expand-infrastructure': changed = expandInfrastructure(run); break;
       case 'select-segment':
@@ -431,6 +445,11 @@ export class GameScene extends Phaser.Scene {
     this.workbenchAt = -Infinity;
     unlockSound();
     const run = this.run;
+    if (lane === 'research' && !run.research.active) {
+      this.workbenchSelection.panel = 'research';
+      this.show();
+      return;
+    }
     const task = activeWork(run) ?? run.tasks.find((entry) => entry.status === 'queued');
     const site = task?.block ? run.blocks.find((block) => block.kind === task.block) : undefined;
     const can = handy(run, lane);
@@ -477,7 +496,10 @@ export class GameScene extends Phaser.Scene {
     }
     const id = Number(owner.slice(1));
     if (key === 'drop') fire(this.run, id);
-    else setLane(this.run, id, key as Lane);
+    else {
+      setLane(this.run, id, key as Lane);
+      if (key === 'research') { this.workbenchSelection.selectedAgent = id; this.workbenchSelection.panel = 'research'; }
+    }
     playSound('ui');
   }
 
@@ -771,6 +793,11 @@ export class GameScene extends Phaser.Scene {
         logEvent(`reveal:${e.kind}`);
         break;
       }
+      case 'researched':
+        this.news(L(`Отчёт готов: ${e.kind === 'clients' ? 'клиенты' : 'рынок'}. Открой исследования, чтобы выбрать следующий ход.`, `Report ready: ${e.kind === 'clients' ? 'customers' : 'market'}. Open Research to choose your next move.`));
+        playSound('quip');
+        this.workbenchAt = -Infinity;
+        break;
       case 'down':
         this.news(NEWS_EVENT.down);
         this.cameras.main.shake(180, 0.004);
@@ -1133,7 +1160,7 @@ export class GameScene extends Phaser.Scene {
     return `<button class="task-progress" data-map="${action}" title="${task.status === 'active' ? L('Помочь стройке', 'Help build') : L('Порядок и прогресс работы', 'Work order and progress')}">${label}</button>` +
       (task.status === 'queued' && this.run.tasks.filter((entry) => entry.status === 'queued').indexOf(task) > 0 ? `<button data-map="first:${task.id}" title="${L('Делать раньше', 'Do sooner')}">↑</button>` : '') +
       (task.status === 'backlog' ? `<button data-map="resume:${task.id}" title="${L('Продолжить', 'Resume')}">▶</button>` : '') +
-      (api ? `<button class="task-api" data-map="rush:${task.id}" ${api.affordable ? '' : 'disabled'} title="${L('Дорогой API: выпустить и включить эту задачу немедленно', 'Paid API: ship and activate this task immediately')}">⚡ ${money(api.cost)}</button>` : '') +
+      (api ? `<button class="task-api" data-map="rush:${task.id}" ${api.affordable ? '' : 'disabled'} title="${L('Ускорить строителей вдвое. Нужен агент на стройке; выпуск на релизе.', 'Double builder speed. Requires a builder; ships at release.')}">⚡ ×2 ${money(api.cost)}</button>` : '') +
       `<button class="task-cancel" data-map="cancel:${task.id}" title="${L('Отменить.', 'Cancel.')}${refund}" aria-label="${L('Отменить работу', 'Cancel work')}">×</button>`;
   }
 
@@ -1205,8 +1232,8 @@ export class GameScene extends Phaser.Scene {
     if (!isLive(run, 'pay')) return L('<b>Платежи ещё не выпущены</b>. Помоги стройке через Enter; готовые проекты включатся на релизе.', '<b>Payments have not shipped yet</b>. Help build with Enter; completed projects activate at release.');
     const totals = companyTotals(run);
     if (totals.utilization > 1) return L(
-      '<strong>Перегруз ' + Math.round(totals.utilization * 100) + '%</strong>: расширь «Инфраструктуру» справа. Агенты — к релизу; дорогой API — сразу.',
-      '<strong>Load ' + Math.round(totals.utilization * 100) + '%</strong>: expand “Infrastructure” on the right. Agents ship at release; paid API ships now.',
+      '<strong>Перегруз ' + Math.round(totals.utilization * 100) + '%</strong>: расширь «Инфраструктуру» справа. Выпуск — на релизе; деньги ускоряют строителей.',
+      '<strong>Load ' + Math.round(totals.utilization * 100) + '%</strong>: expand “Infrastructure” on the right. Ships at release; money speeds up builders.',
     );
     if (task && !task.block) return L('Основатель расширяет компанию. <b>Enter — помочь</b>.', 'The founder is expanding the company. <b>Enter to help</b>.');
     if (customerCount(run) === 0) return L('После выпуска ядра и лендинга придут первые клиенты. <b>Продвижение</b> пополняет воронку, нужные функции помогают им остаться.', 'The first clients arrive after core and landing ship. <b>Promotion</b> fills the funnel; useful features help them stay.');
@@ -1281,19 +1308,19 @@ export class GameScene extends Phaser.Scene {
 
   private shelfView(): ShelfSection[] {
     const run = this.run;
-    const rule = TUNING.stages[run.stage - 1];
+
     // what opens the stronger agents and more desks is written out: it is a goal, not a secret
     const stage3 = `${rate(TUNING.stage3_mrr / TUNING.sprint_s)}${PER_S}`;
     const unlock =
       run.stage === 1
-        ? L('опытный и эксперт + два места — после первого платящего клиента', 'experienced and expert + two desks — after the first paying client')
+        ? L('опытный и эксперт — после первого платящего клиента; места покупаются в полке', 'experienced and expert unlock after the first paying client; buy desks in the shelf')
         : run.stage === 2
-          ? L(`ещё два места для агентов — когда подписки дойдут до ${stage3}`, `two more desks for agents — when subscriptions reach ${stage3}`)
+          ? L(`город — при подписках ${stage3}; дополнительные места покупаются отдельно`, `city at ${stage3} subscriptions; extra desks are purchased separately`)
           : '';
     const rows: ShelfKeys[] = [
       {
         owner: 'hire',
-        keys: TIERS.map((t) => ({ id: t, title: `+ ${TIER_NAME[t]} $${TUNING.tiers[t].cost_per_s}${PER_S}`, note: `${dec(TUNING.tiers[t].work_per_s / TUNING.tiers.fast.work_per_s)}× · ${t === 'think' ? L('без багов', 'no bugs') : t === 'normal' ? L('мало багов', 'few bugs') : L('много багов', 'many bugs')}`, bar: TUNING.tiers[t].work_per_s / TUNING.tiers.think.work_per_s, tip: TIER_NOTE[t], off: !canHire(run, t) })),
+        keys: TIERS.map((t) => ({ id: t, title: `+ ${TIER_NAME[t]} $${TUNING.tiers[t].cost_per_s}${PER_S}`, note: `${dec(TUNING.tiers[t].work_per_s / TUNING.tiers.fast.work_per_s)}× · ${t === 'think' ? L('без багов', 'no bugs') : t === 'normal' ? L('мало багов', 'few bugs') : L('много багов', 'many bugs')}`, bar: TUNING.tiers[t].work_per_s / TUNING.tiers.think.work_per_s, tip: TIER_NOTE[t] + L(` · найм ${OFFICE.hire[t]}`, ` · setup ${OFFICE.hire[t]}`), off: !canHire(run, t) })),
       },
       ...run.agents.map((a) => ({
         owner: `a${a.id}`,
@@ -1305,7 +1332,7 @@ export class GameScene extends Phaser.Scene {
     return [
       {
         id: 'agents',
-        title: L(`АГЕНТЫ · ${run.agents.length} ИЗ ${rule.agents_max}`, `AGENTS · ${run.agents.length} OF ${rule.agents_max}`),
+        title: L(`АГЕНТЫ · ${run.agents.length} ИЗ ${agentSlots(run)}`, `AGENTS · ${run.agents.length} OF ${agentSlots(run)}`),
         hint: `${rate(-flows(run).agents)}${PER_S} · ${L('без дела — бесплатно', 'idle — free')}`,
         note: unlock,
         rows,
@@ -1325,7 +1352,7 @@ export class GameScene extends Phaser.Scene {
             lock: run.reviewLocked,
           },
           // what he does with his own hands: one point of strength a square, on any lane
-          { owner: 'hand', label: L('руками', 'by hand'), keys: LANES.map((l) => ({ id: l as string, title: HAND_NAME[l], off: run.energy < 1 || !handy(run, l) })) },
+          { owner: 'hand', label: L('руками', 'by hand'), keys: LANES.map((l) => ({ id: l as string, title: HAND_NAME[l], off: l !== 'research' && (run.energy < 1 || !handy(run, l)) })) },
         ],
       },
     ];
@@ -1486,7 +1513,7 @@ export class GameScene extends Phaser.Scene {
     const segments = new Set<string>(this.run.market.groups.filter((group) => group.profiles.some((profile) => profile.count > 0)).map((group) => group.id));
     for (const client of this.run.clients) segments.add(client.type === 'corp' || client.type === 'gov' ? 'large' : client.type === 'mid' ? 'medium' : 'small');
     const groups = segments.size;
-    const want = this.run.stage >= 3 || count > 4 || groups > 1 ? 3 : this.run.stage === 2 || count || this.run.market.opened ? 2 : 1;
+    const want = this.run.stage >= 3 || count > 4 || groups > 1 || this.run.land > 0 ? 3 : this.run.stage === 2 || count || this.run.market.opened ? 2 : 1;
     if (this.stageShown === want && this.cityColumnsShown === groups) return;
     this.stageShown = want;
     this.cityColumnsShown = groups;

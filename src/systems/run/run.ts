@@ -10,9 +10,11 @@ import eventsData from '../../data/balance/events.json';
 import ideasEn from '../../data/balance/ideas.en.json';
 import ideasData from '../../data/balance/ideas.json';
 import tuningData from '../../data/balance/run.json';
+import officeData from '../../data/balance/office.json';
 import traitsData from '../../data/balance/traits.json';
 import { companyContext, companyTotals, customerCount } from '../company/company';
-import { advanceMarket, createMarket, MARKET, type MarketState } from '../company/market';
+import { advanceMarket, createMarket, evolveMarket, normalizeMarket, MARKET, type MarketState } from '../company/market';
+import { advanceResearch, beginResearch, createResearch, researchAvailable, RESEARCH, type ResearchKind, type ResearchState } from '../company/research';
 import { dealDraft, releaseCard } from './draft';
 import {
   addProductionWork,
@@ -32,6 +34,9 @@ import {
   restoreCardStacks,
   strategyEffects,
   strategyHosting,
+  segmentRevenueMultiplier,
+  upgradeWork,
+  projectCost,
   type CardStacks,
 } from './product';
 
@@ -87,6 +92,7 @@ export const RULES = blocksData as Record<string, BlockRule>;
 export const EFFECTS = effectsData as Record<string, Record<string, number>>;
 /** the one object the mechanics read every step: a tuning panel binds to it */
 export const TUNING = tuningData;
+export const OFFICE = officeData;
 /** the idea decks and the names of the clients; the English words are laid over the cards by id, over the names — in order */
 export const IDEAS: typeof ideasData =
   LANG === 'en'
@@ -243,6 +249,7 @@ export interface Report {
 }
 
 export type RunEvent =
+  | { type: 'researched'; kind: ResearchKind }
   | { type: 'card-applied'; id: string }
   | { type: 'task-cancelled'; id: string; block?: string }
   | { type: 'work'; agent: number; lane: Lane; i?: number; j?: number; idle?: boolean }
@@ -325,6 +332,8 @@ export interface Run {
   strategy: { support: 'mass' | 'premium' | null; processing: 'batch' | 'instant' | null };
   cardStacks: CardStacks;
   infrastructure: number;
+  land: number;
+  desks: number;
   agents: Agent[];
   /** the lane the founder checks: no debt there, and the work goes faster */
   review: Lane;
@@ -343,6 +352,7 @@ export interface Run {
   known: string[];
   clients: Client[];
   market: MarketState;
+  research: ResearchState;
   /** the product is down this sprint: nobody pays */
   down: boolean;
   /** what brought it down: the founder's own debt or the model supplier's outage */
@@ -364,6 +374,7 @@ export interface Run {
   mod: { tokens: number; price: number; promo: number };
   /** sprints before the news may strike again */
   newsWait: number;
+  recentNews: string[];
   events: RunEvent[];
   over: Ending | null;
   lastReport: Report | null;
@@ -502,6 +513,8 @@ export function createRun(
     strategy: { support: null, processing: null },
     cardStacks: {},
     infrastructure: 0,
+    land: 0,
+    desks: 0,
     agents: [{ id: 1, tier: 'fast', lane: 'build', carry: 0 }],
     review: 'build',
     reviewLocked: false,
@@ -514,7 +527,8 @@ export function createRun(
     corpAsks,
     known: [],
     clients: [],
-    market: createMarket(['core', 'landing', 'pay', ...pool]),
+    market: createMarket(['core', 'landing', 'pay', ...pool], seed),
+    research: createResearch(),
     down: false,
     downWhy: null,
     offer: null,
@@ -527,6 +541,7 @@ export function createRun(
     mods: [],
     mod: { tokens: 1, price: 1, promo: 1 },
     newsWait: 0,
+    recentNews: [],
     events: [],
     over: null,
     lastReport: null,
@@ -625,10 +640,10 @@ function refresh(run: Run): void {
   for (const e of effects) {
     for (const [name, v] of Object.entries(e)) {
       const key = name as keyof Effects;
-      // sprints of patience and places for clients add up; everything else multiplies
-      eff[key] = key === 'patience' || key === 'seats' ? eff[key] + v : eff[key] * v;
+      eff[key] = key === 'patience' || key === 'seats' ? eff[key] + v : key === 'small_pay' || key === 'corp_pay' ? eff[key] + v - 1 : eff[key] * v;
     }
   }
+  eff.tokens = Math.max(PRODUCTION.minimum_token_mult, eff.tokens);
   run.eff = eff;
 }
 
@@ -642,7 +657,12 @@ export function refreshRun(run: Run): void {
   run.strategy ??= { support: null, processing: null };
   restoreCardStacks(run);
   run.infrastructure ??= 0;
+  run.land ??= 0;
+  run.desks ??= Math.max(0, run.agents.length - OFFICE.desks.base);
   run.market ??= createMarket(['core', 'landing', 'pay', ...run.pool]);
+  normalizeMarket(run.market);
+  run.research ??= createResearch();
+  run.recentNews ??= [];
   syncProduction(run);
   refresh(run);
   run.mod = { tokens: 1, price: 1, promo: 1 };
@@ -691,7 +711,8 @@ export function linkBonus(run: Run): number {
 /** what a client is worth per sprint: its subscription at today's prices, whether it pays right now or not */
 function clientWorth(run: Run, c: Client): number {
   const own = CLIENT_RULE[c.type].asks === 'corp' ? run.eff.corp_pay : run.eff.small_pay;
-  return c.pay * c.deal * priceMult(run) * own * (c.happy ? TUNING.clients.happy_bonus : 1);
+  const segment = c.type === 'corp' || c.type === 'gov' ? 'large' : c.type === 'mid' ? 'medium' : 'small';
+  return c.pay * c.deal * priceMult(run) * own * segmentRevenueMultiplier(run, segment) * (c.happy ? TUNING.clients.happy_bonus : 1);
 }
 
 /** the contract is still being approved: this client pays nothing until its block ships */
@@ -707,7 +728,12 @@ export function clientPay(run: Run, c: Client): number {
 
 /** squares of research before the market says one more thing it wants */
 export function researchNeed(run: Run): number {
-  return Math.max(1, Math.round(TUNING.research_work_per_reveal * run.idea.tech.research));
+  return Math.max(1, RESEARCH.work[run.research.active ?? 'clients'] * run.idea.tech.research);
+}
+
+export function startResearch(run: Run, kind: ResearchKind): boolean {
+  if (run.over || run.draft) return false;
+  return beginResearch(run.research, kind, run.market);
 }
 
 /** what a client costs in tokens per sprint: free users burn them too */
@@ -786,16 +812,32 @@ export function stageRule(run: Run): (typeof TUNING.stages)[number] {
   return TUNING.stages[run.stage - 1];
 }
 
-/** how many blocks the sheet of this stage holds: fewer than the startup could build — a product is a choice */
+/** Paid land expansions eventually fit the startup's whole toolkit. */
 export function cellsMax(run: Run): number {
-  return stageRule(run).cells_max;
+  return Math.min(run.pool.length + 3, stageRule(run).cells_max + run.land * OFFICE.land.cells);
+}
+
+export function agentSlots(run: Run): number { return Math.min(OFFICE.desks.max, OFFICE.desks.base + run.desks); }
+
+export function officeQuote(run: Run, kind: 'land' | 'desks'): number | null {
+  const rule = OFFICE[kind];
+  if (run.over || run.draft || (kind === 'land' ? cellsMax(run) >= run.pool.length + 3 || run.land >= OFFICE.land.max : agentSlots(run) >= OFFICE.desks.max)) return null;
+  return Math.round(rule.cost * rule.growth ** run[kind]);
+}
+
+export function expandOffice(run: Run, kind: 'land' | 'desks'): boolean {
+  const cost = officeQuote(run, kind);
+  if (cost === null || run.money < cost) return false;
+  run.money -= cost;
+  run[kind]++;
+  return true;
 }
 
 /** Cells the next block may stand on: inside the sheet of this stage, next to what is already there. */
 export function freeCells(run: Run): { i: number; j: number }[] {
   if (run.blocks.length === 0) return [{ i: 0, j: 0 }];
   if (run.blocks.length >= cellsMax(run)) return [];
-  const r = stageRule(run).radius;
+  const r = Math.max(stageRule(run).radius, run.land > 0 ? 2 : 1);
   const taken = new Set(run.blocks.map((b) => `${b.i},${b.j}`));
   const out: { i: number; j: number }[] = [];
   for (let i = -r; i <= r; i++) {
@@ -862,7 +904,7 @@ export function fulfillClient(run: Run, c: Client): void {
 
 /** squares of work a rework takes: each next version of a block is a bigger job */
 export function reworkNeed(run: Run, b: Block): number {
-  return Math.ceil(workNeed(run, b.kind) * TUNING.rework.work_mult * b.level);
+  return upgradeWork(workNeed(run, b.kind), b.level);
 }
 
 /** Reworks clients are waiting for and nobody has started yet, with the names of those who asked. */
@@ -918,7 +960,7 @@ export function place(run: Run, kind: string, i: number, j: number): boolean {
     block: kind,
     level: 1,
     work,
-    cost: work * PRODUCTION.construction_cost_per_work,
+    cost: projectCost(run, work),
   });
   run.events.push({ type: 'placed', kind, i, j });
   return true;
@@ -971,7 +1013,7 @@ export function upgrade(run: Run, kind: string): boolean {
     block: kind,
     level: b.level + 1,
     work,
-    cost: work * PRODUCTION.upgrade_cost_per_work,
+    cost: projectCost(run, work, b.level + 1),
   });
   run.events.push({ type: 'placed', kind, i: b.i, j: b.j });
   return true;
@@ -994,12 +1036,13 @@ export function setReview(run: Run, lane: Lane): boolean {
 export function canHire(run: Run, tier: Tier): boolean {
   const rule = stageRule(run);
   return (
-    !run.over && !run.draft && run.agents.length < rule.agents_max && rule.tiers.includes(tier)
+    !run.over && !run.draft && run.agents.length < agentSlots(run) && rule.tiers.includes(tier) && run.money >= OFFICE.hire[tier]
   );
 }
 
 export function hire(run: Run, tier: Tier): boolean {
   if (!canHire(run, tier)) return false;
+  run.money -= OFFICE.hire[tier];
   run.agents.push({ id: run.nextAgent++, tier, lane: 'build', carry: 0 });
   return true;
 }
@@ -1048,7 +1091,7 @@ export function handy(run: Run, lane: Lane): boolean {
     case 'promo':
       return sellable(run);
     case 'research':
-      return unknownAsks(run).length > 0 && run.clients.length > 0;
+      return run.research.active !== null && researchAvailable(run.research, run.research.active, run.market);
   }
 }
 
@@ -1075,14 +1118,11 @@ export function leadsPerWork(run: Run): number {
 
 /** One square of research: enough of them and the market names one more block it wants. */
 function interview(run: Run): void {
-  const unknown = unknownAsks(run);
-  if (unknown.length === 0) return;
-  run.insight++;
-  if (run.insight >= researchNeed(run)) {
-    run.insight = 0;
-    run.known.push(unknown[0]);
-    run.events.push({ type: 'reveal', kind: unknown[0] });
-  }
+  const report = advanceResearch(run.research, 1 / Math.max(0.1, run.idea.tech.research), run.market, companyContext(run), run.sprint);
+  if (!report) return;
+  if (report.kind === 'clients') run.known = [...new Set([...run.known, ...run.asks, ...run.corpAsks])];
+  run.insight = 0;
+  run.events.push({ type: 'researched', kind: report.kind });
 }
 
 function work(run: Run, agent: number, hand = false): boolean {
@@ -1367,7 +1407,7 @@ function deliver(run: Run, a: Agent): void {
         type: 'work',
         agent: a.id,
         lane: a.lane,
-        idle: unknownAsks(run).length === 0,
+        idle: !handy(run, 'research'),
       });
       interview(run);
       return;
@@ -1587,9 +1627,7 @@ function release(run: Run): void {
     if (next.length > 0) {
       const kind = run.rng.pick(next);
       run.asks.push(kind);
-      // a trend is no secret: everybody talks about it
-      if (!run.known.includes(kind)) run.known.push(kind);
-      run.events.push({ type: 'trend', kind });
+      // Public signals name a change; an interview identifies the new request.
     }
   }
 
@@ -1601,9 +1639,9 @@ function release(run: Run): void {
       if (pending >= R.max_pending) break;
       if (!c.happy || c.promised || run.rng.next() >= R.chance) continue;
       const own = run.blocks.find((b) => b.kind === c.want);
-      const open = run.blocks.filter((b) => b.live && b.level < R.max_level);
+      const open = run.blocks.filter((b) => b.live && b.level < PRODUCTION.max_level);
       const b =
-        own && own.level < R.max_level ? own : open.length > 0 ? run.rng.pick(open) : undefined;
+        own && own.level < PRODUCTION.max_level ? own : open.length > 0 ? run.rng.pick(open) : undefined;
       if (!b) continue;
       c.want = b.kind;
       c.wantLevel = b.level + 1;
@@ -1653,6 +1691,15 @@ function release(run: Run): void {
   if (run.stage === 1 && customerCount(run) > 0 && isLive(run, 'pay')) {
     run.stage = 2;
     run.events.push({ type: 'stage', stage: 2 });
+  }
+  const signal = evolveMarket(run.market, ['core', 'landing', 'pay', ...run.pool], run.sprint, run.seed);
+  if (signal) {
+    const group = { small: L('малых компаний', 'small companies'), medium: L('средних компаний', 'medium companies'), large: L('крупных компаний', 'large companies') }[signal.segment];
+    const topic = { quality: L('требования к продукту', 'product expectations'), price: L('готовность платить', 'willingness to pay'), demand: L('конкуренция за клиентов', 'competition for customers') }[signal.theme];
+    run.events.push({ type: 'news', id: `market-${signal.kind}`, arg: '', good: true,
+      text: signal.kind === 'warning'
+        ? L(`У ${group} скоро изменятся ${topic}. Следи за обратной связью.`, `For ${group}, ${topic} will change soon. Watch for feedback.`)
+        : L(`У ${group} изменились ${topic}. Старые отчёты сохранены; новые исследования доступны.`, `For ${group}, ${topic} have changed. Old reports are kept; new research is available.`) });
   }
   const marketRelease = advanceMarket(run.market, companyContext(run), marketLeads);
   report.came += marketRelease.came;
@@ -1716,6 +1763,7 @@ function news(run: Run): void {
     const pool = EVENTS.filter(
       (e) =>
         e.stage <= run.stage &&
+        !run.recentNews.includes(e.id) &&
         (e.kind !== 'impatience' || waiting.length > 0) &&
         (e.kind !== 'down' || !run.down),
     );
@@ -1730,7 +1778,7 @@ function news(run: Run): void {
         run.mods.push({ kind: e.kind as Mod['kind'], mult: e.mult, left: e.sprints, tag: e.tag });
         break;
       case 'debt':
-        run.debt += e.add;
+        run.debt = Math.max(0, run.debt + e.add);
         break;
       case 'leads':
         run.leads += e.add;
@@ -1752,9 +1800,12 @@ function news(run: Run): void {
       }
     }
     run.newsWait = N.cooldown;
+    run.recentNews = [...run.recentNews, e.id].slice(-N.no_repeat);
     const good =
       e.kind === 'leads' ||
-      e.kind === 'money' ||
+      (e.kind === 'money' && e.add > 0) ||
+      (e.kind === 'debt' && e.add < 0) ||
+      (e.kind === 'price' && e.mult > 1) ||
       (e.kind === 'promo' && e.mult > 1) ||
       (e.kind === 'tokens' && e.mult < 1);
     run.events.push({ type: 'news', id: e.id, text: e.text, arg, good });

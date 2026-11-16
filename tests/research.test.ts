@@ -50,7 +50,7 @@ describe('research and changing demand', () => {
     delete legacy.warned;
     delete legacy.evolved;
     const needs = legacy.groups.map((group) => group.profiles.map((profile) => profile.needs));
-    normalizeMarket(legacy, toolkit);
+    normalizeMarket(legacy);
     expect(legacy.groups.map((group) => group.profiles.map((profile) => profile.needs))).toEqual(
       needs,
     );

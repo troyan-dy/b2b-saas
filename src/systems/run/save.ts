@@ -1,6 +1,7 @@
 import { createRng } from '../../core/rng';
 import draftCards from '../../data/balance/draft.json';
-import { MARKET } from '../company/market';
+import { createMarket, MARKET } from '../company/market';
+import { RESEARCH } from '../company/research';
 import { PRODUCTION, STRATEGY_IDS } from './product';
 import {
   CLIENT_TYPES,
@@ -13,12 +14,13 @@ import {
   RULES,
   TIERS,
   TUNING,
+  OFFICE,
   type Idea,
   type Run,
 } from './run';
 
 export const RUN_SAVE_KEY = 'b2b-saas-run';
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2;
 const TRANSIENT = new Set(['rng', 'events', 'live', 'eff', 'host', 'linkCount', 'mod', 'idea']);
 type RecordValue = Record<string, unknown>;
 
@@ -119,11 +121,12 @@ function tariff(value: unknown): value is number {
   return Math.abs(value / MARKET.price.step - Math.round(value / MARKET.price.step)) < 1e-7;
 }
 
-function marketProfile(value: unknown, share: number, capacity: number): boolean {
-  if (!record(value) || value.share !== share || !integer(value.count) || !nonnegative(value.leads))
+function marketProfile(value: unknown, capacity: number): boolean {
+  if (!record(value) || !nonnegative(value.share) || value.share <= 0 || value.share > 100 || !integer(value.count) || !nonnegative(value.leads))
     return false;
   if (!nonnegative(value.churnCarry) || value.churnCarry >= 1) return false;
-  if (value.count + value.leads > Math.floor((capacity * share) / 100) + 1e-7) return false;
+  if (value.count + value.leads > capacity * RESEARCH.demand_max + 1e-7) return false;
+  if (value.priceComfort !== undefined && (typeof value.priceComfort !== 'number' || value.priceComfort < RESEARCH.price_min || value.priceComfort > RESEARCH.price_max)) return false;
   if (
     !Array.isArray(value.needs) ||
     value.needs.length === 0 ||
@@ -155,6 +158,8 @@ function market(value: unknown, infrastructure: number): boolean {
   if (value.groups.length !== MARKET.segments.length || !value.groups.every(record)) return false;
   if (new Set(value.groups.map((group: RecordValue) => group.id)).size !== MARKET.segments.length)
     return false;
+  if (value.revision !== undefined && (!integer(value.revision) || value.revision > RESEARCH.shift_sprints.length)) return false;
+  for (const key of ['warned', 'evolved']) if (value[key] !== undefined && (!Array.isArray(value[key]) || !(value[key] as unknown[]).every(n => typeof n === 'number' && RESEARCH.shift_sprints.includes(n)))) return false;
   return value.groups.every((group: RecordValue) => {
     const segment = MARKET.segments.find((entry) => entry.id === group.id);
     if (
@@ -172,15 +177,18 @@ function market(value: unknown, infrastructure: number): boolean {
       return false;
     const capacity = segment.market * MARKET.acquisition.market_expansion_mult ** infrastructure;
     if (!Number.isFinite(capacity)) return false;
+    if (group.demand !== undefined && (!nonnegative(group.demand) || group.demand < RESEARCH.demand_min || group.demand > RESEARCH.demand_max)) return false;
+    if (Math.abs(group.profiles.reduce((sum: number, profile: unknown) => sum + (record(profile) && nonnegative(profile.share) ? profile.share : 0), 0) - 100) > 1e-6) return false;
     return group.profiles.every(
-      (profile: unknown, index: number) =>
-        marketProfile(profile, segment.profiles[index].share, capacity) &&
+      (profile: unknown) =>
+        marketProfile(profile, capacity) &&
         (value.opened || (record(profile) && profile.count === 0 && profile.churnCarry === 0)),
     );
   });
 }
 
 function production(value: RecordValue, blocks: Run['blocks']): boolean {
+  for (const key of ['land', 'desks'] as const) if (value[key] !== undefined && (!integer(value[key]) || value[key] > OFFICE[key].max)) return false;
   if (
     value.apiShipped !== undefined &&
     (!strings(value.apiShipped) ||
@@ -311,7 +319,26 @@ function production(value: RecordValue, blocks: Run['blocks']): boolean {
   });
 }
 
+function validResearchReport(value: unknown): boolean {
+  if (!record(value) || !['clients', 'market'].includes(value.kind as string) || !integer(value.sprint) || !integer(value.revision)) return false;
+  if (!Array.isArray(value.segments) || value.segments.length !== 3 || !value.segments.every(segment => record(segment) && MARKET.segments.some(s => s.id === segment.id) && ['count','satisfaction','leads','market','income','unitPrice','price'].every(key => nonnegative(segment[key])) && Array.isArray(segment.needs) && segment.needs.every(need => record(need) && kind(need.block) && integer(need.level) && need.level > 0 && need.level <= PRODUCTION.max_level && ['count','share','potential'].every(key => nonnegative(need[key]))) && record(segment.reasons) && Object.values(segment.reasons).every(nonnegative))) return false;
+  if (!Array.isArray(value.forecasts) || !value.forecasts.every(f => record(f) && MARKET.segments.some(s => s.id === f.id) && ['price','lost','income','satisfaction'].every(key => nonnegative(f[key])))) return false;
+  return Array.isArray(value.findings) && value.findings.length <= RESEARCH.finding_limit && value.findings.every(f => record(f) && ['need','retention','price','opportunity','competition'].includes(f.type as string) && MARKET.segments.some(s => s.id === f.segment) && nonnegative(f.value) && (f.block === undefined || kind(f.block)) && (f.level === undefined || integer(f.level)));
+}
+
+function validResearch(value: unknown): boolean {
+  if (!record(value) || ![null, 'clients', 'market'].includes(value.active as string | null) || !record(value.progress) || !record(value.reports)) return false;
+  for (const key of ['clients','market'] as const) {
+    if (!nonnegative(value.progress[key]) || value.progress[key] > RESEARCH.work[key]) return false;
+    if (value.reports[key] !== null && !validResearchReport(value.reports[key])) return false;
+  }
+  return Array.isArray(value.history) && value.history.length <= RESEARCH.history_limit && value.history.every(validResearchReport);
+}
+
 function validRun(value: RecordValue, defaults: Run): boolean {
+  if (value.recentNews !== undefined && (!strings(value.recentNews) || value.recentNews.length > TUNING.news.no_repeat)) return false;
+  if (value.research !== undefined && !validResearch(value.research)) return false;
+  if (Array.isArray(value.tasks) && value.tasks.some(task => record(task) && task.apiBoost !== undefined && typeof task.apiBoost !== 'boolean')) return false;
   const numeric = ['t', 'sprintT', 'debt', 'energy', 'leads', 'insight'];
   const ids = ['pool', 'asks', 'corpAsks', 'known'];
   if (!numeric.every((key) => nonnegative(value[key])) || !ids.every((key) => kinds(value[key])))
@@ -444,7 +471,7 @@ export function loadRun(): Run | null {
     if (
       !record(saved) ||
       !plain(saved) ||
-      saved.v !== SCHEMA_VERSION ||
+      (saved.v !== 1 && saved.v !== SCHEMA_VERSION) ||
       !integer(saved.rngState) ||
       saved.rngState > 0xffffffff ||
       !record(saved.run)
@@ -464,6 +491,8 @@ export function loadRun(): Run | null {
       run,
       Object.fromEntries(Object.entries(state).filter(([key]) => !TRANSIENT.has(key))),
     );
+    if (state.desks === undefined) run.desks = Math.max(0, run.agents.length - OFFICE.desks.base);
+    if (state.market === undefined) run.market = createMarket(['core','landing','pay',...run.pool]);
     run.idea = idea;
     run.rng = createRng(run.seed, saved.rngState);
     run.events = [];

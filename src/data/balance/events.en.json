@@ -1,14 +1,114 @@
 {
-  "price_up": { "text": "The model provider raised prices “due to increased value”. Tokens cost 40% more — for three sprints", "tag": "tokens ×1.4" },
-  "free_rival": { "text": "A giant released the same product for free. Clients haggle: bills are 20% smaller — for three sprints", "tag": "bill −20%" },
-  "new_model": { "text": "A new version of the model is out. Half of your prompts no longer work: +8 debt" },
-  "rival_demo": { "text": "A competitor showed “%s” at a conference. Those who waited for it from you are tired of waiting: patience −1" },
-  "outage": { "text": "The model provider is down. Your product is down together with everyone else’s — until the release" },
-  "viral": { "text": "Your post “we are not a wrapper” went viral. Two companies came to take a look: +2 leads" },
-  "hype": { "text": "AI is in fashion again this week. Promotion works one and a half times better — for three sprints", "tag": "promotion ×1.5" },
-  "refund": { "text": "A tax refund you didn’t know about has arrived: +$400. Accounting is a product too" },
-  "launch_day": { "text": "You got featured on a launch platform. Three companies came to look, one — to criticize the fonts: +3 leads" },
-  "price_war": { "text": "Model providers started a price war. You got caught in it, in a good way: tokens cost 30% less — for three sprints", "tag": "tokens ×0.7" },
-  "data_law": { "text": "A new data law has passed. You needed a lawyer yesterday: +6 debt" },
-  "bubble_post": { "text": "A famous blogger called AI wrappers a bubble. Promotion works 40% worse — for three sprints", "tag": "promotion ×0.6" }
+  "price_up": {
+    "text": "The model provider raised prices “due to increased value”. Tokens cost 40% more — for three sprints",
+    "tag": "tokens ×1.4"
+  },
+  "free_rival": {
+    "text": "A giant released the same product for free. Clients haggle: bills are 20% smaller — for three sprints",
+    "tag": "bill −20%"
+  },
+  "new_model": {
+    "text": "A new version of the model is out. Half of your prompts no longer work: +8 debt"
+  },
+  "rival_demo": {
+    "text": "A competitor showed “%s” at a conference. Those who waited for it from you are tired of waiting: patience −1"
+  },
+  "outage": {
+    "text": "The model provider is down. Your product is down together with everyone else’s — until the release"
+  },
+  "viral": {
+    "text": "Your post “we are not a wrapper” went viral. Two companies came to take a look: +2 leads"
+  },
+  "hype": {
+    "text": "AI is in fashion again this week. Promotion works one and a half times better — for three sprints",
+    "tag": "promotion ×1.5"
+  },
+  "refund": {
+    "text": "A tax refund you didn’t know about has arrived: +$400. Accounting is a product too"
+  },
+  "launch_day": {
+    "text": "You got featured on a launch platform. Three companies came to look, one — to criticize the fonts: +3 leads"
+  },
+  "price_war": {
+    "text": "Model providers started a price war. You got caught in it, in a good way: tokens cost 30% less — for three sprints",
+    "tag": "tokens ×0.7"
+  },
+  "data_law": {
+    "text": "A new data law has passed. You needed a lawyer yesterday: +6 debt"
+  },
+  "bubble_post": {
+    "text": "A famous blogger called AI wrappers a bubble. Promotion works 40% worse — for three sprints",
+    "tag": "promotion ×0.6"
+  },
+  "procurement_week": {
+    "text": "Procurement opened quarterly budgets. Promotion +25% for two sprints: someone finally read the email.",
+    "tag": "promo ×1.25"
+  },
+  "budget_freeze": {
+    "text": "Clients announced a savings drive. Bills −10% for two sprints; the coffee subscription survived.",
+    "tag": "price ×0.9"
+  },
+  "self_service_guide": {
+    "text": "Small businesses shared a guide without a meeting. +3 leads: apparently that works too."
+  },
+  "scaleup_digest": {
+    "text": "A growing-business newsletter featured you. +4 leads and an offer to buy a higher position."
+  },
+  "security_questionnaire": {
+    "text": "A hundred-page security questionnaire arrived. Four promises were found in the answers: +4 debt."
+  },
+  "model_cache": {
+    "text": "The provider learned to cache identical answers. Tokens −15% for two sprints; the press release is new.",
+    "tag": "tokens ×0.85"
+  },
+  "context_inflation": {
+    "text": "Every request now starts with the company history. Tokens +20% for two sprints.",
+    "tag": "tokens ×1.2"
+  },
+  "honest_demo": {
+    "text": "Someone showed the product without editing the demo. People were surprised: promotion +30% for two sprints.",
+    "tag": "promo ×1.3"
+  },
+  "ai_fatigue": {
+    "text": "The phrase “we added AI” became a spam filter. Promotion −20% for two sprints.",
+    "tag": "promo ×0.8"
+  },
+  "benchmark_patch": {
+    "text": "The impressive benchmark met real documents. +5 debt: a spreadsheet beat the presentation."
+  },
+  "stable_sdk": {
+    "text": "The SDK fixed a bug you had worked around with three prompts. Debt −4."
+  },
+  "local_meetup": {
+    "text": "Two people at the founder meetup turned out to be customers rather than coaches. +2 leads."
+  },
+  "service_reputation": {
+    "text": "Clients remembered that answering support is a rare feature. Bills +10% for two sprints.",
+    "tag": "price ×1.1"
+  },
+  "comparison_sheet": {
+    "text": "A competitor published a comparison with every checkmark in its own column. Promotion −15% for two sprints.",
+    "tag": "promo ×0.85"
+  },
+  "migration_season": {
+    "text": "A neighbouring service is closing its free plan. +5 leads carrying suitcases of spreadsheets."
+  },
+  "invoice_cleanup": {
+    "text": "Found a hosting invoice paid twice. $240 refunded; accounting earned its first revenue."
+  },
+  "support_summit": {
+    "text": "“We answer people” became the conference breakthrough. Promotion +15% for three sprints.",
+    "tag": "promo ×1.15"
+  },
+  "longer_trial": {
+    "text": "Companies extended payment approval. Bills −15% for one sprint: everyone agrees, no signature.",
+    "tag": "price ×0.85"
+  },
+  "prompt_compaction": {
+    "text": "Removed “please” from the prompt four hundred times. Tokens −10% for three sprints.",
+    "tag": "tokens ×0.9"
+  },
+  "rival_deadline": {
+    "text": "A competitor promises “%s” by Friday. Waiting clients lost one sprint of patience."
+  }
 }

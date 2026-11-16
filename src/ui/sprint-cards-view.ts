@@ -10,6 +10,8 @@ import type { SprintCardsView, SprintCardView } from './sprint-cards';
 export const SPRINT_CARD_ART: Record<string, string> = {
   mass: 'school',
   premium: 'hq',
+  small_sales: 'cityblock',
+  medium_sales: 'cityblock',
   batch: 'racks',
   instant: 'datacenter',
   leads: 'cityblock',
@@ -35,7 +37,7 @@ function stackEffects(id: StrategyId, count: number) {
   };
   const additive = ['seats', 'patience', 'large_satisfaction'];
   const fmt = (value: number) => dec(Number(value.toPrecision(3)));
-  return Object.entries(PRODUCTION.strategy[id]).map(([key, base]) => {
+  const effects = Object.entries(PRODUCTION.strategy[id]).map(([key, base]) => {
     const value = additive.includes(key) ? base * count : base ** count;
     const good = key === 'tokens' ? base < 1 : base > 0;
     const number = additive.includes(key)
@@ -43,6 +45,13 @@ function stackEffects(id: StrategyId, count: number) {
       : `×${fmt(value)}`;
     return { key, number, label: labels[key], text: `${number} ${labels[key]}`, good };
   });
+  const segment = Object.entries(PRODUCTION.segment_revenue).find(([, rule]) => rule.card === id);
+  if (segment) {
+    const label = ({small: L('чек малых', 'small bills'), medium: L('чек средних', 'medium bills'), large: L('чек крупных', 'large bills')} as Record<string,string>)[segment[0]];
+    const number = `+${Math.round(segment[1].bonus_per_copy * count * 100)}%`;
+    effects.unshift({key:'segment_revenue', number, label, text: `${number} ${label}`, good:true});
+  }
+  return effects;
 }
 
 function cardView(run: Run, card: DraftCard, choosing = false): SprintCardView {

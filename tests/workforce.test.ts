@@ -71,7 +71,7 @@ describe('workforce trade-offs', () => {
       for (let tick = 0; tick < 32; tick++) step(run, 1 / 4);
       remaining.push(run.debt);
     }
-    expect(remaining).toEqual([13, 9, 0]);
+    expect(remaining).toEqual([13, 7, 0]);
     const idle = staffed(7, ['think']);
     const money = idle.money;
     step(idle, 8);

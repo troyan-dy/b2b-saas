@@ -181,7 +181,7 @@ export function createMarket(toolkit: readonly string[], seed?: number): MarketS
 }
 
 /** Old runs retain their existing audience; migration never rerolls requirements. */
-export function normalizeMarket(state: MarketState, toolkit: readonly string[]): void {
+export function normalizeMarket(state: MarketState): void {
   state.revision ??= 0;
   state.warned ??= [];
   state.evolved ??= [];
@@ -189,7 +189,6 @@ export function normalizeMarket(state: MarketState, toolkit: readonly string[]):
     group.demand ??= 1;
     for (const profile of group.profiles) {
       profile.priceComfort ??= 0;
-      profile.needs = profile.needs.filter((need) => toolkit.includes(need.block));
       if (!profile.needs.length) profile.needs = [{ block: 'core', level: 2 }];
     }
   }
@@ -202,7 +201,7 @@ export function evolveMarket(
   sprint: number,
   seed: number,
 ): MarketSignal | null {
-  normalizeMarket(state, toolkit);
+  normalizeMarket(state);
   const index = research.shift_sprints.findIndex(
     (at) => sprint === at || sprint === at - research.warning_lead,
   );
@@ -227,7 +226,7 @@ export function evolveMarket(
   const group = state.groups.find((item) => item.id === segment)!;
   if (theme === 'quality') {
     const profile = rng.pick(group.profiles);
-    const eligible = profile.needs.filter((need) => need.level < research.shift_level_cap);
+    const eligible = profile.needs.filter((need) => toolkit.includes(need.block) && need.level < research.shift_level_cap);
     if (eligible.length) rng.pick(eligible).level++;
     // Demand shifts towards this existing cohort; its old requirements stay useful.
     profile.share *= 1 + research.share_variation;
@@ -357,6 +356,7 @@ export function segmentView(
     utilization = load / capacity;
   const unitPrice =
     ctx.basePrice *
+    data.billing_scale *
     cfg.price_scale *
     ctx.priceMult *
     price *
@@ -408,7 +408,7 @@ export function segmentView(
     unitPrice,
     income: ctx.payments && !ctx.down ? count * unitPrice * throughput : 0,
     // Billing choices cannot change the cost of the same usage.
-    tokens: count * ctx.basePrice * cfg.price_scale * data.token_share * ctx.tokenMult,
+    tokens: count * ctx.basePrice * data.billing_scale * cfg.price_scale * data.token_share * ctx.tokenMult,
     needs: [...needs.values()].sort((a, b) => b.count - a.count || b.share - a.share),
     reasons: averages,
   };
@@ -423,7 +423,7 @@ export function marketTotals(state: MarketState, ctx: MarketContext): MarketTota
     tokens = 0;
   for (const group of state.groups) {
     const clients = group.profiles.reduce((n, p) => n + p.count, 0);
-    const base = ctx.basePrice * rule(group.id).price_scale;
+    const base = ctx.basePrice * data.billing_scale * rule(group.id).price_scale;
     count += clients;
     income +=
       clients *

@@ -2,6 +2,7 @@ import './workbench.css';
 import { L } from '../core/lang';
 import { BUILD_CATEGORIES, CATEGORY_TITLE, type BuildCategory } from '../content/build-categories';
 import type { BuildReason } from './build-reasons';
+import type { ResearchView } from './research-view';
 import { dec, money, PER_S, rate, whole } from './format';
 
 export type SegmentId = 'small' | 'medium' | 'large';
@@ -65,7 +66,7 @@ export interface WorkbenchSegment {
   readonly happiness: number;
   readonly delta: number;
   readonly leads: number;
-  readonly market: number;
+  readonly market: number | null;
   /** Current and proposed absolute tariff multipliers, not a percentage change. */
   readonly price: number;
   readonly previewPrice: number;
@@ -99,6 +100,8 @@ export interface WorkbenchDraft {
 }
 
 export interface WorkbenchView {
+  readonly research: ResearchView;
+  readonly office: { cells: number; totalCells: number; slots: number; maxSlots: number; landCost: number | null; deskCost: number | null; money: number };
   readonly tasks: readonly WorkbenchTask[];
   readonly budget: { readonly planned: number; readonly capacity: number };
   readonly modules: readonly WorkbenchModule[];
@@ -123,7 +126,7 @@ export interface WorkbenchView {
   };
   readonly clientAnchor?: { readonly x: number; readonly y: number };
   readonly selectedSegment?: SegmentId;
-  readonly panel?: 'module' | 'clients' | 'agent' | null;
+  readonly panel?: 'module' | 'clients' | 'agent' | 'research' | null;
   readonly agent?: { id: number; title: string; description: string; lane: string; rate: number; topRate: number; fixRate: number; debt: number; salary: number; tariff: number; working: boolean; reviewed: boolean };
   readonly selectedModule?: string;
   readonly perks?: readonly {
@@ -135,6 +138,9 @@ export interface WorkbenchView {
 }
 
 export type WorkbenchAction =
+  | { type: 'open-research' | 'research-hand' | 'research-agent' }
+  | { type: 'start-research'; kind: 'clients' | 'market' }
+  | { type: 'expand-office'; kind: 'land' | 'desks' }
   | { type: 'place' | 'upgrade' | 'demolish' | 'inspect-module'; block: string }
   | { type: 'close-panel' }
   | { type: 'move'; task: string; direction: -1 | 1 }
@@ -243,7 +249,7 @@ function moduleDetail(module: WorkbenchModule): string {
         whole(module.work) +
         ' ' +
         L('работы', 'work') +
-        '</p>' +
+        '</p><small>' + L('Цена растёт с уровнем и числом клиентов: обновление нужно развернуть для всей компании.', 'Higher levels and more customers increase rollout costs.') + '</small>' +
         button(
           module.action,
           module.id,
@@ -279,8 +285,8 @@ function moduleDetail(module: WorkbenchModule): string {
       : '') +
     action +
     (module.taskId && module.api ? '<div class="wb-api-option">' +
-      button('rush-task', module.taskId, L('Выпустить сейчас', 'Ship now') + ' · ' + money(module.api.cost), !module.api.affordable, 'wb-api-button', L('Дорогой API: завершит и включит только эту задачу прямо сейчас. Остальные ждут своего релиза.', 'Paid API: completes and activates only this task right now. Other tasks wait for their release.')) +
-      '<small>' + L('Через API · сразу работает, дороже агентов', 'Via API · active immediately, costs more than agents') + '</small></div>' : '') +
+      button('rush-task', module.taskId, L('Строители ×2', 'Builders ×2') + ' · ' + money(module.api.cost), !module.api.affordable, 'wb-api-button', L('Дополнительные вычисления ускоряют назначенных строителей. Нужен агент на стройке; здание включится на релизе.', 'Extra compute speeds up assigned builders. Requires a builder; activates at release.')) +
+      '<small>' + L('Дополнительные вычисления · нужен строитель · выпуск на релизе', 'Extra compute · requires a builder · ships at release') + '</small></div>' : '') +
     (module.demand
       ? '<p class="wb-demand">' + L('Нужно клиентам: ', 'Wanted by: ') + esc(module.demand) + '</p>'
       : '') +
@@ -390,7 +396,7 @@ function infrastructureCard(infra: NonNullable<WorkbenchView['infrastructure']>)
       ? '<div class="wb-infrastructure-progress">' +
         `<progress max="1" value="${infra.progress ?? 0}" aria-label="${esc(status)}"></progress>` +
         button('cancel-task', infra.taskId, L('Отменить', 'Cancel'), false, 'wb-text-button') +
-        (infra.api ? button('rush-task', infra.taskId, L('API: сейчас', 'API: now') + ' · ' + money(infra.api.cost), !infra.api.affordable, 'wb-api-button', L('Сразу достроить и включить мощность за токены. Цена уже включает неоплаченную стройку.', 'Build and activate capacity now with paid tokens. Price includes any unpaid construction.')) : '') +
+        (infra.api ? button('rush-task', infra.taskId, L('Строители ×2', 'Builders ×2') + ' · ' + money(infra.api.cost), !infra.api.affordable, 'wb-api-button', L('Ускорить работу агентов. Стройка и выпуск остаются обязательными.', 'Speed up agents. Construction and release are still required.')) : '') +
         '</div>'
       : '') +
     '</article>'
@@ -426,6 +432,18 @@ export interface Workbench {
   set(view: WorkbenchView | null): void;
 }
 
+function researchHtml(view: ResearchView): string {
+  return '<h2>' + L('ИССЛЕДОВАНИЯ', 'RESEARCH') + '</h2><p>' + L('Отчёт занимает время. Пока агент исследует, он не строит и не продвигает продукт.', 'A report takes time. A researching agent cannot build or promote the product.') + '</p>' +
+    view.cards.map(card => '<article class="wb-research-card"><h3>' + esc(card.title) + '</h3><p>' + esc(card.status) + ' · ' + card.work + L(' работы', ' work') + '</p>' +
+      '<progress max="1" value="' + card.progress + '"></progress>' +
+      button('start-research', card.kind, card.active ? L('Исследуем…', 'Studying…') : card.available ? L('Начать', 'Start') : L('Данные актуальны', 'Up to date'), !card.available || card.active, 'wb-primary') +
+      (card.findings.length ? '<ul>' + card.findings.map(f => '<li>' + esc(f) + '</li>').join('') + '</ul>' : '<p>' + L('Сначала разговоры и наблюдения — затем выводы.', 'Talk and observe first, then draw conclusions.') + '</p>') + '</article>').join('') +
+    '<div class="wb-research-actions">' + button('research-hand', '', L('Помочь самому · 1 сила', 'Help yourself · 1 energy'), view.handDisabled) +
+    button('research-agent', '', view.working ? L('Агент назначен', 'Agent assigned') : L(`Назначить агента №${view.agent ?? '—'}`, `Assign agent #${view.agent ?? '—'}`), !view.active || !view.agent || view.working) + '</div>' +
+    '<p>' + L('После отчёта агент ждёт бесплатно. Другую работу ему нужно поручить самому.', 'After the report the agent waits for free. Reassign them to other work yourself.') + '</p>' +
+    (view.history.length ? '<details><summary>' + L('Предыдущие отчёты', 'Previous reports') + '</summary>' + view.history.map(report => '<h3>' + esc(report.title) + '</h3><ul>' + report.findings.map(f => '<li>' + esc(f) + '</li>').join('') + '</ul>').join('') + '</details>' : '');
+}
+
 /** The scene owns which detail is open. Input nodes survive simulation updates. */
 export function createWorkbench(
   shop: HTMLElement,
@@ -439,11 +457,11 @@ export function createWorkbench(
   root.innerHTML =
     '<section class="wb-catalog"><header><h2 tabindex="-1">' +
     L('БЛОКИ', 'BLOCKS') +
-    '</h2><nav class="wb-categories" aria-label="' + L('Категории построек', 'Building categories') + '">' +
+    '</h2>' + button('open-research', '', L('Исследования', 'Research'), false, 'wb-text-button') + '<nav class="wb-categories" aria-label="' + L('Категории построек', 'Building categories') + '">' +
     button('category', 'all', L('Все', 'All'), false, 'wb-category-tab wb-category-all') +
     BUILD_CATEGORIES.map((category) => button('category', category, CATEGORY_TITLE[category], false, 'wb-category-tab wb-category-' + category)).join('') +
     '</nav></header>' +
-    '<div class="wb-builds"></div></section>' +
+    '<div class="wb-office"></div><div class="wb-builds"></div></section>' +
     '<section class="wb-detail wb-module-panel" aria-label="' +
     L('Постройка', 'Building') +
     '" hidden>' +
@@ -472,7 +490,7 @@ export function createWorkbench(
     '<div class="wb-happiness"><span></span><meter min="0" max="100"></meter></div>' +
     '<section class="wb-client-needs"><h3>' +
     L('Что им нужно', 'What they need') +
-    '</h3><ul class="wb-needs"></ul></section>' +
+    '</h3><ul class="wb-needs"></ul>' + button('open-research', '', L('Исследовать причины', 'Study the causes'), false, 'wb-text-button') + '</section>' +
     '<section class="wb-price"><label for="wb-price">' +
     L('Тариф', 'Tariff') +
     '<output for="wb-price"></output></label>' +
@@ -530,6 +548,10 @@ export function createWorkbench(
     const id = target.dataset.wbId ?? '';
     if (view.draft) return;
     switch (action) {
+      case 'open-research': case 'research-hand': case 'research-agent':
+        send({ type: action }); break;
+      case 'start-research': send({ type: action, kind: id as 'clients' | 'market' }); break;
+      case 'expand-office': send({ type: action, kind: id as 'land' | 'desks' }); break;
       case 'category':
         category = id as BuildCategory | 'all';
         renderCatalog();
@@ -564,6 +586,10 @@ export function createWorkbench(
       .filter((module) => category === 'all' || module.category === category)
       .sort((a, b) => Number(Boolean(b.reason)) - Number(Boolean(a.reason)));
     for (const tab of root.querySelectorAll<HTMLButtonElement>('.wb-category-tab')) tab.setAttribute('aria-pressed', String(tab.dataset.wbId === category));
+    const office = view.office;
+    html(find('.wb-office'),
+      button('expand-office', 'land', L(`Участок ${office.cells}/${office.totalCells}`, `Plot ${office.cells}/${office.totalCells}`) + (office.landCost === null ? ' ✓' : ` +${Math.min(3, office.totalCells - office.cells)} · ${money(office.landCost)}`), office.landCost === null || office.money < office.landCost, 'wb-text-button', L('Купить клетки под здания. Каждое расширение дороже.', 'Buy building cells. Each expansion costs more.')) +
+      button('expand-office', 'desks', L(`Места агентов ${office.slots}/${office.maxSlots}`, `Agent desks ${office.slots}/${office.maxSlots}`) + (office.deskCost === null ? ' ✓' : ` +1 · ${money(office.deskCost)}`), office.deskCost === null || office.money < office.deskCost, 'wb-text-button', L('Купить рабочее место. Найм агента оплачивается отдельно.', 'Buy a desk. Agent setup is paid separately.')));
     html(find('.wb-builds'),
       (view.infrastructure && (category === 'all' || category === 'infra') ? infrastructureCard(view.infrastructure) : '') +
       (available.length ? available.map(moduleCard).join('') : '<p class="wb-empty">' + L('Кликни здание на карте, чтобы улучшить его.', 'Click a building on the map to upgrade it.') + '</p>'),
@@ -626,8 +652,8 @@ export function createWorkbench(
     text(
       find('.wb-market-numbers'),
       L(
-        whole(segment.leads) + ' лидов · доступный рынок ' + whole(segment.market),
-        whole(segment.leads) + ' leads · reachable market ' + whole(segment.market),
+        whole(segment.leads) + ' лидов · рынок ' + (segment.market === null ? 'не изучен' : '≈' + whole(segment.market)),
+        whole(segment.leads) + ' leads · market ' + (segment.market === null ? 'not studied' : '≈' + whole(segment.market)),
       ),
     );
     text(find('.wb-reasons'), segment.reasons.join(' · '));
@@ -635,7 +661,7 @@ export function createWorkbench(
       find('.wb-needs'),
       segment.needs.length
         ? segment.needs.map(needHtml).join('')
-        : '<li>' + L('Новых запросов пока нет.', 'No new requests yet.') + '</li>',
+        : '<li>' + L('Потребности не изучены. Отчёт поможет выбрать направление развития.', 'Needs have not been studied. A report helps choose what to develop.') + '</li>',
     );
     const contracts = find('.wb-contracts');
     contracts.hidden = !segment.contracts?.length;
@@ -715,7 +741,7 @@ export function createWorkbench(
         return;
       }
       const panel = view.panel ?? null;
-      const detail = panel === 'module' || panel === 'agent';
+      const detail = panel === 'module' || panel === 'agent' || panel === 'research';
       root.classList.toggle('wb-context', detail);
       catalog.hidden = detail;
       modulePanel.hidden = !detail;
@@ -735,6 +761,7 @@ export function createWorkbench(
         );
       }
       if (panel === 'agent' && view.agent) html(find('.wb-module-content'), agentDetail(view.agent));
+      if (panel === 'research') html(find('.wb-module-content'), researchHtml(view.research));
       const segment =
         view.segments.find((entry) => entry.id === view?.selectedSegment) ?? view.segments[0];
       if (panel === 'clients' && segment) {
@@ -744,6 +771,7 @@ export function createWorkbench(
       const nextPanelKey =
         panel === 'module'
           ? 'module:' + (view.selectedModule ?? '')
+          : panel === 'research' ? 'research'
           : panel === 'agent'
             ? 'agent:' + view.agent?.id
           : panel === 'clients'

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { companyTotals } from '../src/systems/company/company';
 import { createRun, IDEAS, refreshRun, RULES, type Run } from '../src/systems/run/run';
+import { projectCost, upgradeWork } from '../src/systems/run/product';
 
 const additions = ['cache', 'monitor', 'webhook', 'help', 'ab', 'portal'];
 const idea = { tech: IDEAS.tech[0], form: IDEAS.form[3], aud: IDEAS.aud[0] };
@@ -28,6 +29,14 @@ function company(level: number): Run {
 }
 
 describe('expanded product toolkit', () => {
+  it('makes higher levels cost more work and makes rollout to a larger audience cost more', () => {
+    const run = createRun(7, idea);
+    const costs = [2, 3, 4, 5].map(level => projectCost(run, upgradeWork(20, level - 1), level));
+    for (let i = 1; i < costs.length; i++) expect(costs[i]).toBeGreaterThan(costs[i - 1]);
+    const small = projectCost(run, 20);
+    run.market.groups[0].profiles[0].count = 200;
+    expect(projectCost(run, 20)).toBeGreaterThan(small);
+  });
   it('keeps new requests buildable and makes every new block available across seeded runs', () => {
     const dealt = new Set<string>();
     const requested = new Set<string>();
@@ -59,6 +68,6 @@ describe('expanded product toolkit', () => {
       expect(runs[i].eff.patience).toBe(2);
     }
     expect(runs[2].eff.tokens).toBeCloseTo(0.95 * 0.65 * 0.89);
-    expect(runs[2].eff.corp_pay).toBeCloseTo(1.3 * 1.5);
+    expect(runs[2].eff.corp_pay).toBeCloseTo(1 + 0.3 + 0.5);
   });
 });

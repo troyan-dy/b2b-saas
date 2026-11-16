@@ -1,7 +1,7 @@
 import api from '../../data/balance/api.json';
 import tuning from '../../data/balance/run.json';
 import { PRODUCTION, upgradeWork } from './product';
-import { fulfillClient, refreshRun, RULES, workNeed, type Block, type Run } from './run';
+import { RULES, workNeed, type Block, type Run } from './run';
 import { agentWorkRate } from './workforce';
 
 export type TaskStatus = 'queued' | 'active' | 'ready' | 'backlog';
@@ -15,6 +15,7 @@ export interface WorkTask {
   done: number;
   cost: number;
   status: TaskStatus;
+  apiBoost?: boolean;
 }
 
 export interface ApiWorkQuote {
@@ -23,6 +24,7 @@ export interface ApiWorkQuote {
   unpaidCost: number;
   remainingWork: number;
   affordable: boolean;
+  builder: boolean;
 }
 
 export function apiWorkQuote(run: Run, id: string): ApiWorkQuote | null {
@@ -40,13 +42,13 @@ export function apiWorkQuote(run: Run, id: string): ApiWorkQuote | null {
     !task ||
     task.kind === 'card' ||
     !['build', 'upgrade', 'infrastructure'].includes(task.kind) ||
-    !['queued', 'active', 'ready', 'backlog'].includes(task.status) ||
+    !['queued', 'active'].includes(task.status) ||
+    task.apiBoost ||
     ![task.work, task.done, task.cost].every(Number.isFinite) ||
     task.work <= 0 ||
     task.done < 0 ||
-    task.done > task.work ||
-    task.cost < 0 ||
-    (task.status === 'ready' && task.done !== task.work)
+    task.done >= task.work ||
+    task.cost < 0
   )
     return null;
   if (task.kind === 'infrastructure') {
@@ -68,38 +70,25 @@ export function apiWorkQuote(run: Run, id: string): ApiWorkQuote | null {
   }
   const remainingWork = task.work - task.done;
   const unpaidCost = task.status === 'queued' || task.status === 'backlog' ? task.cost : 0;
-  const fee = Math.ceil(api.minimum_fee + remainingWork * api.cost_per_work);
-  const cost = Math.ceil(unpaidCost + fee);
+  const fee = Math.ceil((api.minimum_fee + remainingWork * api.cost_per_work) * (1 + api.level_growth * ((task.level ?? run.infrastructure + 1) - 1)));
+  const cost = fee;
+  const builder = run.agents.some((agent) => agent.lane === 'build');
   if (!Number.isSafeInteger(cost)) return null;
-  return { cost, fee, unpaidCost, remainingWork, affordable: run.money >= cost };
+  return { cost, fee, unpaidCost, remainingWork, builder, affordable: builder && run.money >= cost + unpaidCost };
 }
 
-/** Ships only this order. It does not tick the market, clients or the sprint clock. */
+/** Extra compute speeds up builders; it never supplies work or ships the task. */
 export function rushTask(run: Run, id: string): boolean {
   const quote = apiWorkQuote(run, id);
   if (!quote?.affordable) return false;
   const task = run.tasks.find((entry) => entry.id === id)!;
   run.money -= quote.cost;
   run.stats.tokens += quote.fee;
-  task.done = task.work;
-  task.status = 'ready';
-  syncProduction(run);
-  if (task.kind === 'infrastructure') run.infrastructure++;
-  else {
-    const block = run.blocks.find((entry) => entry.kind === task.block)!;
-    block.hand = false;
-    run.events.push({ type: 'built', kind: block.kind, i: block.i, j: block.j });
-    shipBlock(run, block);
-  }
-  run.tasks = run.tasks.filter((entry) => entry !== task);
-  const shipped = task.kind === 'infrastructure' ? task.kind : task.block!;
-  if (!run.apiShipped.includes(shipped)) run.apiShipped.push(shipped);
-  refreshRun(run);
-  for (const client of run.clients) if (client.want === task.block) fulfillClient(run, client);
+  task.apiBoost = true;
   return true;
 }
 
-/** The same block activation serves the scheduled release and a paid early release. */
+/** Apply a completed building or upgrade at the scheduled release. */
 export function shipBlock(run: Run, block: Block): boolean {
   if (block.built && !block.live) {
     block.live = true;
