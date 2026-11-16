@@ -10,6 +10,10 @@ import {
 import {
   chooseCard,
   cancelTask,
+  agentSlots,
+  expandOffice,
+  hire,
+  officeQuote,
   upgrade,
   crunch,
   createRun,
@@ -82,6 +86,48 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('company save', () => {
+  it.each([1, 2])('preserves the old team and bought capacity when migrating schema %s', (version) => {
+    const run = createRun(72, idea);
+    run.money = 100_000;
+    expect(hire(run, 'fast')).toBe(true);
+    expect(hire(run, 'fast')).toBe(true);
+    run.desks = 2;
+    expect(saveRun(run)).toBe(true);
+    const saved = savedData();
+    saved.v = version;
+    // The old office had two free places and two bought places.
+    saved.run.desks = 2;
+    memory.set(RUN_SAVE_KEY, JSON.stringify(saved));
+    const loaded = loadRun()!;
+    expect(loaded).not.toBeNull();
+    expect(loaded.agents).toEqual(run.agents);
+    expect(agentSlots(loaded)).toBe(4);
+    expect(loaded.money).toBe(run.money);
+    const quote = officeQuote(loaded, 'desks');
+    expect(saveRun(loaded)).toBe(true);
+    const twice = loadRun()!;
+    expect(agentSlots(twice)).toBe(4);
+    expect(officeQuote(twice, 'desks')).toBe(quote);
+    expect(expandOffice(twice, 'desks')).toBe(true);
+    expect(agentSlots(twice)).toBe(5);
+  });
+
+  it('restores all twelve agents and purchased places in a new save', () => {
+    const run = createRun(72, idea);
+    run.money = 2_000_000;
+    while (expandOffice(run, 'desks')) { /* buy all available places */ }
+    while (hire(run, 'fast')) { /* fill all available places */ }
+    expect(agentSlots(run)).toBe(12);
+    expect(run.agents).toHaveLength(12);
+    expect(saveRun(run)).toBe(true);
+    const loaded = loadRun()!;
+    expect(loaded).not.toBeNull();
+    expect(loaded.agents).toEqual(run.agents);
+    expect(loaded.desks).toBe(run.desks);
+    expect(loaded.money).toBe(run.money);
+    expect(hire(loaded, 'fast')).toBe(false);
+  });
+
   it.each(['queued', 'backlog', 'active', 'ready'] as const)(
     'removes old ordinary task fees in %s state without refunding paid money',
     (status) => {

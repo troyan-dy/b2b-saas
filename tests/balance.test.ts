@@ -70,6 +70,10 @@ describe('economy', () => {
     const runs = Array.from({ length: 24 }, (_, k) => play(100 + k, ideaOf(k), SENSIBLE));
     const s = summary(runs);
     console.log('sensible', JSON.stringify(s));
+    console.log('reachable teams without injected cash', JSON.stringify(runs.map((run) => ({
+      seed: run.seed, agents: run.agents.length, desks: run.desks, cash: Math.round(run.money),
+      blocks: run.blocks.length, upgrades: run.blocks.reduce((sum, block) => sum + block.level - 1, 0),
+    }))));
     const pawned = runs.filter((r) => r.mortgaged);
     console.log(`mortgage: taken in ${pawned.length} of ${runs.length} runs, survived after it ${pawned.filter((r) => r.over !== 'broke').length}`);
     const promises = runs.reduce((a, r) => a + r.stats.promises, 0);

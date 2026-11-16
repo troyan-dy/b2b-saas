@@ -187,9 +187,8 @@ export function playBot(run: Run, style: BotStyle = SENSIBLE): void {
 
   // A new wage needs recurring income, not the one-time consulting grant.
   const deskCost = officeQuote(run, 'desks');
-  if (deskCost !== null && run.agents.length < 4 && !canHire(run, 'fast') && netPerS(run) > TUNING.tiers.fast.cost_per_s * 2 && canFund(run, deskCost, 0)) expandOffice(run, 'desks');
+  if (deskCost !== null && !canHire(run, 'fast') && netPerS(run) > TUNING.tiers.fast.cost_per_s * 2 && canFund(run, deskCost, 0)) expandOffice(run, 'desks');
   if (
-    run.agents.length < 3 &&
     canHire(run, 'fast') &&
     netPerS(run) > TUNING.tiers.fast.cost_per_s * 1.5 &&
     run.money > burnPerS(run) * TUNING.sprint_s * 6 &&
