@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { companyContext } from '../src/systems/company/company';
 import { segmentView, marketCapacity } from '../src/systems/company/market';
 import { dealDraft } from '../src/systems/run/draft';
-import { strategyCount } from '../src/systems/run/product';
+import { segmentRevenueMultiplier, strategyCount } from '../src/systems/run/product';
 import {
   chooseCard,
   createRun,
@@ -69,7 +69,7 @@ describe('stacked sprint cards', () => {
     expect(run.eff.patience).toBe(-4);
   });
 
-  it('gives every large company the repeated enterprise bill, without charging small companies or more tokens', () => {
+  it('adds a bounded enterprise bill bonus per copy without charging small companies or more tokens', () => {
     const run = company();
     const base = companyContext(run);
     const large = segmentView(run.market, base, 'large');
@@ -79,13 +79,14 @@ describe('stacked sprint cards', () => {
       pick(run, 'premium');
       const ctx = companyContext(run);
       const upgraded = segmentView(run.market, ctx, 'large');
-      expect(upgraded.income / large.income).toBeCloseTo(1.5 ** count);
+      expect(upgraded.income / large.income).toBeCloseTo(1 + 0.12 * count);
       expect(upgraded.tokens).toBe(large.tokens);
       expect(segmentView(run.market, ctx, 'small').income).toBe(small.income);
-      expect(run.host).toBe(host + count * 3);
+      expect(run.host).toBe(host + count * 2);
       expect(run.eff.patience).toBe(count);
     }
-    expect(run.eff.corp_pay).toBeCloseTo(7.59375);
+    expect(segmentRevenueMultiplier(run, 'large')).toBeCloseTo(1.6);
+    expect(run.eff.corp_pay).toBe(1);
     expect(strategyCount(run, 'premium')).toBe(5);
     expect(
       Array.from({ length: 20 }, () => {
@@ -93,6 +94,43 @@ describe('stacked sprint cards', () => {
         return run.draft!.includes('premium');
       }).some(Boolean),
     ).toBe(true);
+  });
+
+  it('gives small and medium businesses their own stackable revenue cards without cross-charging', () => {
+    for (const [id, segment, bonus, hosting] of [
+      ['small_sales', 'small', 0.18, 0.5],
+      ['medium_sales', 'medium', 0.16, 1],
+    ] as const) {
+      const run = company();
+      const base = companyContext(run);
+      const before = ['small', 'medium', 'large'].map((group) =>
+        segmentView(run.market, base, group as 'small' | 'medium' | 'large'),
+      );
+      const host = run.host;
+      for (let count = 1; count <= 5; count++) {
+        pick(run, id);
+        const ctx = companyContext(run);
+        for (const group of before) {
+          const after = segmentView(run.market, ctx, group.id);
+          expect(after.income / group.income).toBeCloseTo(
+            group.id === segment ? 1 + bonus * count : 1,
+          );
+          expect(after.tokens).toBe(group.tokens);
+        }
+        expect(run.host).toBeCloseTo(host + hosting * count);
+      }
+      expect(strategyCount(run, id)).toBe(5);
+    }
+  });
+
+  it('preserves old premium copies and never exponentiates a full run of revenue cards', () => {
+    const legacy = { strategy: { support: 'premium' as const, processing: null } };
+    expect(segmentRevenueMultiplier(legacy, 'large')).toBeCloseTo(1.12);
+    const run = company();
+    run.cardStacks = { premium: 30, small_sales: 30, medium_sales: 30 };
+    expect(segmentRevenueMultiplier(run, 'large')).toBeCloseTo(4.6);
+    expect(segmentRevenueMultiplier(run, 'medium')).toBeCloseTo(5.8);
+    expect(segmentRevenueMultiplier(run, 'small')).toBeCloseTo(6.4);
   });
 
   it('combines all four cards after five copies each and scales each tradeoff instead of discarding it', () => {
@@ -106,9 +144,9 @@ describe('stacked sprint cards', () => {
     expect(run.cardStacks).toEqual({ mass: 5, premium: 5, batch: 5, instant: 5 });
     expect(run.eff.tokens).toBeCloseTo(0.95 * 0.8 ** 5 * 1.1 ** 5);
     expect(run.eff.promo).toBeCloseTo(promo * 1.2 ** 10);
-    expect(run.eff.corp_pay).toBeCloseTo(1.5 ** 5);
+    expect(segmentRevenueMultiplier(run, 'large')).toBeCloseTo(1.6);
     expect(run.eff.patience).toBe(5);
-    expect(run.host).toBeCloseTo(host + 27.5);
+    expect(run.host).toBeCloseTo(host + 22.5);
     expect(marketCapacity(ctx)).toBe(Math.round(marketCapacity(base) * 1.2 ** 5));
     expect(segmentView(run.market, ctx, 'large').reasons.delay).toBe(20);
     refreshRun(run);

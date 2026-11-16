@@ -1,6 +1,6 @@
 import api from '../../data/balance/api.json';
 import tuning from '../../data/balance/run.json';
-import { PRODUCTION } from './product';
+import { PRODUCTION, upgradeWork } from './product';
 import { fulfillClient, refreshRun, RULES, workNeed, type Block, type Run } from './run';
 import { agentWorkRate } from './workforce';
 
@@ -184,8 +184,7 @@ export function cancelTask(run: Run, id: string): boolean {
       block.built = true;
       block.queued = false;
       const base = workNeed(run, block.kind);
-      block.need =
-        block.level === 1 ? base : Math.ceil(base * tuning.rework.work_mult * (block.level - 1));
+      block.need = block.level === 1 ? base : upgradeWork(base, block.level - 1);
       block.done = block.need;
       block.hand = false;
     }

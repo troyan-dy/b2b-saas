@@ -8,14 +8,26 @@ export type ProductEffects = Record<string, number>;
 export type StrategyId = keyof typeof PRODUCTION.strategy;
 export type CardStacks = Partial<Record<StrategyId, number>>;
 export const STRATEGY_IDS = Object.keys(PRODUCTION.strategy) as StrategyId[];
+type StrategyHolder = { cardStacks?: CardStacks; strategy: Run['strategy'] };
 
-export function strategyCount(
-  run: { cardStacks?: CardStacks; strategy: Run['strategy'] },
-  id: StrategyId,
-): number {
+export function strategyCount(run: StrategyHolder, id: StrategyId): number {
   return (
     run.cardStacks?.[id] ?? (run.strategy.support === id || run.strategy.processing === id ? 1 : 0)
   );
+}
+
+/** Bonuses add to the segment's bill; repeated cards never compound each other. */
+export function segmentRevenueMultiplier(
+  run: StrategyHolder,
+  segment: keyof typeof PRODUCTION.segment_revenue,
+): number {
+  const rule = PRODUCTION.segment_revenue[segment];
+  return 1 + rule.bonus_per_copy * strategyCount(run, rule.card as StrategyId);
+}
+
+export function upgradeWork(baseWork: number, currentLevel: number): number {
+  const level = Math.max(1, Math.min(PRODUCTION.max_level - 1, currentLevel));
+  return Math.ceil(baseWork * PRODUCTION.upgrade_work_mult[level]);
 }
 
 export function restoreCardStacks(run: Run): void {
@@ -29,9 +41,15 @@ export function restoreCardStacks(run: Run): void {
 export function blockEffects(kind: string, level: number): ProductEffects {
   const base = (effectsData as Record<string, ProductEffects>)[kind] ?? {};
   const steps = (PRODUCTION.upgrade_steps as Record<string, ProductEffects>)[kind] ?? {};
-  const extra = Math.max(0, Math.min(PRODUCTION.max_level, level) - 1);
+  const cappedLevel = Math.max(1, Math.min(PRODUCTION.max_level, level));
+  const extra = PRODUCTION.upgrade_effect_steps
+    .slice(0, cappedLevel)
+    .reduce((sum, n) => sum + n, 0);
   return Object.fromEntries(
-    Object.entries(base).map(([key, value]) => [key, value + (steps[key] ?? 0) * extra]),
+    Object.entries(base).map(([key, value]) => [
+      key,
+      value + (steps[key] ?? 0) * (key === 'seats' || key === 'patience' ? cappedLevel - 1 : extra),
+    ]),
   );
 }
 
@@ -69,7 +87,7 @@ export function blockEffectText(_run: Run, kind: string, level: number): string[
   };
   const numbers = Object.entries(blockEffects(kind, level)).map(([key, value]) => {
     if (key === 'seats' || key === 'patience') return `${labels[key]} +${value}`;
-    return `${labels[key]} ×${Number(value.toFixed(2))}`;
+    return `${labels[key]} ×${Number(value.toFixed(3))}`;
   });
   if (kind === 'core') numbers.unshift(L('ядро продукта', 'product core'));
   if (kind === 'landing')

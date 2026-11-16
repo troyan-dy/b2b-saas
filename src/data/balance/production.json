@@ -1,15 +1,31 @@
 {
   "construction_cost_per_work": 12,
   "upgrade_cost_per_work": 16,
-  "max_level": 3,
+  "max_level": 5,
+  "upgrade_work_mult": [0, 0.6, 1.2, 2, 3.2],
+  "upgrade_effect_steps": [0, 1, 1, 0.6, 0.4],
   "infrastructure": { "cost": 900, "cost_growth": 1.6, "work": 12, "work_growth": 4 },
   "strategy": {
     "mass": { "promo": 1.2, "seats": 2, "capacity": 1.2 },
-    "premium": { "corp_pay": 1.5, "patience": 1 },
+    "premium": { "patience": 1 },
+    "small_sales": {},
+    "medium_sales": {},
     "batch": { "tokens": 0.8, "patience": -1, "large_satisfaction": -4 },
     "instant": { "promo": 1.2, "tokens": 1.1, "patience": 1 }
   },
-  "strategy_host": { "mass": 1, "premium": 3, "batch": 0, "instant": 1.5 },
+  "strategy_host": {
+    "mass": 1,
+    "premium": 2,
+    "small_sales": 0.5,
+    "medium_sales": 1,
+    "batch": 0,
+    "instant": 1.5
+  },
+  "segment_revenue": {
+    "small": { "card": "small_sales", "bonus_per_copy": 0.18 },
+    "medium": { "card": "medium_sales", "bonus_per_copy": 0.16 },
+    "large": { "card": "premium", "bonus_per_copy": 0.12 }
+  },
   "upgrade_steps": {
     "core": { "tokens": -0.05 },
     "landing": { "promo": 0.25 },

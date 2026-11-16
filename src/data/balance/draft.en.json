@@ -7,9 +7,21 @@
   },
   "premium": {
     "title": "Now that is enterprise",
-    "description": "A personal manager sells at a premium. Raises bills for all large companies, including the client cloud.",
-    "impact": "Large-company bills ×1.5 · +1 sprint of contract patience",
-    "tradeoff": "Hosting +$96 per sprint for each copy."
+    "description": "A personal manager helps large companies buy a better package. Copies add their bonuses instead of compounding them.",
+    "impact": "Per copy: +12% to base large-company bills · +1 sprint of contract patience",
+    "tradeoff": "Hosting +$64 per sprint for each copy."
+  },
+  "small_sales": {
+    "title": "The neighborhood plan",
+    "description": "Small businesses get a clear package without a three-month negotiation. Copy bonuses add up.",
+    "impact": "Per copy: +18% to base small-company bills",
+    "tradeoff": "Hosting +$16 per sprint for each copy. Medium and large bills stay unchanged."
+  },
+  "medium_sales": {
+    "title": "The department plan",
+    "description": "A chain has outgrown the small plan but does not need a procurement committee. Copy bonuses add up.",
+    "impact": "Per copy: +16% to base medium-company bills",
+    "tradeoff": "Hosting +$32 per sprint for each copy. Small and large bills stay unchanged."
   },
   "batch": {
     "title": "Your answer was ready yesterday",
