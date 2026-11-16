@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { BLOCKS } from '../src/content/blocks';
-import { blockEffects } from '../src/systems/run/product';
+import {
+  blockEffects,
+  PRODUCTION,
+  segmentRevenueMultiplier,
+  STRATEGY_IDS,
+  upgradeWork,
+} from '../src/systems/run/product';
 import { dealDraft, DRAFT_CARDS, releaseCard } from '../src/systems/run/draft';
 import { enqueueTask } from '../src/systems/run/production';
 import { playBot } from '../src/gyms/bot';
@@ -244,6 +250,41 @@ describe('production queue and sprint choices', () => {
     expect(draftCards(run)).toHaveLength(3);
   });
 
+  it('ships five levels with increasingly expensive work and refuses a sixth', () => {
+    const run = fresh(['core']);
+    let previousCost = 0;
+    for (let level = 1; level < 5; level++) {
+      run.draft = null;
+      expect(upgrade(run, 'core')).toBe(true);
+      const task = run.tasks[0];
+      expect(task.work).toBe(upgradeWork(workNeed(run, 'core'), level));
+      expect(task.cost).toBeGreaterThan(previousCost);
+      previousCost = task.cost;
+      finishWork(run);
+      expect(run.blocks[0].level).toBe(level);
+      release(run);
+      expect(run.blocks[0].level).toBe(level + 1);
+    }
+    run.draft = null;
+    expect(PRODUCTION.max_level).toBe(5);
+    expect(upgrade(run, 'core')).toBe(false);
+    expect(run.eff.tokens).toBeCloseTo(0.8);
+  });
+
+  it('makes late upgrade gains smaller while keeping seats and patience whole', () => {
+    const core = [1, 2, 3, 4, 5].map((level) => blockEffects('core', level).tokens);
+    expect(core[1] - core[2]).toBeGreaterThan(core[2] - core[3]);
+    expect(core[2] - core[3]).toBeGreaterThan(core[3] - core[4]);
+    expect(upgradeWork(10, 3)).toBe(20);
+    expect(upgradeWork(10, 4)).toBe(32);
+    for (const kind of Object.keys(RULES)) {
+      const effects = blockEffects(kind, 5);
+      if (effects.tokens !== undefined) expect(effects.tokens).toBeGreaterThan(0);
+      if (effects.seats !== undefined) expect(Number.isInteger(effects.seats)).toBe(true);
+      if (effects.patience !== undefined) expect(Number.isInteger(effects.patience)).toBe(true);
+    }
+  });
+
   it('freezes time and every gameplay intent while the saved draft awaits a choice', () => {
     const run = fresh(['core']);
     place(run, 'landing', 1, 0);
@@ -279,7 +320,7 @@ describe('production queue and sprint choices', () => {
 
   it('always offers three distinct usable cards even when all strategy projects are planned', () => {
     const run = fresh(['core']);
-    for (const id of ['mass', 'premium', 'batch', 'instant'])
+    for (const id of STRATEGY_IDS)
       enqueueTask(run, { kind: 'card', card: id, work: 12, cost: 600 });
     run.agents = [];
     for (let sprint = 0; sprint < 8; sprint++) {
@@ -315,15 +356,15 @@ describe('production queue and sprint choices', () => {
     select(run, 'premium');
     expect(run.strategy).toEqual({ support: 'premium', processing: 'batch' });
     expect(run.eff.promo).toBe(1.2);
-    expect(run.eff.corp_pay).toBe(1.5);
-    expect(run.host).toBeCloseTo(host + 4);
+    expect(segmentRevenueMultiplier(run, 'large')).toBeCloseTo(1.12);
+    expect(run.host).toBeCloseTo(host + 3);
     select(run, 'instant');
     expect(run.strategy).toEqual({ support: 'premium', processing: 'instant' });
     expect(run.eff.tokens).toBeCloseTo(0.836);
     expect(run.eff.patience).toBe(1);
     expect(run.eff.promo).toBeCloseTo(1.44);
     expect(run.cardStacks).toEqual({ mass: 1, premium: 1, batch: 1, instant: 1 });
-    expect(run.host).toBeCloseTo(host + 5.5);
+    expect(run.host).toBeCloseTo(host + 4.5);
     expect(run.money).toBe(money);
     expect(run.nextTask).toBe(nextTask);
     expect(queueView(run)).toEqual(queued);

@@ -9,10 +9,20 @@ function company(level: number): Run {
   const run = createRun(7, idea);
   run.stage = 3;
   run.blocks = ['core', 'landing', 'pay', ...additions].map((kind, i) => ({
-    kind, i: i * 2, j: 0, done: 30, need: 30, built: true, live: true,
-    level: additions.includes(kind) ? level : 1, up: false, hand: false,
+    kind,
+    i: i * 2,
+    j: 0,
+    done: 30,
+    need: 30,
+    built: true,
+    live: true,
+    level: additions.includes(kind) ? level : 1,
+    up: false,
+    hand: false,
   }));
-  run.market.groups.forEach((group, i) => { group.profiles[0].count = [200, 50, 10][i]; });
+  run.market.groups.forEach((group, i) => {
+    group.profiles[0].count = [200, 50, 10][i];
+  });
   refreshRun(run);
   return run;
 }
@@ -35,8 +45,8 @@ describe('expanded product toolkit', () => {
     expect(['webhook', 'help', 'ab', 'portal'].every((kind) => requested.has(kind))).toBe(true);
   });
 
-  it('all three levels improve the same customer base while hosting grows and tokens stay positive', () => {
-    const runs = [1, 2, 3].map(company);
+  it('all five levels improve the same customer base while hosting grows and tokens stay positive', () => {
+    const runs = [1, 2, 3, 4, 5].map(company);
     for (let i = 1; i < runs.length; i++) {
       const before = companyTotals(runs[i - 1]);
       const after = companyTotals(runs[i]);
