@@ -1573,7 +1573,7 @@ export class GameScene extends Phaser.Scene {
     const rightEdge = groups ? CLIENT_SLOTS[(groups - 1) * 4][0] + 105 : 0;
     const centre = Math.max(v.x, rightEdge - (1322 - VIEW_AT[0]) / v.zoom);
     const duration = groups && this.board.onScreen(rightEdge, 0)[0] > 1322 ? 0 : ms;
-    this.board.view(v.zoom, centre, teamRows > 1 ? Math.max(v.y, 225) : v.y, VIEW_AT[0], VIEW_AT[1], duration, () => undefined);
+    this.board.view(v.zoom, centre, teamRows > 1 ? Math.max(v.y, want === 1 ? 300 : 225) : v.y, VIEW_AT[0], VIEW_AT[1], duration, () => undefined);
   }
 
   /** Subscriptions: green squares keep flying from the clients into the money. */
