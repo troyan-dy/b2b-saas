@@ -1,5 +1,5 @@
 import data from '../../data/balance/market.json';
-import research from '../../data/balance/research.json';
+import marketEvolution from '../../data/balance/market-evolution.json';
 import { createRng } from '../../core/rng';
 import {
   PRODUCTION,
@@ -155,23 +155,23 @@ export function createMarket(toolkit: readonly string[], seed?: number): MarketS
     })),
   };
   if (seed !== undefined) {
-    const rng = createRng(seed ^ research.seed_salt);
+    const rng = createRng(seed ^ marketEvolution.seed_salt);
     for (const group of state.groups) {
       group.demand =
-        1 + rng.range(-research.initial_demand_variation, research.initial_demand_variation);
-      const pool = research.segment_needs[group.id].filter((block) => toolkit.includes(block));
+        1 + rng.range(-marketEvolution.initial_demand_variation, marketEvolution.initial_demand_variation);
+      const pool = marketEvolution.segment_needs[group.id].filter((block) => toolkit.includes(block));
       for (const profile of group.profiles) {
-        profile.share *= 1 + rng.range(-research.share_variation, research.share_variation);
+        profile.share *= 1 + rng.range(-marketEvolution.share_variation, marketEvolution.share_variation);
         profile.priceComfort = rng.range(
-          -research.initial_price_variation,
-          research.initial_price_variation,
+          -marketEvolution.initial_price_variation,
+          marketEvolution.initial_price_variation,
         );
         // Keep established needs; a run-specific priority changes the value of optional blocks.
         const candidates = pool.filter(
           (block) => !profile.needs.some((need) => need.block === block),
         );
         if (candidates.length)
-          profile.needs.push({ block: rng.pick(candidates), level: research.initial_need_level });
+          profile.needs.push({ block: rng.pick(candidates), level: marketEvolution.initial_need_level });
       }
       const total = group.profiles.reduce((sum, profile) => sum + profile.share, 0);
       for (const profile of group.profiles) profile.share = (profile.share / total) * 100;
@@ -202,12 +202,12 @@ export function evolveMarket(
   seed: number,
 ): MarketSignal | null {
   normalizeMarket(state);
-  const index = research.shift_sprints.findIndex(
-    (at) => sprint === at || sprint === at - research.warning_lead,
+  const index = marketEvolution.shift_sprints.findIndex(
+    (at) => sprint === at || sprint === at - marketEvolution.warning_lead,
   );
   if (index < 0) return null;
-  const at = research.shift_sprints[index];
-  const rng = createRng(seed ^ research.seed_salt ^ at);
+  const at = marketEvolution.shift_sprints[index];
+  const rng = createRng(seed ^ marketEvolution.seed_salt ^ at);
   const segment = SEGMENTS[(rng.int(0, SEGMENTS.length - 1) + index) % SEGMENTS.length];
   const theme = (['quality', 'price', 'demand'] as const)[index % 3];
   const signal: MarketSignal = {
@@ -226,26 +226,26 @@ export function evolveMarket(
   const group = state.groups.find((item) => item.id === segment)!;
   if (theme === 'quality') {
     const profile = rng.pick(group.profiles);
-    const eligible = profile.needs.filter((need) => toolkit.includes(need.block) && need.level < research.shift_level_cap);
+    const eligible = profile.needs.filter((need) => toolkit.includes(need.block) && need.level < marketEvolution.shift_level_cap);
     if (eligible.length) rng.pick(eligible).level++;
     // Demand shifts towards this existing cohort; its old requirements stay useful.
-    profile.share *= 1 + research.share_variation;
+    profile.share *= 1 + marketEvolution.share_variation;
     const total = group.profiles.reduce((sum, item) => sum + item.share, 0);
     for (const item of group.profiles) item.share = (item.share / total) * 100;
   } else if (theme === 'price') {
     const direction = rng.next() < 0.5 ? -1 : 1;
     for (const profile of group.profiles)
       profile.priceComfort = clamp(
-        (profile.priceComfort ?? 0) + direction * research.price_change,
-        research.price_min,
-        research.price_max,
+        (profile.priceComfort ?? 0) + direction * marketEvolution.price_change,
+        marketEvolution.price_min,
+        marketEvolution.price_max,
       );
   } else {
     const direction = rng.next() < 0.5 ? -1 : 1;
     group.demand = clamp(
-      (group.demand ?? 1) + direction * research.demand_change,
-      research.demand_min,
-      research.demand_max,
+      (group.demand ?? 1) + direction * marketEvolution.demand_change,
+      marketEvolution.demand_min,
+      marketEvolution.demand_max,
     );
   }
   state.revision!++;

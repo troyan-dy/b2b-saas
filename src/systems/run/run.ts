@@ -14,7 +14,6 @@ import officeData from '../../data/balance/office.json';
 import traitsData from '../../data/balance/traits.json';
 import { companyContext, companyTotals, customerCount } from '../company/company';
 import { advanceMarket, createMarket, evolveMarket, normalizeMarket, MARKET, type MarketState } from '../company/market';
-import { advanceResearch, beginResearch, createResearch, researchAvailable, RESEARCH, type ResearchKind, type ResearchState } from '../company/research';
 import { dealDraft, releaseCard } from './draft';
 import {
   addProductionWork,
@@ -64,10 +63,10 @@ export { agentDebtPerWork, agentFixPerWork, agentWorkRate, WORKFORCE } from './w
  * The scene calls `step` at a fixed rate, sends the player's intents and drains `events`.
  */
 
-export type Lane = 'build' | 'fix' | 'promo' | 'research';
+export type Lane = 'build' | 'fix' | 'promo';
 export type Tier = 'fast' | 'normal' | 'think';
 export type Ending = 'broke' | 'sold' | 'profit' | 'late';
-export const LANES: readonly Lane[] = ['build', 'fix', 'promo', 'research'];
+export const LANES: readonly Lane[] = ['build', 'fix', 'promo'];
 export const TIERS: readonly Tier[] = ['fast', 'normal', 'think'];
 
 export type TechCard = (typeof ideasData.tech)[number];
@@ -105,6 +104,8 @@ export const IDEAS: typeof ideasData =
         gov: ideasData.gov.map((c, k) => ({ ...c, name: ideasEn.gov[k] ?? c.name })),
       }
     : ideasData;
+/** Retired cards remain in IDEAS for loading old startups and their history. */
+export const ACTIVE_TECHS = IDEAS.tech.filter((card) => card.id !== 'rag');
 /** what the industry does to the startup between releases: the news of the run */
 const EVENTS = worded(eventsData, eventsEn);
 
@@ -249,7 +250,6 @@ export interface Report {
 }
 
 export type RunEvent =
-  | { type: 'researched'; kind: ResearchKind }
   | { type: 'card-applied'; id: string }
   | { type: 'task-cancelled'; id: string; block?: string }
   | { type: 'work'; agent: number; lane: Lane; i?: number; j?: number; idle?: boolean }
@@ -280,7 +280,6 @@ export type RunEvent =
   | { type: 'answered'; id: string; option: number; text: string }
   /** a lie came out */
   | { type: 'exposed'; text: string }
-  | { type: 'reveal'; kind: string }
   /** the market wants something new: one more block joins what clients ask for */
   | { type: 'trend'; kind: string }
   /** a block is taken off the sheet */
@@ -343,16 +342,13 @@ export interface Run {
   /** the founder's own strength: each point is one square of work done by hand */
   energy: number;
   leads: number;
-  insight: number;
   /** the blocks this startup can build besides the base three: a different set every time */
   pool: string[];
-  /** what this market asks for; hidden until research reveals it */
+  /** the named customers' requirements, visible from the start */
   asks: string[];
   corpAsks: string[];
-  known: string[];
   clients: Client[];
   market: MarketState;
-  research: ResearchState;
   /** the product is down this sprint: nobody pays */
   down: boolean;
   /** what brought it down: the founder's own debt or the model supplier's outage */
@@ -444,7 +440,7 @@ export function dealIdea(
   const open = <T extends { unlock: number }>(deck: readonly T[]): T[] =>
     deck.filter((c) => c.unlock <= runs);
   return {
-    tech: shuffle(rng, open(IDEAS.tech)).slice(0, 3),
+    tech: shuffle(rng, open(ACTIVE_TECHS)).slice(0, 3),
     form: shuffle(rng, open(IDEAS.form)).slice(0, 3),
     aud: shuffle(rng, open(IDEAS.aud)).slice(0, 3),
   };
@@ -521,14 +517,11 @@ export function createRun(
     debt: 0,
     energy: TUNING.crunch.max,
     leads: 0,
-    insight: 0,
     pool,
     asks,
     corpAsks,
-    known: [],
     clients: [],
     market: createMarket(['core', 'landing', 'pay', ...pool], seed),
-    research: createResearch(),
     down: false,
     downWhy: null,
     offer: null,
@@ -597,8 +590,6 @@ export function createRun(
     });
   }
   if (perks.includes('posts')) run.leads = 1;
-  if (perks.includes('buyers')) run.known.push(run.corpAsks[0]);
-  if (perks.includes('ear')) run.known.push(run.asks[0]);
   for (const [id, perk, amount] of [['small', 'ear', TUNING.lessons.ear_leads], ['large', 'buyers', TUNING.lessons.buyers_leads]] as const) {
     if (perks.includes(perk)) {
       for (const profile of run.market.groups.find(group => group.id === id)!.profiles)
@@ -661,7 +652,6 @@ export function refreshRun(run: Run): void {
   run.desks ??= Math.max(0, run.agents.length - OFFICE.desks.base);
   run.market ??= createMarket(['core', 'landing', 'pay', ...run.pool]);
   normalizeMarket(run.market);
-  run.research ??= createResearch();
   run.recentNews ??= [];
   syncProduction(run);
   refresh(run);
@@ -724,16 +714,6 @@ export function signing(c: Client): boolean {
 export function clientPay(run: Run, c: Client): number {
   if (run.down || !isLive(run, 'pay') || signing(c)) return 0;
   return clientWorth(run, c);
-}
-
-/** squares of research before the market says one more thing it wants */
-export function researchNeed(run: Run): number {
-  return Math.max(1, RESEARCH.work[run.research.active ?? 'clients'] * run.idea.tech.research);
-}
-
-export function startResearch(run: Run, kind: ResearchKind): boolean {
-  if (run.over || run.draft) return false;
-  return beginResearch(run.research, kind, run.market);
 }
 
 /** what a client costs in tokens per sprint: free users burn them too */
@@ -1020,14 +1000,14 @@ export function upgrade(run: Run, kind: string): boolean {
 }
 
 export function setLane(run: Run, agentId: number, lane: Lane): void {
-  if (run.over || run.draft) return;
+  if (run.over || run.draft || !LANES.includes(lane)) return;
   const a = run.agents.find((x) => x.id === agentId);
   if (a) a.lane = lane;
 }
 
 /** The founder picks what to check; the choice holds until the release. */
 export function setReview(run: Run, lane: Lane): boolean {
-  if (run.over || run.draft || run.reviewLocked || run.review === lane) return false;
+  if (run.over || run.draft || run.reviewLocked || run.review === lane || !LANES.includes(lane)) return false;
   run.review = lane;
   run.reviewLocked = true;
   return true;
@@ -1073,10 +1053,6 @@ export function crunch(run: Run, lane: Lane = 'build'): boolean {
       run.leads += leadsPerWork(run);
       run.events.push({ type: 'work', agent: 0, lane });
       break;
-    case 'research':
-      run.events.push({ type: 'work', agent: 0, lane });
-      interview(run);
-      break;
   }
   return true;
 }
@@ -1090,16 +1066,9 @@ export function handy(run: Run, lane: Lane): boolean {
       return run.debt > 0;
     case 'promo':
       return sellable(run);
-    case 'research':
-      return run.research.active !== null && researchAvailable(run.research, run.research.active, run.market);
+    default:
+      return false;
   }
-}
-
-/** what the market wants and the founder does not know yet */
-export function unknownAsks(run: Run): string[] {
-  return [...run.asks, ...(run.stage >= 2 ? run.corpAsks : [])].filter(
-    (k) => !run.known.includes(k),
-  );
 }
 
 /** how much of a lead one square of promotion is */
@@ -1114,15 +1083,6 @@ export function leadsPerWork(run: Run): number {
       trust) /
     TUNING.promo_work_per_lead
   );
-}
-
-/** One square of research: enough of them and the market names one more block it wants. */
-function interview(run: Run): void {
-  const report = advanceResearch(run.research, 1 / Math.max(0.1, run.idea.tech.research), run.market, companyContext(run), run.sprint);
-  if (!report) return;
-  if (report.kind === 'clients') run.known = [...new Set([...run.known, ...run.asks, ...run.corpAsks])];
-  run.insight = 0;
-  run.events.push({ type: 'researched', kind: report.kind });
 }
 
 function work(run: Run, agent: number, hand = false): boolean {
@@ -1402,15 +1362,6 @@ function deliver(run: Run, a: Agent): void {
       run.debt += dirty * 0.5;
       run.events.push({ type: 'work', agent: a.id, lane: a.lane });
       return;
-    case 'research':
-      run.events.push({
-        type: 'work',
-        agent: a.id,
-        lane: a.lane,
-        idle: !handy(run, 'research'),
-      });
-      interview(run);
-      return;
   }
 }
 
@@ -1561,7 +1512,7 @@ function release(run: Run): void {
       stay.push(c);
       continue;
     }
-    const reason = run.known.includes(c.want) || c.promised ? c.want : '';
+    const reason = c.want;
     report.left++;
     report.reasons.push(reason);
     run.stats.left++;
@@ -1676,11 +1627,6 @@ function release(run: Run): void {
       ) {
         run.call = c;
         run.events.push({ type: 'call', name: c.name, kind: c.want });
-        // the question itself says what this market wants
-        if (!run.known.includes(c.want)) {
-          run.known.push(c.want);
-          run.events.push({ type: 'reveal', kind: c.want });
-        }
         continue;
       }
       seat(run, c);
@@ -1699,7 +1645,7 @@ function release(run: Run): void {
     run.events.push({ type: 'news', id: `market-${signal.kind}`, arg: '', good: true,
       text: signal.kind === 'warning'
         ? L(`У ${group} скоро изменятся ${topic}. Следи за обратной связью.`, `For ${group}, ${topic} will change soon. Watch for feedback.`)
-        : L(`У ${group} изменились ${topic}. Старые отчёты сохранены; новые исследования доступны.`, `For ${group}, ${topic} have changed. Old reports are kept; new research is available.`) });
+        : L(`У ${group} изменились ${topic}. Свежие данные уже доступны в обзоре рынка.`, `For ${group}, ${topic} have changed. Current figures are available in the market overview.`) });
   }
   const marketRelease = advanceMarket(run.market, companyContext(run), marketLeads);
   report.came += marketRelease.came;

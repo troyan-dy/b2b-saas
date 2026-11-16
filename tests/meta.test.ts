@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { emptyMeta, finish, learn, migrate, raise, traitChoices, traitLevels, TRAITS } from '../src/systems/meta/meta';
+import { collectionLessons, emptyMeta, finish, learn, LESSONS, migrate, pastPitch, raise, traitChoices, traitLevels, TRAITS } from '../src/systems/meta/meta';
 import { answerLastChance, chooseCard, createRun, IDEAS, isLive, priceMult, shelf, step, TUNING, type Idea } from '../src/systems/run/run';
 
 const idea: Idea = { tech: IDEAS.tech[0], form: IDEAS.form[3], aud: IDEAS.aud[0] };
@@ -17,6 +17,18 @@ function goBroke(seed: number): ReturnType<typeof createRun> {
 }
 
 describe('founder', () => {
+  it('keeps earned ear and buyers while retiring new ear awards and preserving old rag titles', () => {
+    const meta = migrate({ v: 2, runs: [], lessons: ['ear', 'buyers'], traits: {} });
+    expect(meta.lessons).toEqual(['ear', 'buyers']);
+    expect(collectionLessons(meta).some(lesson => lesson.id === 'ear')).toBe(true);
+    expect(collectionLessons(emptyMeta()).some(lesson => lesson.id === 'ear')).toBe(false);
+    expect(collectionLessons(emptyMeta()).some(lesson => lesson.id === 'buyers')).toBe(true);
+    const run = createRun(1, idea);
+    const allButEar = { ...emptyMeta(), lessons: LESSONS.filter(lesson => lesson.id !== 'ear').map(lesson => lesson.id) };
+    expect(learn(run, allButEar)).toEqual([]);
+    const old = { pitch: 'old text', idea: ['rag', idea.form.id, idea.aud.id] as [string, string, string], ending: 'sold' as const, lived: 900, peakMrr: 100, clients: 5, soldFor: 1000 };
+    expect(pastPitch(old)).toContain(IDEAS.tech.find(card => card.id === 'rag')!.adj);
+  });
   it('learns profitable operations without requiring the removed timed ending', () => {
     const run = createRun(1, idea);
     run.over = 'sold';
@@ -76,7 +88,7 @@ describe('founder', () => {
     expect(isLive(plain, 'core')).toBe(false);
     expect(isLive(wise, 'core')).toBe(true);
     expect(wise.leads).toBe(1);
-    expect(wise.known).toEqual([wise.asks[0]]);
+    expect(wise.market.groups.find(group => group.id === 'small')!.profiles.reduce((sum, profile) => sum + profile.leads, 0)).toBeCloseTo(TUNING.lessons.ear_leads);
     expect(wise.money).toBe(TUNING.start_money + 1500);
     expect(shelf(wise)).toContain('cheap');
     expect(shelf(plain)).not.toContain('cheap');

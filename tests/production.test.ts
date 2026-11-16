@@ -287,9 +287,13 @@ describe('production queue and sprint choices', () => {
   });
 
   it('ships the prioritized upper upgrade when a late company cannot finish both before release', () => {
-    for (const first of ['core', 'pay']) {
+    for (const first of ['excel', 'pay']) {
       // Reproduce a normal bot company, not a player save or a cash-funded fixture.
-      const run = createRun(3200, { tech: IDEAS.tech[0], form: IDEAS.form[0], aud: IDEAS.aud[0] });
+      const run = createRun(3200, {
+        tech: IDEAS.tech.find(card => card.id === 'chat')!,
+        form: IDEAS.form.find(card => card.id === 'tinder')!,
+        aud: IDEAS.aud.find(card => card.id === 'dent')!,
+      });
       for (let tick = 0; tick < TUNING.last_sprint * TUNING.sprint_s * 4 && !run.over; tick++) {
         playBot(run);
         run.offer = null;
@@ -303,7 +307,7 @@ describe('production queue and sprint choices', () => {
       for (const agent of run.agents) setLane(run, agent.id, agent.tier === 'fast' ? 'fix' : 'build');
       setReview(run, 'build');
       const cash = run.money;
-      for (const kind of ['core', 'pay']) {
+      for (const kind of ['excel', 'pay']) {
         expect(run.blocks.find(block => block.kind === kind)?.level).toBe(4);
         expect(upgrade(run, kind)).toBe(true);
       }
@@ -313,13 +317,13 @@ describe('production queue and sprint choices', () => {
       expect(run.tasks.every(task => task.work <= budget)).toBe(true);
       expect(run.tasks.reduce((sum, task) => sum + task.work, 0)).toBeGreaterThan(budget);
       if (first === 'pay') expect(moveTask(run, run.tasks[1].id, -1)).toBe(true);
-      expect(blockEffects('core', 5).tokens).toBeLessThan(blockEffects('core', 4).tokens);
+      expect(blockEffects('excel', 5).small_pay).toBeGreaterThan(blockEffects('excel', 4).small_pay);
       expect(blockEffects('pay', 5).small_pay).toBeGreaterThan(blockEffects('pay', 4).small_pay);
       for (let tick = 0; tick < TUNING.sprint_s * 4 - 1; tick++) step(run, 0.25);
       expect(run.tasks.find(task => task.block === first)?.status).toBe('ready');
-      expect(run.blocks.filter(block => ['core', 'pay'].includes(block.kind)).every(block => block.level === 4)).toBe(true);
+      expect(run.blocks.filter(block => ['excel', 'pay'].includes(block.kind)).every(block => block.level === 4)).toBe(true);
       step(run, 0.25);
-      const second = first === 'core' ? 'pay' : 'core';
+      const second = first === 'excel' ? 'pay' : 'excel';
       expect(run.lastReport?.sprint).toBe(24);
       expect(run.lastReport?.shipped).toEqual([first]);
       expect(run.blocks.find(block => block.kind === first)?.level).toBe(PRODUCTION.max_level);
