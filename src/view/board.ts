@@ -32,6 +32,7 @@ interface Route {
   pts: readonly Pt[];
   len: number;
   arrow: boolean;
+  activity?: string;
 }
 
 interface Dot {
@@ -209,15 +210,31 @@ export class Board {
     this.nodeLayer.add(obj);
   }
 
-  route(key: string, pts: readonly Pt[], arrow = true): void {
+  route(key: string, pts: readonly Pt[], arrow = true, activity?: string): void {
+    const previous = this.routes.get(key);
+    if (previous?.arrow === arrow && previous.activity === activity && previous.pts.length === pts.length && previous.pts.every((point, k) => point[0] === pts[k][0] && point[1] === pts[k][1])) return;
+    if (previous) this.finishFlows(previous);
     let len = 0;
     for (let k = 1; k < pts.length; k++) len += Math.hypot(pts[k][0] - pts[k - 1][0], pts[k][1] - pts[k - 1][1]);
-    this.routes.set(key, { pts, len, arrow });
+    this.routes.set(key, { pts, len, arrow, activity });
     this.redrawLines();
   }
 
   dropRoute(key: string): void {
+    const route = this.routes.get(key);
+    if (route) this.finishFlows(route);
     if (this.routes.delete(key)) this.redrawLines();
+  }
+
+  private finishFlows(route: Route): void {
+    for (const dot of this.dots) {
+      if (dot.route !== route) continue;
+      dot.route = null;
+      dot.rect.setVisible(false);
+      // Work already happened in the simulation; only its old visual path is cancelled.
+      dot.done?.();
+      dot.done = null;
+    }
   }
 
   hasRoute(key: string): boolean {
