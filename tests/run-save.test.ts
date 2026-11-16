@@ -3,6 +3,7 @@ import { createRng } from '../src/core/rng';
 import { segmentRevenueMultiplier } from '../src/systems/run/product';
 import {
   createMarket,
+  evolveMarket,
   MARKET,
   schedulePrice,
   type MarketState,
@@ -86,6 +87,65 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('company save', () => {
+  it.each([1, 2, 3])('migrates retired research jobs in schema %s without refunds or changing company progress', (version) => {
+    const run = marketCompany();
+    run.reviewLocked = true;
+    run.agents[0].carry = 0.75;
+    run.perks = ['ear', 'buyers'];
+    run.traits = { engineering: 2 };
+    run.mods = [{ kind: 'tokens', mult: 1.2, left: 2, tag: 'legacy modifier' }];
+    evolveMarket(run.market, ['core', 'landing', 'pay', ...run.pool], 7, run.seed);
+    expect(saveRun(run)).toBe(true);
+    const saved = savedData();
+    saved.v = version;
+    saved.run.review = 'research';
+    (saved.run.agents as { lane: string }[])[0].lane = 'research';
+    if (version < 3) saved.run.desks = 1;
+    saved.run.known = [run.asks[0]];
+    saved.run.insight = 2;
+    saved.run.research = {
+      active: 'clients', progress: { clients: 2, market: 0 },
+      reports: { clients: null, market: null }, history: [],
+    };
+    const founder = JSON.stringify({ v: 2, runs: [], lessons: ['ear', 'buyers'], traits: { sales: 1 } });
+    storage.setItem('b2b-saas-founder', founder);
+    storage.setItem(RUN_SAVE_KEY, JSON.stringify(saved));
+    const loaded = loadRun()!;
+    expect(loaded).not.toBeNull();
+    expect(loaded.review).toBe('build');
+    expect(loaded.reviewLocked).toBe(true);
+    expect(loaded.agents).toEqual(run.agents);
+    for (const key of ['money', 'blocks', 'tasks', 'market', 'land', 'desks', 'perks', 'traits', 'mods', 'debt', 'energy', 'stats'] as const)
+      expect(loaded[key]).toEqual(run[key]);
+    expect(loaded.rng.state()).toBe(saved.rngState);
+    expect(loaded.rng.next()).toBe(createRng(run.seed, saved.rngState).next());
+    expect(storage.getItem('b2b-saas-founder')).toBe(founder);
+    for (const key of ['research', 'known', 'insight']) expect(loaded).not.toHaveProperty(key);
+    expect(saveRun(loaded)).toBe(true);
+    expect(savedData().v).toBe(4);
+    expect(snapshot(loadRun()!)).toEqual(snapshot(loaded));
+  });
+
+  it('loads an old rag company with a neutral token modifier exactly once and keeps other modifiers', () => {
+    const rag = IDEAS.tech.find(card => card.id === 'rag')!;
+    const run = createRun(55, { ...idea, tech: rag });
+    run.mods = [{ kind: 'tokens', mult: 1.3, left: 2, tag: 'tokens' }];
+    expect(saveRun(run)).toBe(true);
+    const saved = savedData();
+    saved.v = 3;
+    memory.set(RUN_SAVE_KEY, JSON.stringify(saved));
+    const loaded = loadRun()!;
+    expect(loaded.idea.tech.id).toBe('rag');
+    expect(loaded.idea.tech.tokens).toBe(1);
+    expect(loaded.mod.tokens).toBe(1.3);
+    expect(loaded.money).toBe(run.money);
+    expect(saveRun(loaded)).toBe(true);
+    const twice = loadRun()!;
+    expect(twice.idea.tech).toEqual(loaded.idea.tech);
+    expect(twice.mod).toEqual(loaded.mod);
+    expect(twice.money).toBe(run.money);
+  });
+
   it.each([1, 2])('preserves the old team and bought capacity when migrating schema %s', (version) => {
     const run = createRun(72, idea);
     run.money = 100_000;

@@ -600,10 +600,10 @@
   color: var(--ink);
   font-weight: 700;
 }
-/* the four lanes of work: one line of small keys */
+/* the work lanes: one line of small keys */
 .bl-lanes {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: 6px;
   margin-bottom: 7px;
 }

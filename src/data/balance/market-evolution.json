@@ -1,7 +1,4 @@
 {
-  "work": { "clients": 6, "market": 8 },
-  "history_limit": 12,
-  "finding_limit": 3,
   "shift_sprints": [7, 13, 19, 25],
   "warning_lead": 1,
   "seed_salt": 1947,

@@ -17,7 +17,6 @@ export function mountGymKeys(scene: GameScene, run: Run, overlayOn: boolean): vo
     { target: TUNING.tiers.fast, key: 'debt_per_work', label: 'быстрый: долг за квадрат', min: 0, max: 1.5, step: 0.05 },
     { target: TUNING, key: 'review_boost', label: 'проверка: множитель', min: 1, max: 2, step: 0.05 },
     { target: TUNING, key: 'promo_work_per_lead', label: 'продвижение: квадратов на лид', min: 2, max: 20, step: 1 },
-    { target: TUNING, key: 'research_work_per_reveal', label: 'разведка: квадратов на запрос', min: 2, max: 16, step: 1 },
     { target: TUNING.clients, key: 'token_share', label: 'токены: доля подписки', min: 0.1, max: 0.8, step: 0.05 },
     { target: TUNING, key: 'link_bonus', label: 'связка: бонус к чеку', min: 0, max: 0.4, step: 0.02 },
     { target: TUNING.debt, key: 'down_at', label: 'долг: порог падения', min: 10, max: 60, step: 1 },
@@ -60,8 +59,8 @@ export function mountGymKeys(scene: GameScene, run: Run, overlayOn: boolean): vo
       `t ${run.t.toFixed(0)} с · спринт ${run.sprint} · этап ${run.stage} · ×${scene.speed}`,
       `деньги ${run.money.toFixed(0)} · доход ${incomePerS(run).toFixed(1)}/с · расход ${burnPerS(run).toFixed(1)}/с`,
       `подписки ${mrr(run).toFixed(0)} · токены ${tokens(run).toFixed(0)} за спринт`,
-      `долг ${run.debt.toFixed(1)} · лиды ${run.leads.toFixed(2)} · разведка ${run.insight}`,
-      `просят: ${run.asks.join(', ')} · известно: ${run.known.join(', ') || '—'}`,
+      `долг ${run.debt.toFixed(1)} · лиды ${run.leads.toFixed(2)}`,
+      `просят: ${run.asks.join(', ')}`,
       `клиенты ${run.clients.length} · пришло ${run.stats.clients} · ушло ${run.stats.left} · падений ${run.stats.downs}`,
       run.over ? `КОНЕЦ: ${run.over}` : '',
     ]);

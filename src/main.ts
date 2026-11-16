@@ -23,7 +23,7 @@ import { LookdevScene } from './gyms/lookdev/LookdevScene';
 import { mountMusicDemo } from './gyms/music/MusicDemo';
 import { SheetScene } from './gyms/sheet/SheetScene';
 import { emptyMeta, loadMeta, traitLevels } from './systems/meta/meta';
-import { createRun, IDEAS, type Idea, type Run } from './systems/run/run';
+import { ACTIVE_TECHS, createRun, IDEAS, type Idea, type Run } from './systems/run/run';
 import { clearRunSave, loadRun, saveRun } from './systems/run/save';
 import { createHud } from './ui/hud';
 import { createPaper } from './ui/paper';
@@ -225,7 +225,7 @@ else if (__TOOLS__ && args.gym === 'music') mountMusicDemo(over);
 else if (__TOOLS__ && args.gym === 'build') {
   const pick = <T,>(items: readonly T[], k: number): T => items[k % items.length];
   const n = Number(args.state) || 0;
-  const idea: Idea = { tech: pick(IDEAS.tech, n), form: pick(IDEAS.form, n + 3), aud: pick(IDEAS.aud, n) };
+  const idea: Idea = { tech: pick(ACTIVE_TECHS, n), form: pick(IDEAS.form, n + 3), aud: pick(IDEAS.aud, n) };
   const run = createRun(args.seed, idea);
   const style = { ...SENSIBLE, calls: !args.flags.includes('nocalls'), fix: !args.flags.includes('nofix') };
   const paper = createPaper(under, over);

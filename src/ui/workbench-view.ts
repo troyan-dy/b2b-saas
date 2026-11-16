@@ -2,13 +2,13 @@ import { BLOCK_BY_ID } from '../content/blocks';
 import { buildCategory } from '../content/build-categories';
 import { LANE_NAME, TIER_TITLE, TIER_NOTE } from '../content/texts';
 import { buildReason } from './build-reasons';
-import { researchView } from './research-view';
 import { L } from '../core/lang';
 import { companyContext, companyTotals } from '../systems/company/company';
 import {
   MARKET,
   SEGMENTS,
   marketCapacity,
+  priceForecast,
   segmentView,
   type MarketContext,
 } from '../systems/company/market';
@@ -54,9 +54,8 @@ export interface WorkbenchSelection {
   selectedSegment: SegmentId;
   previewPrices: Partial<Record<SegmentId, number>>;
   news?: WorkbenchNews;
-  panel?: 'module' | 'clients' | 'agent' | 'research' | null;
+  panel?: 'module' | 'clients' | 'agent' | null;
   selectedAgent?: number;
-  researchKind?: 'clients' | 'market';
   paused?: boolean;
   selectedModule?: string;
   clientAnchor?: { x: number; y: number };
@@ -126,7 +125,8 @@ export function productEffects(kind: string, level: number): string {
 
 function demand(run: Run, kind: string): string {
   const level = run.blocks.find((block) => block.kind === kind && block.live)?.level ?? 0;
-  const demand = (run.research.reports.clients?.segments ?? [])
+  const ctx = companyContext(run);
+  const demand = SEGMENTS.map((id) => segmentView(run.market, ctx, id))
     .map((group) => {
       const need = group.needs.find(need => need.block === kind && need.level > level);
       return need ? `${SEGMENT_TITLES[group.id]} ≈${whole(need.share)}%` : '';
@@ -136,8 +136,7 @@ function demand(run: Run, kind: string): string {
     (client) =>
       !client.happy &&
       client.want === kind &&
-      client.wantLevel > level &&
-      (client.promised || client.wantLevel > 1 || run.known.includes(kind)),
+      client.wantLevel > level,
   ).length;
   if (contracts) demand.push(L(`договоры ${contracts}`, `contracts ${contracts}`));
   return demand.join(' · ');
@@ -279,23 +278,21 @@ function segmentNeeds(
   id: SegmentId,
   modules: WorkbenchModule[],
 ): WorkbenchNeed[] {
-  const report = run.research.reports.clients;
-  return (report?.segments.find(segment => segment.id === id)?.needs ?? []).map((need) => {
+  return segmentView(run.market, ctx, id).needs.map((need) => {
     const module = modules.find((entry) => entry.id === need.block)!;
     const current = ctx.levels[need.block] ?? 0;
     const target = Math.min(need.level, current + 1);
     const fulfilled = current >= need.level;
-    const extra = L(` · отчёт спринта ${report!.sprint}`, ` · sprint ${report!.sprint} report`);
     return {
       block: need.block,
       title: `${blockName(need.block)} v${need.level}`,
       count: need.count,
       share: need.share,
       effect: fulfilled
-        ? L(`Уровень выпущен${extra}`, `Level shipped${extra}`)
+        ? L('Уровень выпущен', 'Level shipped')
         : L(
-            `Шаг v${target} приблизит продукт к запросу${extra}`,
-            `Step v${target} improves the fit${extra}`,
+            `Шаг v${target} приблизит продукт к запросу`,
+            `Step v${target} improves the fit`,
           ),
       action: fulfilled ? 'none' : (module?.action ?? 'none'),
       disabled: fulfilled || !module || module.disabled,
@@ -315,9 +312,7 @@ function segmentPanel(
 ): WorkbenchSegment {
   const segment = segmentView(run.market, ctx, id);
   const previewPrice = segment.pendingPrice ?? selection.previewPrices[id] ?? segment.price;
-  const marketReport = run.research.reports.market;
-  const clientReport = run.research.reports.clients;
-  const forecast = marketReport?.forecasts.filter(f => f.id === id).sort((a, b) => Math.abs(a.price - previewPrice) - Math.abs(b.price - previewPrice))[0];
+  const forecast = priceForecast(run.market, ctx, id, previewPrice);
   const labels: Record<string, string> = {
     needs: L('потребности', 'needs'),
     price: L('цена', 'price'),
@@ -332,12 +327,7 @@ function segmentPanel(
       title: `${client.name} · ${rate(clientPay(run, client) / TUNING.sprint_s)}${PER_S}`,
       detail: client.happy
         ? L('Доволен · отдельный фиксированный тариф', 'Happy · separate fixed tariff')
-        : !client.promised && client.wantLevel <= 1 && !run.known.includes(client.want)
-          ? L(
-              `Ждёт молча · ${client.patience} спр. · разведка откроет запрос`,
-              `Waiting silently · ${client.patience} sprints · research reveals the request`,
-            )
-          : L(
+        : L(
               `${client.promised ? 'Обещано' : 'Ждёт'} ${shortName(client.want)} v${client.wantLevel} · ${client.patience} спр. · тариф отдельный`,
               `${client.promised ? 'Promised' : 'Waiting for'} ${shortName(client.want)} v${client.wantLevel} · ${client.patience} sprints · separate tariff`,
             ),
@@ -349,15 +339,15 @@ function segmentPanel(
     happiness: segment.satisfaction,
     delta: segment.delta,
     leads: segment.leads,
-    market: marketReport?.segments.find(s => s.id === id)?.market ?? null,
+    market: segment.market,
     price: segment.price,
     previewPrice,
     pricePending: segment.pendingPrice !== null,
     priceDisabled: Boolean(run.draft || run.over),
     priceLabel: `${rate(segment.unitPrice / TUNING.sprint_s)}${PER_S}`,
-    forecast: forecast ? L(`Оценка спринта ${marketReport!.sprint} при ×${dec(forecast.price)}: ${rate(forecast.income / TUNING.sprint_s)}/с, отток ≈${forecast.lost}. Для продукта и аудитории на дату отчёта.`, `Sprint ${marketReport!.sprint} estimate at ×${dec(forecast.price)}: ${rate(forecast.income / TUNING.sprint_s)}/s, ≈${forecast.lost} leaving. Based on the product and audience at that time.`) : L('Изучи рынок, чтобы оценить тариф. Менять цену можно и вслепую.', 'Study the market for a pricing estimate. You can still change the price without one.'),
+    forecast: L(`При ×${dec(previewPrice)}: ≈${rate(forecast.income / TUNING.sprint_s)}/с, отток ≈${forecast.lost}. Оценка на следующий релиз при текущем продукте и аудитории.`, `At ×${dec(previewPrice)}: ≈${rate(forecast.income / TUNING.sprint_s)}/s, ≈${forecast.lost} leaving. Next-release estimate for the current product and audience.`),
     needs: segmentNeeds(run, ctx, id, modules),
-    reasons: Object.entries(clientReport?.segments.find(s => s.id === id)?.reasons ?? {})
+    reasons: Object.entries(segment.reasons)
       .filter(([, value]) => value >= 0.5)
       .map(([key, value]) => `${key === 'needs' ? '+' : '−'}${Math.round(value)} ${labels[key]}`),
     contracts,
@@ -400,7 +390,6 @@ export function workbenchView(run: Run, selection: WorkbenchSelection): Workbenc
   const active = activeWork(run);
   const agent = run.agents.find((item) => item.id === selection.selectedAgent);
   return {
-    research: researchView(run, { selectedKind: selection.researchKind, paused: selection.paused }),
     office: { cells: cellsMax(run), totalCells: run.pool.length + 3, slots: agentSlots(run), landCost: officeQuote(run, 'land'), deskCost: officeQuote(run, 'desks'), money: run.money, maxSlots: OFFICE.desks.max },
     panel: selection.panel,
     agent: agent ? {

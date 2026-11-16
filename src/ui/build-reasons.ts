@@ -1,6 +1,6 @@
 import { L } from '../core/lang';
 import { companyContext, companyTotals } from '../systems/company/company';
-import { marketCapacity } from '../systems/company/market';
+import { marketCapacity, SEGMENTS, segmentView } from '../systems/company/market';
 import type { Run } from '../systems/run/run';
 import { PRODUCTION } from '../systems/run/product';
 
@@ -16,18 +16,19 @@ const names: Record<string, string> = {
 /** One actionable reason on a tile; details keep the full request in plain language. */
 export function buildReason(run: Run, kind: string): BuildReason | undefined {
   const level = run.blocks.find((block) => block.kind === kind && block.live)?.level ?? 0;
-  const contracts = run.clients.filter((client) => !client.happy && client.want === kind && client.wantLevel > level && (client.promised || client.wantLevel > 1 || run.known.includes(kind)));
+  const contracts = run.clients.filter((client) => !client.happy && client.want === kind && client.wantLevel > level);
   if (contracts.some((client) => client.promised)) return {
     label: L('Обещано клиенту', 'Promised to client'),
     detail: contracts.map((client) => `${client.name}: v${client.wantLevel}`).join(' · '), tone: 'demand',
   };
-  const wanted = (run.research.reports.clients?.segments ?? []).map((group) => {
+  const context = companyContext(run);
+  const wanted = SEGMENTS.map((id) => segmentView(run.market, context, id)).map((group) => {
     const need = group.needs.find(need => need.block === kind && need.level > level);
     return { id: group.id, count: need?.count ?? 0, share: need?.share ?? 0 };
   }).filter((group) => group.share > 0).sort((a, b) => b.share - a.share);
   if (wanted.length) return {
     label: L(`Просят ${Math.round(wanted[0].share)}% ${names[wanted[0].id]}`, `Wanted: ${Math.round(wanted[0].share)}% ${names[wanted[0].id]}`),
-    detail: wanted.map((group) => L(`По отчёту спринта ${run.research.reports.clients!.sprint}: ≈${Math.round(group.share)}% ${names[group.id]} интересуются улучшением`, `Sprint ${run.research.reports.clients!.sprint} report: ≈${Math.round(group.share)}% of ${names[group.id]} companies are interested`)).join(' · '), tone: 'demand',
+    detail: wanted.map((group) => L(`≈${Math.round(group.share)}% ${names[group.id]} компаний интересуются улучшением`, `≈${Math.round(group.share)}% of ${names[group.id]} companies are interested`)).join(' · '), tone: 'demand',
   };
   if (contracts.length) return {
     label: L(`Ждут договоры: ${contracts.length}`, `Contracts waiting: ${contracts.length}`),

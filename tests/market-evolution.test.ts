@@ -4,17 +4,12 @@ import {
   createMarket,
   evolveMarket,
   normalizeMarket,
+  priceForecast,
   SEGMENTS,
   segmentView,
   type MarketContext,
 } from '../src/systems/company/market';
-import {
-  advanceResearch,
-  beginResearch,
-  createResearch,
-  RESEARCH,
-  researchAvailable,
-} from '../src/systems/company/research';
+import marketEvolution from '../src/data/balance/market-evolution.json';
 
 const toolkit = Object.keys(blocks);
 const context = (): MarketContext => ({
@@ -34,7 +29,7 @@ const context = (): MarketContext => ({
   promotionMult: 1,
 });
 
-describe('research and changing demand', () => {
+describe('visible changing demand', () => {
   it('creates reproducible, reachable priorities without changing the unseeded legacy market', () => {
     const limited = ['core', 'landing', 'pay', 'bot', 'api', 'onb'];
     expect(createMarket(limited, 8)).toEqual(createMarket(limited, 8));
@@ -61,7 +56,7 @@ describe('research and changing demand', () => {
     const market = createMarket(toolkit, 10),
       ctx = context();
     for (const group of market.groups) for (const profile of group.profiles) profile.count = 5;
-    for (const sprint of RESEARCH.shift_sprints) {
+    for (const sprint of marketEvolution.shift_sprints) {
       const before = SEGMENTS.map((id) => segmentView(market, ctx, id));
       const prior = structuredClone(market);
       const warning = evolveMarket(market, toolkit, sprint - 1, 10);
@@ -92,54 +87,20 @@ describe('research and changing demand', () => {
     }
   });
 
-  it('lets both studies finish before sales, preserves interrupted work and prevents empty repeats', () => {
-    const market = createMarket(toolkit, 5),
-      state = createResearch(),
-      ctx = context();
+  it('shows all current needs and tariff forecasts before sales without changing the company', () => {
+    const market = createMarket(toolkit, 5), ctx = context();
     ctx.levels = {};
     ctx.sellable = false;
     ctx.payments = false;
-    expect(beginResearch(state, 'clients', market)).toBe(true);
-    expect(advanceResearch(state, 2, market, ctx, 1)).toBeNull();
-    expect(beginResearch(state, 'market', market)).toBe(true);
-    const marketBefore = structuredClone(market);
-    const report = advanceResearch(state, RESEARCH.work.market, market, ctx, 1);
-    expect(report?.findings).toHaveLength(3);
-    expect(report?.forecasts.length).toBeGreaterThan(0);
-    expect(market).toEqual(marketBefore); // Information creates no revenue or hidden bonus.
-    expect(state.active).toBeNull();
-    expect(beginResearch(state, 'market', market)).toBe(false);
-    expect(advanceResearch(state, 100, market, ctx, 2)).toBeNull();
-    expect(beginResearch(state, 'clients', market)).toBe(true);
-    expect(state.progress.clients).toBe(2);
-    expect(advanceResearch(state, RESEARCH.work.clients - 2, market, ctx, 2)?.kind).toBe('clients');
-    expect(researchAvailable(state, 'clients', market)).toBe(false);
-    expect(researchAvailable(state, 'market', market)).toBe(false);
-    evolveMarket(market, toolkit, RESEARCH.shift_sprints[0], 5);
-    expect(researchAvailable(state, 'clients', market)).toBe(true);
-    expect(researchAvailable(state, 'market', market)).toBe(true);
-  });
-
-  it('keeps dated snapshots unchanged through market shifts, new reports and save round trips', () => {
-    const market = createMarket(toolkit, 12),
-      state = createResearch(),
-      ctx = context();
-    beginResearch(state, 'clients', market);
-    const first = advanceResearch(state, RESEARCH.work.clients, market, ctx, 1)!;
-    const original = JSON.stringify(first);
-    const history = JSON.stringify(state.history[0]);
-    evolveMarket(market, toolkit, 7, 12);
-    ctx.levels = {};
-    beginResearch(state, 'clients', market);
-    advanceResearch(state, 1, market, ctx, 7);
-    const restored = JSON.parse(JSON.stringify(state));
-    const second = advanceResearch(restored, RESEARCH.work.clients - 1, market, ctx, 8)!;
-    expect(second.revision).toBe(1);
-    expect(second.sprint).toBe(8);
-    expect(JSON.stringify(first)).toBe(original);
-    expect(JSON.stringify(restored.history[0])).toBe(history);
-    expect(restored.history).toHaveLength(2);
-    expect(restored.active).toBeNull();
-    expect(researchAvailable(restored, 'clients', market)).toBe(false);
+    const before = structuredClone(market);
+    const views = SEGMENTS.map(id => segmentView(market, ctx, id));
+    for (const view of views) {
+      const expected = market.groups.find(group => group.id === view.id)!.profiles.flatMap(profile => profile.needs);
+      for (const need of expected) expect(view.needs.some(item => item.block === need.block && item.level === need.level)).toBe(true);
+      expect(priceForecast(market, ctx, view.id, 1.5).after).toEqual(segmentView(market, ctx, view.id, 1.5));
+    }
+    expect(market).toEqual(before);
+    evolveMarket(market, toolkit, 7, 5);
+    expect(SEGMENTS.map(id => segmentView(market, ctx, id))).not.toEqual(views);
   });
 });

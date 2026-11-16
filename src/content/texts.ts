@@ -79,20 +79,20 @@ export function effectLine(kind: string, rest = false): string {
 /** The words of the sheet. Dry on purpose: the joke is in what is said, never in how. */
 
 export const LANE_NAME: Record<Lane, string> = L(
-  { build: 'стройка', fix: 'починка', promo: 'продвижение', research: 'разведка' },
-  { build: 'build', fix: 'fixes', promo: 'promotion', research: 'research' },
+  { build: 'стройка', fix: 'починка', promo: 'продвижение' },
+  { build: 'build', fix: 'fixes', promo: 'promotion' },
 );
 
 /** «проверяешь стройку» */
 export const LANE_ACC: Record<Lane, string> = L(
-  { build: 'стройку', fix: 'починку', promo: 'продвижение', research: 'разведку' },
-  { build: 'the build', fix: 'the fixes', promo: 'promotion', research: 'research' },
+  { build: 'стройку', fix: 'починку', promo: 'продвижение' },
+  { build: 'the build', fix: 'the fixes', promo: 'promotion' },
 );
 
 /** What the founder does with his own hands on each lane: a founder codes least of all. */
 export const HAND_NAME: Record<Lane, string> = L(
-  { build: 'кодить', fix: 'чинить', promo: 'пост', research: 'изучить' },
-  { build: 'code', fix: 'fix', promo: 'post', research: 'study' },
+  { build: 'кодить', fix: 'чинить', promo: 'пост' },
+  { build: 'code', fix: 'fix', promo: 'post' },
 );
 
 /** said over the desk when there is nothing for the hands to do there */
@@ -101,20 +101,18 @@ export const HAND_IDLE: Record<Lane, string> = L(
     build: 'строить нечего: выбери блок',
     fix: 'долга нет: чинить нечего',
     promo: 'показывать нечего: нужны ядро и лендинг',
-    research: 'выбери клиентов или рынок в исследованиях',
   },
   {
     build: 'nothing to build: pick a block',
     fix: 'no debt: nothing to fix',
     promo: 'nothing to show: needs the core and a landing page',
-    research: 'choose customers or market in Research',
   },
 );
 
 /** said where the square lands */
 export const HAND_DONE: Record<Lane, string> = L(
-  { build: '', fix: 'починил сам', promo: 'пост написан', research: 'собрал данные' },
-  { build: '', fix: 'fixed it yourself', promo: 'post written', research: 'collected data' },
+  { build: '', fix: 'починил сам', promo: 'пост написан' },
+  { build: '', fix: 'fixed it yourself', promo: 'post written' },
 );
 
 export const TIER_NAME: Record<Tier, string> = L({ fast: 'базовый', normal: 'опытный', think: 'эксперт' }, { fast: 'basic', normal: 'experienced', think: 'expert' });
@@ -136,9 +134,9 @@ export const LEFT_KNOWN = L(
   ['«без %s нам не подходит»', '«мы просили %s ещё в прошлом спринте»', '«у конкурентов %s уже есть»'],
   ['“without %s it’s not for us”', '“we asked for %s back in the last sprint”', '“the competitors already have %s”'],
 );
-export const LEFT_UNKNOWN = L(
-  ['ушёл, не сказав почему', '«мы пересмотрели приоритеты»', '«дело не в вас, дело в бюджете»'],
-  ['left without saying why', '“we have revised our priorities”', '“it’s not you, it’s the budget”'],
+export const LEFT_GENERIC = L(
+  ['«мы пересмотрели приоритеты»', '«дело не в вас, дело в бюджете»'],
+  ['“we have revised our priorities”', '“it’s not you, it’s the budget”'],
 );
 
 /** The news line: the industry talks to itself. Shown in turn, between the events of the run. The English lines are in the same order. */

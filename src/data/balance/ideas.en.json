@@ -5,7 +5,7 @@
     "voice": { "adj": "Voice", "note": "voice AI: calls the clients so you don’t have to", "does": "building costs ×1.25, clients wait a sprint longer" },
     "gen": { "adj": "Generative", "note": "image generation: a sixth finger on the house", "does": "promotion ×1.6, tokens burn ×1.3" },
     "copilot": { "adj": "Copilot", "note": "a copilot: gives advice while you do the work", "does": "building costs ×0.85, tokens ×0.8, bill ×0.9" },
-    "rag": { "adj": "Well-read", "note": "AI over your documents: confident even when there is no document", "does": "research twice as fast, tokens burn ×1.2" },
+    "rag": { "adj": "Well-read", "note": "AI over your documents: confident even when there is no document", "does": "Archived card · no modifiers" },
     "buyer": { "adj": "Shopping", "note": "picked a plan itself. With your card", "does": "bill ×1.2, building costs ×1.1, promotion ×0.9" },
     "multiplayer": { "adj": "Multiplayer", "note": "five agents are typing. No decision yet", "does": "promotion ×1.25, tokens burn ×1.25" },
     "guarded": { "adj": "Cautious", "note": "first, consent to process your consent", "does": "bill ×1.15, building costs ×1.2, clients wait a sprint longer" },

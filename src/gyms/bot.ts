@@ -2,6 +2,8 @@ import { companyContext } from '../systems/company/company';
 import {
   MARKET,
   marketCapacity,
+  priceForecast,
+  SEGMENTS,
   marketTotals,
   schedulePrice,
   segmentView,
@@ -9,7 +11,7 @@ import {
   type SegmentId,
 } from '../systems/company/market';
 import { blockEffects, PRODUCTION, projectCost } from '../systems/run/product';
-import { researchAvailable } from '../systems/company/research';
+import marketEvolution from '../data/balance/market-evolution.json';
 import {
   answerCall,
   answerDilemma,
@@ -25,7 +27,6 @@ import {
   expandInfrastructure,
   expandOffice,
   officeQuote,
-  startResearch,
   flows,
   freeCells,
   friendsAt,
@@ -54,9 +55,6 @@ import {
 export interface BotStyle {
   /** puts blocks next to their friends; otherwise on the first free cell */
   links: boolean;
-  /** reads customer needs and interviews named accounts; otherwise builds blind */
-  research: boolean;
-  researchOnce?: boolean;
   focus?: SegmentId;
   /** pays down debt before the product falls */
   fix: boolean;
@@ -64,7 +62,7 @@ export interface BotStyle {
   calls: boolean;
 }
 
-export const SENSIBLE: BotStyle = { links: true, research: true, fix: true, calls: true };
+export const SENSIBLE: BotStyle = { links: true, fix: true, calls: true };
 
 const lastDecision = new WeakMap<Run, number>();
 
@@ -120,13 +118,7 @@ export function playBot(run: Run, style: BotStyle = SENSIBLE): void {
   const ctx = companyContext(run);
   const market = marketTotals(run.market, ctx);
   const growth = sellable(run) && market.utilization < 1;
-  if (style.research && run.live.has('pay')) {
-    if (!run.research.active) {
-      const topic = (['clients','market'] as const).find(kind => researchAvailable(run.research, kind, run.market) && (!style.researchOnce || !run.research.reports[kind]));
-      if (topic) startResearch(run, topic);
-    }
-    if (run.sprintT === 0) adjustPrices(run);
-  }
+  if (run.live.has('pay') && run.sprintT === 0) adjustPrices(run);
   const landCost = officeQuote(run, 'land');
   if (landCost !== null && !freeCells(run).length && canFund(run, landCost, 0)) expandOffice(run, 'land');
 
@@ -161,27 +153,21 @@ export function playBot(run: Run, style: BotStyle = SENSIBLE): void {
   }
 
   const building = handy(run, 'build');
-  const interview =
-    style.research &&
-    handy(run, 'research');
-  // The founder can research without taking the only agent away from shipping or sales.
   if (run.energy >= TUNING.crunch.max) {
     const lane: Lane =
       style.fix && run.debt >= 8
         ? 'fix'
         : !run.live.has('pay') && building
           ? 'build'
-          : interview
-            ? 'research'
-            : growth && run.leads < 3
-              ? 'promo'
-              : building
-                ? 'build'
-                : style.fix && run.debt > 0
-                  ? 'fix'
-                  : growth
-                    ? 'promo'
-                    : 'build';
+          : growth && run.leads < 3
+            ? 'promo'
+            : building
+              ? 'build'
+              : style.fix && run.debt > 0
+                ? 'fix'
+                : growth
+                  ? 'promo'
+                  : 'build';
     crunch(run, lane);
   }
 
@@ -199,7 +185,6 @@ export function playBot(run: Run, style: BotStyle = SENSIBLE): void {
   const lanes: Lane[] = [];
   if (style.fix && run.debt >= 18) lanes.push('fix');
   if (building) lanes.push('build');
-  if (interview && run.agents.length > 1) lanes.push('research');
   if (growth) lanes.push('promo');
   if (lanes.length === 0) lanes.push(style.fix && run.debt > 0 ? 'fix' : 'build');
   run.agents.forEach((agent, i) => setLane(run, agent.id, lanes[i % lanes.length]));
@@ -280,7 +265,7 @@ function nextProject(run: Run, style: BotStyle, ctx: MarketContext): Project | u
     }
   }
   const market = marketTotals(run.market, ctx);
-  const views = style.research ? run.research.reports.clients?.segments ?? [] : [];
+  const views = SEGMENTS.map((id) => segmentView(run.market, ctx, id));
   const projects: Project[] = [];
   const kinds = [
     ...(cells.length ? available : []),
@@ -314,7 +299,7 @@ function nextProject(run: Run, style: BotStyle, ctx: MarketContext): Project | u
       },
     };
     const future = marketTotals(run.market, projected);
-    // Estimate only the published block effects and observed income, not hidden customer fit.
+    // Estimate the published block effects and current customer needs.
     let benefit = market.tokens * (1 - ratio('tokens')) - hosting * TUNING.sprint_s;
     for (const group of run.market.groups) {
       const effect = group.id === 'large' ? 'corp_pay' : 'small_pay';
@@ -323,24 +308,20 @@ function nextProject(run: Run, style: BotStyle, ctx: MarketContext): Project | u
     // Capacity is useful before overload begins, while customers are already arriving.
     if (market.count > 0 && market.utilization > 0.65)
       benefit += Math.max(0, future.capacity - market.capacity) * market.utilization * 2;
-    if (style.research) {
-      for (const view of views) {
-        for (const need of view.needs.filter((need) => need.block === block && (ctx.levels[block] ?? 0) < need.level)) {
-          const progress =
-            Math.min(1, level / need.level) - Math.min(1, (own?.level ?? 0) / need.level);
-          benefit +=
-            (need.count + ((Math.min(10, view.leads) + 1) * need.share) / 100) *
-            view.unitPrice * (style.focus ? view.id === style.focus ? 2 : .5 : 1) *
-            progress;
-        }
+    for (const view of views) {
+      for (const need of view.needs.filter((need) => need.block === block && (ctx.levels[block] ?? 0) < need.level)) {
+        const progress =
+          Math.min(1, level / need.level) - Math.min(1, (own?.level ?? 0) / need.level);
+        benefit +=
+          (need.count + ((Math.min(10, view.leads) + 1) * need.share) / 100) *
+          view.unitPrice * (style.focus ? view.id === style.focus ? 2 : .5 : 1) *
+          progress;
       }
-      for (const client of run.clients.filter(
-        (c) => !c.happy && c.want === block && (c.promised || run.known.includes(block)),
-      )) {
-        if (level >= client.wantLevel)
-          benefit += client.pay * client.deal * (client.promised ? 2 : 1);
-      }
-    } else if (!own) benefit += 80;
+    }
+    for (const client of run.clients.filter((c) => !c.happy && c.want === block)) {
+      if (level >= client.wantLevel)
+        benefit += client.pay * client.deal * (client.promised ? 2 : 1);
+    }
     if (!own && style.links) {
       const cell = bestCell(run, block, style)!;
       benefit += friendsAt(run, block, cell.i, cell.j) * mrr(run) * TUNING.link_bonus;
@@ -379,7 +360,10 @@ function nextProject(run: Run, style: BotStyle, ctx: MarketContext): Project | u
 function adjustPrices(run: Run): void {
   for (const group of run.market.groups) {
     if (group.pendingPrice !== null) continue;
-    const forecasts = run.research.reports.market?.forecasts.filter(f => f.id === group.id && f.satisfaction >= 65).sort((a,b) => b.income - a.income || a.price - b.price) ?? [];
+    const forecasts = marketEvolution.forecast_prices.map((price) => {
+      const forecast = priceForecast(run.market, companyContext(run), group.id, price);
+      return { price, income: forecast.income, satisfaction: forecast.after.satisfaction };
+    }).filter(f => f.satisfaction >= 65).sort((a,b) => b.income - a.income || a.price - b.price);
     const chosen = forecasts[0]?.price ?? group.price;
     if (Math.abs(chosen - group.price) >= MARKET.price.step / 2)
       schedulePrice(run.market, group.id, chosen);
