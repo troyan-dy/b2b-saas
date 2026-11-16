@@ -103,7 +103,7 @@ import {
 import { Board, type BlockOnSheet, type SlotOnSheet } from '../view/board';
 import type { Pt } from '../view/iso';
 import { Squares } from '../view/squares';
-import { AGENT_SLOTS, BUS_GAP, BUS_Y, CLIENT_SLOTS, DESK, INFRASTRUCTURE, MARKET, MONEY_RECT, STAGE_VIEW, TRUNK_X, VIEW_AT } from './layout';
+import { agentRoute, AGENT_SLOTS, BUS_GAP, BUS_Y, CLIENT_SLOTS, DESK, INFRASTRUCTURE, MARKET, MONEY_RECT, STAGE_VIEW, TRUNK_X, VIEW_AT } from './layout';
 
 const STEP = 1 / 60;
 
@@ -1043,7 +1043,7 @@ export class GameScene extends Phaser.Scene {
       // on a wide sheet the laptops stand close: their captions are set smaller
       const labelWidth = (AGENT_SLOTS[1][0] - AGENT_SLOTS[0][0]) * z - 14;
       const label = `${NO}${a.id} · ${TIER_NAME[a.tier]} · ${LANE_NAME[a.lane]}`;
-      this.paper.tag(id, x, y, `<button class="map-agent" style="width:${labelWidth}px" data-map="agent:${a.id}" title="${label}"><span class="map-agent-heading"><b>${LANE_NAME[a.lane]}</b><small>${NO}${a.id}</small></span><i${idle ? ' class="bad"' : ''}>${idle ? '$0' : TIER_NAME[a.tier]}</i></button>`, z < 0.8 ? 'small act' : 'act');
+      this.paper.tag(id, x, y, `<button class="map-agent" style="width:${labelWidth}px" data-map="agent:${a.id}" title="${label}"><span class="map-agent-heading"><b>${LANE_NAME[a.lane]}</b><small>${NO}${a.id}</small></span><i${idle ? ' class="bad"' : ''}>${idle ? L('ждёт · $0', 'idle · $0') : TIER_NAME[a.tier]}</i></button>`, z < 0.8 ? 'small act' : 'act');
     });
     this.paper.pruneTags('a', keepA);
 
@@ -1379,29 +1379,30 @@ export class GameScene extends Phaser.Scene {
     const board = this.board;
     const task = activeWork(run) ?? run.tasks.find((entry) => entry.status === 'queued');
     const site = task?.block ? run.blocks.find((block) => block.kind === task.block) : undefined;
-    const sig = JSON.stringify([run.agents.map((a) => [a.id, a.lane]), task?.id, site ? [site.i, site.j] : null, run.review]);
-    if (sig === this.routeSig) return;
-    this.routeSig = sig;
-
     // where the work of a lane goes on the sheet
     const targetOf = (lane: Lane): Pt | null => {
+      if (!handy(run, lane)) return null;
       if (lane === 'build') {
         if (!site) return task ? task.kind === 'infrastructure' ? INFRASTRUCTURE : [DESK[0] + 100, DESK[1] - 150] : null;
         const [cx, cy] = board.cell(site.i, site.j);
         return [cx, cy + 56];
       }
-      if (lane === 'fix') {
-        const [cx, cy] = board.cell(0, 0);
-        return [cx, cy + 56];
-      }
-      return MARKET;
+      const block = run.blocks.find((entry) => entry.kind === (lane === 'fix' ? 'core' : 'landing') && (lane === 'fix' || entry.live));
+      if (!block) return null;
+      const [cx, cy] = board.cell(block.i, block.j);
+      return [cx, cy + 56];
     };
+    const targets = { build: targetOf('build'), fix: targetOf('fix'), promo: targetOf('promo') };
+    const sig = JSON.stringify([run.agents.map((a) => [a.id, a.lane]), targets, task?.id, run.review]);
+    if (sig === this.routeSig) return;
+    this.routeSig = sig;
 
     // the founder's own connector: from the desk to what he checks. His squares are ink, not coral:
     // every square of work on that lane is looked at by a human
-    const mine = targetOf(run.review);
+    const mine = targets[run.review];
     const from: Pt = [DESK[0] + 118, DESK[1] - 64];
-    if (mine && !(run.review === 'build' && task && !site)) board.route('me', [from, [from[0] + 40, from[1]], [from[0] + 40, BUS_Y - 9], [mine[0], BUS_Y - 9], mine]);
+    const activity = (lane: Lane): string => lane === 'build' ? `${lane}:${task?.id}` : lane;
+    if (mine && !(run.review === 'build' && task && !site)) board.route('me', [from, [from[0], BUS_Y + BUS_GAP], [mine[0], BUS_Y + BUS_GAP], mine], true, activity(run.review));
     else board.dropRoute('me');
 
     const ids = new Set(run.agents.map((a) => `a${a.id}`));
@@ -1429,10 +1430,8 @@ export class GameScene extends Phaser.Scene {
         const s = 118 / img.height / 0.5;
         this.addFace(key, x + 14 * s, y - 128 * s, 14 * s, 12 * s, 0.37);
       }
-      const top: Pt = [x, y - 122];
-      const bus = BUS_Y + k * BUS_GAP;
-      const target = targetOf(a.lane);
-      if (target) board.route(key, [top, [x, bus], [target[0], bus], target]);
+      const target = targets[a.lane];
+      if (target) board.route(key, agentRoute(k, target), true, activity(a.lane));
       else board.dropRoute(key);
     });
   }
@@ -1535,12 +1534,12 @@ export class GameScene extends Phaser.Scene {
     if (this.stageShown === want * 10 + teamRows && this.cityColumnsShown === groups) return;
     this.stageShown = want * 10 + teamRows;
     this.cityColumnsShown = groups;
-    const v = STAGE_VIEW[want - 1];
+    const v = STAGE_VIEW[Math.max(want, teamRows > 1 ? 2 : 1) - 1];
     // Reserve the whole caption, not just the building centre, before the shelf at x=1340.
     const rightEdge = groups ? CLIENT_SLOTS[(groups - 1) * 4][0] + 105 : 0;
     const centre = Math.max(v.x, rightEdge - (1322 - VIEW_AT[0]) / v.zoom);
     const duration = groups && this.board.onScreen(rightEdge, 0)[0] > 1322 ? 0 : ms;
-    this.board.view(v.zoom, centre, teamRows > 1 ? Math.max(v.y, want === 1 ? 300 : 225) : v.y, VIEW_AT[0], VIEW_AT[1], duration, () => undefined);
+    this.board.view(v.zoom, centre, teamRows > 1 ? Math.max(v.y, want <= 2 ? 300 : 225) : v.y, VIEW_AT[0], VIEW_AT[1], duration, () => undefined);
   }
 
   /** Subscriptions: green squares keep flying from the clients into the money. */

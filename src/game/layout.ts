@@ -17,17 +17,35 @@ export const AGENT_SLOTS: readonly Pt[] = [
   [95, 400],
   [260, 400],
   [425, 400],
-  [-400, 560],
-  [-235, 560],
-  [-70, 560],
-  [95, 560],
-  [260, 560],
-  [425, 560],
+  [-400, 660],
+  [-235, 660],
+  [-70, 660],
+  [95, 660],
+  [260, 660],
+  [425, 660],
 ];
 
-/** connectors of the agents run along horizontal lines under the product, one line each, BUS_GAP px apart */
-export const BUS_Y = 304;
+/** Connectors stay above the laptops; the lower row goes around the upper row and its captions. */
+export const BUS_Y = 250;
 export const BUS_GAP = 7;
+
+export function agentRoute(slot: number, target: Pt): Pt[] {
+  const [x, y] = AGENT_SLOTS[slot];
+  const bus = BUS_Y - slot * BUS_GAP;
+  const points: Pt[] = [[x, y - 122]];
+  if (slot >= AGENT_SLOTS.length / 2) {
+    const column = slot - AGENT_SLOTS.length / 2;
+    const rowBus = y - 140 - column * BUS_GAP;
+    const outside = AGENT_SLOTS[5][0] + 100 + column * BUS_GAP;
+    points.push([x, rowBus], [outside, rowBus], [outside, bus]);
+  } else points.push([x, bus]);
+  // Projects at the founder's desk approach from its right, clear of his chair.
+  if (target[0] < DESK[0] + 118) {
+    const approach = DESK[0] + 160;
+    points.push([approach, bus], [approach, target[1]], target);
+  } else points.push([target[0], bus], target);
+  return points;
+}
 
 /** the trunk to the clients: a vertical line to the right of the product */
 export const TRUNK_X = 640;
