@@ -1,9 +1,9 @@
 import { BLOCK_BY_ID } from '../content/blocks';
 import { CARD_ART } from '../content/cards';
 import { L } from '../core/lang';
-import { LESSONS, TRAITS, traitGives, type Meta } from '../systems/meta/meta';
+import { collectionLessons, TRAITS, traitGives, type Meta } from '../systems/meta/meta';
 import { DRAFT_CARDS } from '../systems/run/draft';
-import { IDEAS, TUNING, type Run } from '../systems/run/run';
+import { ACTIVE_TECHS, IDEAS, TUNING, type Run } from '../systems/run/run';
 import type { CollectionCard, CollectionSection, CollectionView } from './player-collection';
 import { rate } from './format';
 import { SPRINT_CARD_ART, sprintCardsView } from './sprint-cards-view';
@@ -25,10 +25,6 @@ const LESSON_ART: Record<string, string> = {
 const LESSON_UNLOCK: Record<string, string> = {
   down: L('Переживи падение продукта.', 'Experience a product outage.'),
   corp: L('Привлеки крупного клиента.', 'Attract an enterprise client.'),
-  asked: L(
-    'Узнай хотя бы два запроса клиентов за партию.',
-    'Discover at least two client requests in one run.',
-  ),
   kept: L('Выполни два обещания клиентам за партию.', 'Keep two client promises in one run.'),
   broken: L(
     'Заверши партию хотя бы с одним сорванным обещанием.',
@@ -54,14 +50,16 @@ const LESSON_UNLOCK: Record<string, string> = {
 
 export function playerCollectionSummary(meta: Meta): string {
   const traits = TRAITS.filter((trait) => (meta.traits[trait.id] ?? 0) > 0).length;
+  const lessons = collectionLessons(meta);
   return L(
-    `черты ${traits}/${TRAITS.length} · уроки ${meta.lessons.length}/${LESSONS.length}`,
-    `traits ${traits}/${TRAITS.length} · lessons ${meta.lessons.length}/${LESSONS.length}`,
+    `черты ${traits}/${TRAITS.length} · уроки ${meta.lessons.length}/${lessons.length}`,
+    `traits ${traits}/${TRAITS.length} · lessons ${meta.lessons.length}/${lessons.length}`,
   );
 }
 
 /** Progress comes from the persistent founder record; a run's temporary boost is never a new level. */
 export function playerCollectionView(meta: Meta, saved: Run | null = null): CollectionView {
+  const visibleLessons = collectionLessons(meta);
   const levels = TRAITS.reduce((sum, trait) => sum + (meta.traits[trait.id] ?? 0), 0);
   const maxLevels = TRAITS.reduce((sum, trait) => sum + trait.max, 0);
   const traits: CollectionSection = {
@@ -114,14 +112,14 @@ export function playerCollectionView(meta: Meta, saved: Run | null = null): Coll
     id: 'lessons',
     title: L('Уроки', 'Lessons'),
     summary: L(
-      `Получено ${meta.lessons.length}/${LESSONS.length}`,
-      `Earned ${meta.lessons.length}/${LESSONS.length}`,
+      `Получено ${meta.lessons.length}/${visibleLessons.length}`,
+      `Earned ${meta.lessons.length}/${visibleLessons.length}`,
     ),
     note: L(
       'Остаются с основателем навсегда. В конце партии выдаётся до двух новых уроков по событиям забега.',
       'Stay with the founder forever. A finished run grants up to two new lessons based on what happened.',
     ),
-    cards: LESSONS.map((lesson) => ({
+    cards: visibleLessons.map((lesson) => ({
       id: lesson.id,
       title: lesson.title,
       art: LESSON_ART[lesson.id] ?? 'desk',
@@ -136,7 +134,7 @@ export function playerCollectionView(meta: Meta, saved: Run | null = null): Coll
     })),
   };
   const ideas = [
-    ...IDEAS.tech.map((card) => ({
+    ...ACTIVE_TECHS.map((card) => ({
       ...card,
       id: 'tech:' + card.id,
       title: L(`${card.adj} ИИ`, `${card.adj} AI`),

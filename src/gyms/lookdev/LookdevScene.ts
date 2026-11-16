@@ -12,7 +12,6 @@ const LANES = [
   { id: 'build', title: 'стройка' },
   { id: 'fix', title: 'починка' },
   { id: 'promo', title: 'продвижение' },
-  { id: 'research', title: 'разведка' },
 ];
 
 /** pictures of the sheet this scene uses */

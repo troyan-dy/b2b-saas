@@ -2,8 +2,6 @@ import './workbench.css';
 import { L } from '../core/lang';
 import { BUILD_CATEGORIES, CATEGORY_TITLE, type BuildCategory } from '../content/build-categories';
 import type { BuildReason } from './build-reasons';
-import type { ResearchView } from './research-view';
-import { researchPanelHtml } from './research-panel';
 import { dec, money, PER_S, rate, whole } from './format';
 
 export type SegmentId = 'small' | 'medium' | 'large';
@@ -67,7 +65,7 @@ export interface WorkbenchSegment {
   readonly happiness: number;
   readonly delta: number;
   readonly leads: number;
-  readonly market: number | null;
+  readonly market: number;
   /** Current and proposed absolute tariff multipliers, not a percentage change. */
   readonly price: number;
   readonly previewPrice: number;
@@ -101,7 +99,6 @@ export interface WorkbenchDraft {
 }
 
 export interface WorkbenchView {
-  readonly research: ResearchView;
   readonly office: { cells: number; totalCells: number; slots: number; maxSlots: number; landCost: number | null; deskCost: number | null; money: number };
   readonly tasks: readonly WorkbenchTask[];
   readonly budget: { readonly planned: number; readonly capacity: number };
@@ -129,7 +126,7 @@ export interface WorkbenchView {
   };
   readonly clientAnchor?: { readonly x: number; readonly y: number };
   readonly selectedSegment?: SegmentId;
-  readonly panel?: 'module' | 'clients' | 'agent' | 'research' | null;
+  readonly panel?: 'module' | 'clients' | 'agent' | null;
   readonly agent?: { id: number; title: string; description: string; lane: string; rate: number; topRate: number; fixRate: number; debt: number; salary: number; tariff: number; working: boolean; reviewed: boolean };
   readonly selectedModule?: string;
   readonly perks?: readonly {
@@ -141,9 +138,6 @@ export interface WorkbenchView {
 }
 
 export type WorkbenchAction =
-  | { type: 'open-research' | 'research-hand' }
-  | { type: 'research-agent'; id: number }
-  | { type: 'start-research' | 'select-research'; kind: 'clients' | 'market' }
   | { type: 'expand-office'; kind: 'land' | 'desks' }
   | { type: 'place' | 'upgrade' | 'demolish' | 'inspect-module'; block: string }
   | { type: 'close-panel' }
@@ -452,7 +446,7 @@ export function createWorkbench(
   root.innerHTML =
     '<section class="wb-catalog"><header><h2 tabindex="-1">' +
     L('БЛОКИ', 'BLOCKS') +
-    '</h2>' + button('open-research', '', L('Исследования', 'Research'), false, 'wb-text-button') + '<nav class="wb-categories" aria-label="' + L('Категории построек', 'Building categories') + '">' +
+    '</h2><nav class="wb-categories" aria-label="' + L('Категории построек', 'Building categories') + '">' +
     button('category', 'all', L('Все', 'All'), false, 'wb-category-tab wb-category-all') +
     BUILD_CATEGORIES.map((category) => button('category', category, CATEGORY_TITLE[category], false, 'wb-category-tab wb-category-' + category)).join('') +
     '</nav></header>' +
@@ -485,7 +479,7 @@ export function createWorkbench(
     '<div class="wb-happiness"><span></span><meter min="0" max="100"></meter></div>' +
     '<section class="wb-client-needs"><h3>' +
     L('Что им нужно', 'What they need') +
-    '</h3><ul class="wb-needs"></ul>' + button('open-research', '', L('Исследовать причины', 'Study the causes'), false, 'wb-text-button') + '</section>' +
+    '</h3><ul class="wb-needs"></ul></section>' +
     '<section class="wb-price"><label for="wb-price">' +
     L('Тариф', 'Tariff') +
     '<output for="wb-price"></output></label>' +
@@ -551,10 +545,6 @@ export function createWorkbench(
     const id = target.dataset.wbId ?? '';
     if (view.draft) return;
     switch (action) {
-      case 'open-research': case 'research-hand':
-        send({ type: action }); break;
-      case 'research-agent': send({ type: action, id: Number(id) }); break;
-      case 'select-research': case 'start-research': send({ type: action, kind: id as 'clients' | 'market' }); break;
       case 'expand-office': send({ type: action, kind: id as 'land' | 'desks' }); break;
       case 'category':
         category = id as BuildCategory | 'all';
@@ -660,8 +650,8 @@ export function createWorkbench(
     text(
       find('.wb-market-numbers'),
       L(
-        whole(segment.leads) + ' лидов · рынок ' + (segment.market === null ? 'не изучен' : '≈' + whole(segment.market)),
-        whole(segment.leads) + ' leads · market ' + (segment.market === null ? 'not studied' : '≈' + whole(segment.market)),
+        whole(segment.leads) + ' лидов · рынок ≈' + whole(segment.market),
+        whole(segment.leads) + ' leads · market ≈' + whole(segment.market),
       ),
     );
     text(find('.wb-reasons'), segment.reasons.join(' · '));
@@ -669,7 +659,7 @@ export function createWorkbench(
       find('.wb-needs'),
       segment.needs.length
         ? segment.needs.map(needHtml).join('')
-        : '<li>' + L('Потребности не изучены. Отчёт поможет выбрать направление развития.', 'Needs have not been studied. A report helps choose what to develop.') + '</li>',
+        : '<li>' + L('Новых запросов нет.', 'No new requests.') + '</li>',
     );
     const contracts = find('.wb-contracts');
     contracts.hidden = !segment.contracts?.length;
@@ -749,7 +739,7 @@ export function createWorkbench(
         return;
       }
       const panel = view.panel ?? null;
-      const detail = panel === 'module' || panel === 'agent' || panel === 'research';
+      const detail = panel === 'module' || panel === 'agent';
       root.classList.toggle('wb-context', detail);
       catalog.hidden = detail;
       modulePanel.hidden = !detail;
@@ -769,7 +759,6 @@ export function createWorkbench(
         );
       }
       if (panel === 'agent' && view.agent) html(find('.wb-module-content'), agentDetail(view.agent));
-      if (panel === 'research') html(find('.wb-module-content'), researchPanelHtml(view.research));
       const segment =
         view.segments.find((entry) => entry.id === view?.selectedSegment) ?? view.segments[0];
       if (panel === 'clients' && segment) {
@@ -779,7 +768,6 @@ export function createWorkbench(
       const nextPanelKey =
         panel === 'module'
           ? 'module:' + (view.selectedModule ?? '')
-          : panel === 'research' ? 'research'
           : panel === 'agent'
             ? 'agent:' + view.agent?.id
           : panel === 'clients'

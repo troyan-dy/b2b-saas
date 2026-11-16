@@ -16,7 +16,7 @@ import {
   LEFT_CLOSED,
   LEFT_DEMO,
   LEFT_KNOWN,
-  LEFT_UNKNOWN,
+  LEFT_GENERIC,
   NEWS,
   NEWS_EVENT,
   releaseLines,
@@ -55,7 +55,6 @@ import {
   officeQuote,
   expandOffice,
   OFFICE,
-  startResearch,
   clientPay,
   crunch,
   chooseCard,
@@ -316,22 +315,6 @@ export class GameScene extends Phaser.Scene {
     unlockSound();
     let changed = true;
     switch (action.type) {
-      case 'open-research':
-        this.workbenchSelection.panel = 'research';
-        this.workbenchSelection.researchKind ??= run.research.active ?? 'clients';
-        break;
-      case 'select-research': this.workbenchSelection.researchKind = action.kind; break;
-      case 'start-research':
-        changed = startResearch(run, action.kind);
-        if (changed) this.workbenchSelection.researchKind = action.kind;
-        break;
-      case 'research-hand': this.byHand('research'); break;
-      case 'research-agent': {
-        const agent = run.agents.find(a => a.id === action.id);
-        changed = Boolean(agent && run.research.active);
-        if (changed && agent) setLane(run, agent.id, 'research');
-        break;
-      }
       case 'expand-office': changed = expandOffice(run, action.kind); break;
       case 'inspect-module':
         this.workbenchSelection.selectedModule = action.block;
@@ -467,11 +450,6 @@ export class GameScene extends Phaser.Scene {
     this.workbenchAt = -Infinity;
     unlockSound();
     const run = this.run;
-    if (lane === 'research' && !run.research.active) {
-      this.workbenchSelection.panel = 'research';
-      this.show();
-      return;
-    }
     const task = activeWork(run) ?? run.tasks.find((entry) => entry.status === 'queued');
     const site = task?.block ? run.blocks.find((block) => block.kind === task.block) : undefined;
     const can = handy(run, lane);
@@ -522,10 +500,7 @@ export class GameScene extends Phaser.Scene {
     }
     const id = Number(owner.slice(1));
     if (key === 'drop') fire(this.run, id);
-    else {
-      setLane(this.run, id, key as Lane);
-      if (key === 'research') { this.workbenchSelection.selectedAgent = id; this.workbenchSelection.panel = 'research'; }
-    }
+    else setLane(this.run, id, key as Lane);
     playSound('ui');
   }
 
@@ -767,7 +742,7 @@ export class GameScene extends Phaser.Scene {
         break;
       }
       case 'left': {
-        const pool = e.demo ? LEFT_DEMO : e.closed ? LEFT_CLOSED : e.reason ? LEFT_KNOWN : LEFT_UNKNOWN;
+        const pool = e.demo ? LEFT_DEMO : e.closed ? LEFT_CLOSED : e.reason ? LEFT_KNOWN : LEFT_GENERIC;
         this.paper.pop(1178, 740, e.say ?? pool[e.id % pool.length].replace('%s', BLOCK_BY_ID[e.reason]?.short ?? ''), 'bad');
         playSound('waste');
         logEvent(e.closed ? 'closed' : 'left');
@@ -813,18 +788,6 @@ export class GameScene extends Phaser.Scene {
         }
         break;
       }
-      case 'reveal': {
-        const [x, y] = this.board.onScreen(MARKET[0], MARKET[1]);
-        this.paper.pop(x, y - 20, `${L('клиенты просят', 'clients ask for')}: ${BLOCK_BY_ID[e.kind]?.name ?? e.kind}`, 'good');
-        playSound('quip');
-        logEvent(`reveal:${e.kind}`);
-        break;
-      }
-      case 'researched':
-        this.news(L(`Отчёт готов: ${e.kind === 'clients' ? 'клиенты' : 'рынок'}. Открой исследования, чтобы выбрать следующий ход.`, `Report ready: ${e.kind === 'clients' ? 'customers' : 'market'}. Open Research to choose your next move.`));
-        playSound('quip');
-        this.workbenchAt = -Infinity;
-        break;
       case 'down':
         this.news(NEWS_EVENT.down);
         this.cameras.main.shake(180, 0.004);
@@ -1326,9 +1289,9 @@ export class GameScene extends Phaser.Scene {
       ['Чертёж полон. Улучшай здания', 'на месте — кликни любое.', 'Ненужное можно разобрать', 'из его карточки.'],
       ['The blueprint is full. Click', 'a building to improve it in place.', 'You can demolish unneeded', 'buildings from their details.'],
     ))) return;
-    if (run.clients.some((client) => !client.happy && !run.known.includes(client.want)) && tell('t:ask', L(
-      ['Ключевой договор недоволен.', 'Разведка выяснит его запрос.', 'Нажми на здание клиента:', 'его договор показан в окне над ним.'],
-      ['A key contract is unhappy.', 'Research reveals its request.', 'Click the customer building:', 'its contract is shown above it.'],
+    if (run.clients.some((client) => !client.happy) && tell('t:ask', L(
+      ['Ключевой договор недоволен.', 'Нажми на здание клиента:', 'в окне виден его запрос', 'и сколько спринтов он готов ждать.'],
+      ['A key contract is unhappy.', 'Click the customer building:', 'its request and remaining patience', 'are shown above it.'],
     ))) return;
     if (run.stage >= 2 && run.energy >= TUNING.crunch.max && tell('t:hands', L(
       ['Силы — не только на код.', 'Справа внизу можно самому', 'заняться продвижением или починкой.'],
@@ -1404,7 +1367,7 @@ export class GameScene extends Phaser.Scene {
             lock: run.reviewLocked,
           },
           // what he does with his own hands: one point of strength a square, on any lane
-          { owner: 'hand', label: L('руками', 'by hand'), keys: LANES.map((l) => ({ id: l as string, title: HAND_NAME[l], off: l !== 'research' && (run.energy < 1 || !handy(run, l)) })) },
+          { owner: 'hand', label: L('руками', 'by hand'), keys: LANES.map((l) => ({ id: l as string, title: HAND_NAME[l], off: run.energy < 1 || !handy(run, l) })) },
         ],
       },
     ];
