@@ -345,7 +345,7 @@ function segmentPanel(
     pricePending: segment.pendingPrice !== null,
     priceDisabled: Boolean(run.draft || run.over),
     priceLabel: `${rate(segment.unitPrice / TUNING.sprint_s)}${PER_S}`,
-    forecast: L(`При ×${dec(previewPrice)}: ≈${rate(forecast.income / TUNING.sprint_s)}/с, отток ≈${forecast.lost}. Оценка на следующий релиз при текущем продукте и аудитории.`, `At ×${dec(previewPrice)}: ≈${rate(forecast.income / TUNING.sprint_s)}/s, ≈${forecast.lost} leaving. Next-release estimate for the current product and audience.`),
+    forecast: L(`По общему тарифу при ×${dec(previewPrice)}: ≈${rate(forecast.income / TUNING.sprint_s)}/с, отток ≈${forecast.lost}. Именные договоры ниже сюда не входят. Оценка на следующий релиз при текущем продукте и аудитории.`, `At the shared tariff ×${dec(previewPrice)}: ≈${rate(forecast.income / TUNING.sprint_s)}/s, ≈${forecast.lost} leaving. Named contracts below are not included. Next-release estimate for the current product and audience.`),
     needs: segmentNeeds(run, ctx, id, modules),
     reasons: Object.entries(segment.reasons)
       .filter(([, value]) => value >= 0.5)
