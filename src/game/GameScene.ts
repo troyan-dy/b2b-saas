@@ -1462,7 +1462,15 @@ export class GameScene extends Phaser.Scene {
       }
       const target = targets[a.lane];
       if (target) {
-        const points = a.lane === 'build' && !site ? [...agentRoute(k, [target[0] - 20, target[1]]), target] : agentRoute(k, target);
+        let points = agentRoute(k, target);
+        if (a.lane === 'build' && !site) {
+          const outside: Pt = [target[0] - 20, target[1]];
+          if (target[0] < DESK[0] + 118) {
+            const desk = board.node('me')!;
+            const above: Pt = [DESK[0] + desk.displayWidth / 2 + 24, DESK[1] - desk.displayHeight - 24];
+            points = [...agentRoute(k, above), [outside[0], above[1]], outside, target];
+          } else points = [...agentRoute(k, outside), target];
+        }
         board.route(key, points, true, activity(a.lane));
       }
       else board.dropRoute(key);
