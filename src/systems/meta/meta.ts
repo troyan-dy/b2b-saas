@@ -4,7 +4,7 @@ import traitsEn from '../../data/balance/traits.en.json';
 import traitsData from '../../data/balance/traits.json';
 import { L, worded } from '../../core/lang';
 import { createRng } from '../../core/rng';
-import { IDEAS, pitch, type Ending, type Run } from '../run/run';
+import { ACTIVE_TECHS, IDEAS, pitch, type Ending, type Run } from '../run/run';
 
 /**
  * The founder between startups: the same developer goes from run to run and keeps what was learned —
@@ -59,6 +59,9 @@ export interface Trait {
 }
 
 export const LESSONS: Lesson[] = worded(lessonsData, lessonsEn);
+export function collectionLessons(meta: Meta): Lesson[] {
+  return LESSONS.filter((lesson) => lesson.id !== 'ear' || meta.lessons.includes('ear'));
+}
 export const TRAITS: Trait[] = worded(traitsData, traitsEn);
 const SCHEMA_VERSION = 2;
 const KEY = 'b2b-saas-founder';
@@ -113,7 +116,7 @@ function happened(run: Run, when: string): boolean {
     case 'corp':
       return run.stats.corp > 0;
     case 'asked':
-      return run.known.length >= 2;
+      return false;
     case 'kept':
       return run.stats.kept >= 2;
     case 'broken':
@@ -137,7 +140,7 @@ function happened(run: Run, when: string): boolean {
 
 /** What this startup taught: up to two new lessons, by what happened in it. */
 export function learn(run: Run, meta: Meta): Lesson[] {
-  return LESSONS.filter((l) => !meta.lessons.includes(l.id) && happened(run, l.when)).slice(0, PER_RUN);
+  return LESSONS.filter((l) => l.id !== 'ear' && !meta.lessons.includes(l.id) && happened(run, l.when)).slice(0, PER_RUN);
 }
 
 /** Writes the finished startup into the founder's record and returns the lessons it gave. */
@@ -196,7 +199,7 @@ export function traitGives(t: Trait, level: number): string {
 /** Cards of the idea decks that the next startup sees for the first time: unlocked by the number of startups behind. */
 export function unlockedNow(runs: number): string[] {
   const all = [
-    ...IDEAS.tech.map((c) => ({ c, name: L(`${c.adj} ИИ`, `${c.adj} AI`) })),
+    ...ACTIVE_TECHS.map((c) => ({ c, name: L(`${c.adj} ИИ`, `${c.adj} AI`) })),
     ...IDEAS.form.map((c) => ({ c, name: L(`ИИ-${c.name}`, `AI ${c.name}`) })),
     ...IDEAS.aud.map((c) => ({ c, name: L(`для ${c.name}`, `for ${c.name}`) })),
   ];

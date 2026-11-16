@@ -1,5 +1,5 @@
 import { createRng } from '../../core/rng';
-import { IDEAS, type AudCard, type FormCard, type TechCard } from './run';
+import { ACTIVE_TECHS, IDEAS, type AudCard, type FormCard, type TechCard } from './run';
 
 export const PITCH_REROLLS = 3;
 const HAND_SIZE = 4;
@@ -24,7 +24,7 @@ export function createPitchDraft(seed: number, runs: number) {
     return result;
   };
   const hands: PitchHands = {
-    tech: draw(IDEAS.tech, [], HAND_SIZE),
+    tech: draw(ACTIVE_TECHS, [], HAND_SIZE),
     form: draw(IDEAS.form, [], HAND_SIZE),
     aud: draw(IDEAS.aud, [], HAND_SIZE),
   };
@@ -56,7 +56,7 @@ export function createPitchDraft(seed: number, runs: number) {
       };
       const changed =
         deck === 'tech'
-          ? replace(IDEAS.tech, hands.tech)
+          ? replace(ACTIVE_TECHS, hands.tech)
           : deck === 'form'
             ? replace(IDEAS.form, hands.form)
             : replace(IDEAS.aud, hands.aud);

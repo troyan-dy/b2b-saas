@@ -1,7 +1,23 @@
 import { describe, expect, it } from 'vitest';
 import { createPitchDraft, type PitchDeck } from '../src/systems/run/pitch';
+import { ACTIVE_TECHS, dealIdea, IDEAS } from '../src/systems/run/run';
+import { unlockedNow } from '../src/systems/meta/meta';
 
 describe('pitch draft', () => {
+  it('keeps rag for saved companies but never offers it in a new idea, pitch, reroll or unlock', () => {
+    expect(IDEAS.tech.some(card => card.id === 'rag')).toBe(true);
+    expect(ACTIVE_TECHS.some(card => card.id === 'rag')).toBe(false);
+    for (let seed = 0; seed < 40; seed++) {
+      expect(dealIdea(seed).tech.some(card => card.id === 'rag')).toBe(false);
+      const draft = createPitchDraft(seed, 99);
+      for (let turn = 0; turn <= 3; turn++) {
+        expect(draft.hands.tech.some(card => card.id === 'rag')).toBe(false);
+        draft.reroll('tech', [0, 1, 2, 3]);
+      }
+    }
+    const rag = IDEAS.tech.find(card => card.id === 'rag')!;
+    expect(unlockedNow(rag.unlock).some(name => name.includes(rag.adj))).toBe(false);
+  });
   it('replays the seed and actions, preserving held cards and sharing three rerolls', () => {
     const a = createPitchDraft(42, 0);
     const b = createPitchDraft(42, 0);
