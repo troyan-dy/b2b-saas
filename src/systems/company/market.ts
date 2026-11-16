@@ -1,5 +1,13 @@
 import data from '../../data/balance/market.json';
-import { PRODUCTION, strategyCount, type CardStacks, type StrategyId } from '../run/product';
+import research from '../../data/balance/research.json';
+import { createRng } from '../../core/rng';
+import {
+  PRODUCTION,
+  strategyCount,
+  segmentRevenueMultiplier,
+  type CardStacks,
+  type StrategyId,
+} from '../run/product';
 
 export type SegmentId = 'small' | 'medium' | 'large';
 export const SEGMENTS: readonly SegmentId[] = ['small', 'medium', 'large'];
@@ -18,6 +26,7 @@ export interface Profile {
   leads: number;
   /** Fractions accumulate, so a small cohort eventually experiences churn too. */
   churnCarry: number;
+  priceComfort?: number;
 }
 export interface MarketGroup {
   id: SegmentId;
@@ -26,10 +35,21 @@ export interface MarketGroup {
   profiles: Profile[];
   came: number;
   left: number;
+  demand?: number;
 }
 export interface MarketState {
   groups: MarketGroup[];
   opened: boolean;
+  revision?: number;
+  warned?: number[];
+  evolved?: number[];
+}
+
+export interface MarketSignal {
+  kind: 'warning' | 'shift';
+  sprint: number;
+  segment: SegmentId;
+  theme: 'quality' | 'price' | 'demand';
 }
 
 /** All inputs come from the shipped product, never from an unfinished project. */
@@ -102,15 +122,19 @@ const stacks = (ctx: MarketContext, id: StrategyId) =>
     id,
   );
 
-export function createMarket(toolkit: readonly string[]): MarketState {
-  return {
+export function createMarket(toolkit: readonly string[], seed?: number): MarketState {
+  const state: MarketState = {
     opened: false,
+    revision: 0,
+    warned: [],
+    evolved: [],
     groups: data.segments.map((segment) => ({
       id: segment.id as SegmentId,
       price: 1,
       pendingPrice: null,
       came: 0,
       left: 0,
+      demand: 1,
       profiles: segment.profiles.map((profile) => {
         // A run's toolkit is finite: every request must have a route to completion.
         const needs = profile.needs.filter((need) => toolkit.includes(need.block));
@@ -125,10 +149,108 @@ export function createMarket(toolkit: readonly string[]): MarketState {
           count: 0,
           leads: 0,
           churnCarry: 0,
+          priceComfort: 0,
         };
       }),
     })),
   };
+  if (seed !== undefined) {
+    const rng = createRng(seed ^ research.seed_salt);
+    for (const group of state.groups) {
+      group.demand =
+        1 + rng.range(-research.initial_demand_variation, research.initial_demand_variation);
+      const pool = research.segment_needs[group.id].filter((block) => toolkit.includes(block));
+      for (const profile of group.profiles) {
+        profile.share *= 1 + rng.range(-research.share_variation, research.share_variation);
+        profile.priceComfort = rng.range(
+          -research.initial_price_variation,
+          research.initial_price_variation,
+        );
+        // Keep established needs; a run-specific priority changes the value of optional blocks.
+        const candidates = pool.filter(
+          (block) => !profile.needs.some((need) => need.block === block),
+        );
+        if (candidates.length)
+          profile.needs.push({ block: rng.pick(candidates), level: research.initial_need_level });
+      }
+      const total = group.profiles.reduce((sum, profile) => sum + profile.share, 0);
+      for (const profile of group.profiles) profile.share = (profile.share / total) * 100;
+    }
+  }
+  return state;
+}
+
+/** Old runs retain their existing audience; migration never rerolls requirements. */
+export function normalizeMarket(state: MarketState, toolkit: readonly string[]): void {
+  state.revision ??= 0;
+  state.warned ??= [];
+  state.evolved ??= [];
+  for (const group of state.groups) {
+    group.demand ??= 1;
+    for (const profile of group.profiles) {
+      profile.priceComfort ??= 0;
+      profile.needs = profile.needs.filter((need) => toolkit.includes(need.block));
+      if (!profile.needs.length) profile.needs = [{ block: 'core', level: 2 }];
+    }
+  }
+}
+
+/** Warn first; the change affects real demand rather than merely invalidating a report. */
+export function evolveMarket(
+  state: MarketState,
+  toolkit: readonly string[],
+  sprint: number,
+  seed: number,
+): MarketSignal | null {
+  normalizeMarket(state, toolkit);
+  const index = research.shift_sprints.findIndex(
+    (at) => sprint === at || sprint === at - research.warning_lead,
+  );
+  if (index < 0) return null;
+  const at = research.shift_sprints[index];
+  const rng = createRng(seed ^ research.seed_salt ^ at);
+  const segment = SEGMENTS[(rng.int(0, SEGMENTS.length - 1) + index) % SEGMENTS.length];
+  const theme = (['quality', 'price', 'demand'] as const)[index % 3];
+  const signal: MarketSignal = {
+    kind: sprint === at ? 'shift' : 'warning',
+    sprint: at,
+    segment,
+    theme,
+  };
+  if (signal.kind === 'warning') {
+    if (state.warned!.includes(at)) return null;
+    state.warned!.push(at);
+    return signal;
+  }
+  if (state.evolved!.includes(at)) return null;
+  state.evolved!.push(at);
+  const group = state.groups.find((item) => item.id === segment)!;
+  if (theme === 'quality') {
+    const profile = rng.pick(group.profiles);
+    const eligible = profile.needs.filter((need) => need.level < research.shift_level_cap);
+    if (eligible.length) rng.pick(eligible).level++;
+    // Demand shifts towards this existing cohort; its old requirements stay useful.
+    profile.share *= 1 + research.share_variation;
+    const total = group.profiles.reduce((sum, item) => sum + item.share, 0);
+    for (const item of group.profiles) item.share = (item.share / total) * 100;
+  } else if (theme === 'price') {
+    const direction = rng.next() < 0.5 ? -1 : 1;
+    for (const profile of group.profiles)
+      profile.priceComfort = clamp(
+        (profile.priceComfort ?? 0) + direction * research.price_change,
+        research.price_min,
+        research.price_max,
+      );
+  } else {
+    const direction = rng.next() < 0.5 ? -1 : 1;
+    group.demand = clamp(
+      (group.demand ?? 1) + direction * research.demand_change,
+      research.demand_min,
+      research.demand_max,
+    );
+  }
+  state.revision!++;
+  return signal;
 }
 
 export function marketCapacity(ctx: MarketContext): number {
@@ -166,7 +288,11 @@ function coverage(profile: Profile, ctx: MarketContext): number {
 }
 
 export function acceptedPrice(profile: Profile, _id: SegmentId, ctx: MarketContext): number {
-  return data.price.base_comfort + data.price.fulfilled_comfort * coverage(profile, ctx);
+  return (
+    data.price.base_comfort +
+    data.price.fulfilled_comfort * coverage(profile, ctx) +
+    (profile.priceComfort ?? 0)
+  );
 }
 
 function reasons(
@@ -230,8 +356,19 @@ export function segmentView(
     capacity = marketCapacity(ctx),
     utilization = load / capacity;
   const unitPrice =
-    ctx.basePrice * cfg.price_scale * ctx.priceMult * price * (ctx.segmentPrice?.[id] ?? 1);
-  const totalMarket = reachable(cfg.market, ctx);
+    ctx.basePrice *
+    cfg.price_scale *
+    ctx.priceMult *
+    price *
+    (ctx.segmentPrice?.[id] ?? 1) *
+    segmentRevenueMultiplier(
+      {
+        cardStacks: ctx.cardStacks,
+        strategy: { support: ctx.support, processing: ctx.processing },
+      },
+      id,
+    );
+  const totalMarket = reachable(cfg.market * (group.demand ?? 1), ctx);
   let satisfaction = 0;
   const averages = { needs: 0, price: 0, overload: 0, outage: 0, delay: 0, debt: 0 };
   const needs = new Map<string, MarketNeed>();
@@ -294,6 +431,13 @@ export function marketTotals(state: MarketState, ctx: MarketContext): MarketTota
       ctx.priceMult *
       group.price *
       (ctx.segmentPrice?.[group.id] ?? 1) *
+      segmentRevenueMultiplier(
+        {
+          cardStacks: ctx.cardStacks,
+          strategy: { support: ctx.support, processing: ctx.processing },
+        },
+        group.id,
+      ) *
       throughput;
     tokens += clients * base * data.token_share * ctx.tokenMult;
   }
@@ -369,7 +513,7 @@ export function advanceMarket(
     left = 0;
   for (const group of state.groups) {
     const cfg = rule(group.id),
-      available = reachable(cfg.market, ctx);
+      available = reachable(cfg.market * (group.demand ?? 1), ctx);
     const canReach = group.id === 'small' || ctx.stage >= 2;
     for (const p of group.profiles) {
       const happy = happiness(p, group.id, group.price, ctx, utilization);
@@ -383,7 +527,8 @@ export function advanceMarket(
       if (!canReach) continue;
       const promotion =
         ((Math.max(0, leads) * data.acquisition.per_lead * cfg.weight * p.share) / 100) *
-        ctx.promotionMult;
+        ctx.promotionMult *
+        (group.demand ?? 1);
       const referral =
         (p.count *
           data.acquisition.referral_rate *
