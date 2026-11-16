@@ -269,9 +269,38 @@
 .hire-stat small { display: block; margin: 4px 0; font-size: 11px; }
 .agent-speed-bar { display: block; height: 3px; margin: 0 10px; background: #ddd9ce; }
 .agent-speed-bar i { display: block; height: 100%; background: #6a9bcc; }
-.bl-lanes .agent-inspect { padding: 0; border: 0; background: none; color: inherit; font: 12px var(--mono); cursor: pointer; }
+.bl-lanes .agent-inspect {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: 12px/1.25 var(--mono);
+  text-align: left;
+  cursor: pointer;
+}
+.agent-inspect small {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font: inherit;
+}
+.agent-inspect i { font-style: normal; }
+.bl-agent-row > p { min-width: 0; }
 .bl-lanes .agent-inspect:hover { color: var(--ink); text-decoration: underline; }
 .map-agent { padding: 0; border: 0; background: none; color: inherit; font: inherit; cursor: pointer; }
+.map-agent b,
+.map-agent i {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.map-agent-heading { display: flex; align-items: baseline; justify-content: center; gap: 4px; }
+.map-agent-heading b { min-width: 0; }
+.map-agent small { flex-shrink: 0; font-size: 12px; }
 .map-agent:hover { color: #527088; }
 .bl-tag.face.act:hover { color: var(--coral); }
 .bl-tag.map-reason { pointer-events: auto; background: var(--paper); }
