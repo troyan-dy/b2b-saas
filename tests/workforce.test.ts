@@ -2,8 +2,16 @@ import { describe, expect, it } from 'vitest';
 import { enqueueTask } from '../src/systems/run/production';
 import {
   agentCost,
+  agentSlots,
+  canHire,
+  chooseCard,
   createRun,
+  draftCards,
+  expandOffice,
+  hire,
   IDEAS,
+  officeQuote,
+  place,
   step,
   TUNING,
   type Agent,
@@ -36,6 +44,66 @@ function workload(seed: number, builders: Tier[], fixer?: Tier, work = 10000) {
 }
 
 describe('workforce trade-offs', () => {
+  it('reaches the first paying customer with three basic agents and the starting cash alone', () => {
+    const results = [1, 3].map((teamSize) => {
+      const run = createRun(7, { tech: IDEAS.tech[0], form: IDEAS.form[0], aud: IDEAS.aud[0] });
+      for (let i = 1; i < teamSize; i++) expect(hire(run, 'fast')).toBe(true);
+      expect(place(run, 'core', 0, 0)).toBe(true);
+      expect(place(run, 'landing', 1, 0)).toBe(true);
+      expect(place(run, 'pay', 0, 1)).toBe(true);
+      let minimumCash = run.money;
+      for (let tick = 0; tick < TUNING.sprint_s * 4 * 4 && (!run.live.has('pay') || run.stats.clients === 0) && !run.over; tick++) {
+        if (run.draft) {
+          const card = draftCards(run).find((card) => !card.money)!;
+          expect(chooseCard(run, card.id)).toBe(true);
+        }
+        step(run, 0.25);
+        minimumCash = Math.min(minimumCash, run.money);
+      }
+      expect(run.live.has('pay')).toBe(true);
+      expect(run.stats.clients).toBeGreaterThan(0);
+      expect(run.mortgaged).toBe(false);
+      expect(run.claimedGrants).toEqual([]);
+      expect(minimumCash).toBeGreaterThan(0);
+      expect(run.desks).toBe(0);
+      return { teamSize, firstClientAt: run.stats.firstClientAt, paidProductAt: run.t, minimumCash, cash: run.money, debt: run.debt };
+    });
+    console.log('manual opening without founder work or grants', JSON.stringify(results));
+    expect(results[1].firstClientAt).toBeLessThan(results[0].firstClientAt);
+  });
+
+  it('offers three starting places and sells increasingly expensive places up to twelve', () => {
+    const run = createRun(7, { tech: IDEAS.tech[0], form: IDEAS.form[0], aud: IDEAS.aud[0] });
+    const cash = run.money;
+    expect(agentSlots(run)).toBe(3);
+    expect(hire(run, 'fast')).toBe(true);
+    expect(hire(run, 'fast')).toBe(true);
+    expect(run.agents).toHaveLength(3);
+    expect(run.money).toBe(cash);
+    expect(canHire(run, 'fast')).toBe(false);
+    const first = officeQuote(run, 'desks')!;
+    expect(first).toBeGreaterThan(cash / 2);
+    run.money = first - 1;
+    expect(expandOffice(run, 'desks')).toBe(false);
+    expect(run.money).toBe(first - 1);
+    run.money = 2_000_000;
+    let previous = 0;
+    for (let slots = 4; slots <= 12; slots++) {
+      const cost = officeQuote(run, 'desks')!;
+      expect(cost).toBeGreaterThanOrEqual(previous * 2);
+      const before = run.money;
+      expect(expandOffice(run, 'desks')).toBe(true);
+      expect(run.money).toBe(before - cost);
+      expect(agentSlots(run)).toBe(slots);
+      expect(hire(run, 'fast')).toBe(true);
+      previous = cost;
+    }
+    expect(run.agents).toHaveLength(12);
+    expect(canHire(run, 'fast')).toBe(false);
+    expect(officeQuote(run, 'desks')).toBeNull();
+    expect(expandOffice(run, 'desks')).toBe(false);
+  });
+
   it('keeps basic work cheapest, while an expert finishes the same urgent job fastest', () => {
     const tiers: Tier[] = ['fast', 'normal', 'think'];
     const rawCost = tiers.map(

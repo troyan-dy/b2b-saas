@@ -20,7 +20,7 @@ import {
 } from './run';
 
 export const RUN_SAVE_KEY = 'b2b-saas-run';
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
 const TRANSIENT = new Set(['rng', 'events', 'live', 'eff', 'host', 'linkCount', 'mod', 'idea']);
 type RecordValue = Record<string, unknown>;
 
@@ -471,7 +471,7 @@ export function loadRun(): Run | null {
     if (
       !record(saved) ||
       !plain(saved) ||
-      (saved.v !== 1 && saved.v !== SCHEMA_VERSION) ||
+      ![1, 2, SCHEMA_VERSION].includes(saved.v as number) ||
       !integer(saved.rngState) ||
       saved.rngState > 0xffffffff ||
       !record(saved.run)
@@ -492,6 +492,11 @@ export function loadRun(): Run | null {
       Object.fromEntries(Object.entries(state).filter(([key]) => !TRANSIENT.has(key))),
     );
     if (state.desks === undefined) run.desks = Math.max(0, run.agents.length - OFFICE.desks.base);
+    else if ((saved.v as number) < 3) {
+      // Schemas 1–2 had two free places and at most six places in total.
+      const oldSlots = Math.min(6, 2 + run.desks);
+      run.desks = Math.max(0, oldSlots - OFFICE.desks.base, run.agents.length - OFFICE.desks.base);
+    }
     if (state.market === undefined) run.market = createMarket(['core','landing','pay',...run.pool]);
     run.idea = idea;
     run.rng = createRng(run.seed, saved.rngState);
