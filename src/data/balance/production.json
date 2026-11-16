@@ -1,7 +1,7 @@
 {
   "minimum_token_mult": 0.12,
   "max_level": 5,
-  "upgrade_work_mult": [0, 0.6, 1.2, 2, 3.2],
+  "upgrade_work_mult": [0, 0.6, 2.4, 6, 16],
   "upgrade_effect_steps": [0, 1, 1, 0.6, 0.4],
   "infrastructure": { "cost": 900, "cost_growth": 1.6, "work": 12, "work_growth": 4 },
   "strategy": {

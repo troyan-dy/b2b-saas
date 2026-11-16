@@ -50,7 +50,7 @@ describe('research in the company loop', () => {
     }
     expect(run.blocks).toHaveLength(run.pool.length + 3);
     expect(agentSlots(run)).toBe(OFFICE.desks.base);
-    run.money = 2_000_000;
+    run.money = 4_000_000;
     while(expandOffice(run,'desks')) { /* buy the finite office */ }
     expect(agentSlots(run)).toBe(OFFICE.desks.max);
     expect(officeQuote(run,'desks')).toBeNull();
