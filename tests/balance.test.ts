@@ -123,7 +123,7 @@ describe('economy', () => {
       console.log(`idea ${k}: ${ideaOf(k).tech.id}/${ideaOf(k).form.id}/${ideaOf(k).aud.id} alive ${alive}/12 profitable ${profitable}/12 peak ${Math.round(runs.reduce((a, r) => a + r.stats.peakMrr, 0) / 12)}`);
       expect(profitable).toBeGreaterThan(0);
     }
-  }, 30000);
+  }, 60000); // 192 full runs with teams up to twelve need extra time under parallel test load.
 
   it('test_run_every_client_type_comes_and_startups_close', () => {
     // counted over every startup played above: content that never shows up is not content

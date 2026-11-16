@@ -276,13 +276,55 @@ describe('production queue and sprint choices', () => {
     const core = [1, 2, 3, 4, 5].map((level) => blockEffects('core', level).tokens);
     expect(core[1] - core[2]).toBeGreaterThan(core[2] - core[3]);
     expect(core[2] - core[3]).toBeGreaterThan(core[3] - core[4]);
-    expect(upgradeWork(10, 3)).toBe(20);
-    expect(upgradeWork(10, 4)).toBe(32);
+    expect(upgradeWork(10, 3)).toBe(60);
+    expect(upgradeWork(10, 4)).toBe(160);
     for (const kind of Object.keys(RULES)) {
       const effects = blockEffects(kind, 5);
       if (effects.tokens !== undefined) expect(effects.tokens).toBeGreaterThan(0);
       if (effects.seats !== undefined) expect(Number.isInteger(effects.seats)).toBe(true);
       if (effects.patience !== undefined) expect(Number.isInteger(effects.patience)).toBe(true);
+    }
+  });
+
+  it('ships the prioritized upper upgrade when a late company cannot finish both before release', () => {
+    for (const first of ['core', 'pay']) {
+      // Reproduce a normal bot company, not a player save or a cash-funded fixture.
+      const run = createRun(3200, { tech: IDEAS.tech[0], form: IDEAS.form[0], aud: IDEAS.aud[0] });
+      for (let tick = 0; tick < TUNING.last_sprint * TUNING.sprint_s * 4 && !run.over; tick++) {
+        playBot(run);
+        run.offer = null;
+        if (run.sprint === 24 && run.sprintT === 0) break;
+        step(run, 0.25);
+      }
+      expect(run.sprint).toBe(24);
+      expect(run.sprintT).toBe(0);
+      expect(run.draft).toBeNull();
+      for (const task of [...run.tasks]) expect(cancelTask(run, task.id)).toBe(true);
+      for (const agent of run.agents) setLane(run, agent.id, agent.tier === 'fast' ? 'fix' : 'build');
+      setReview(run, 'build');
+      const cash = run.money;
+      for (const kind of ['core', 'pay']) {
+        expect(run.blocks.find(block => block.kind === kind)?.level).toBe(4);
+        expect(upgrade(run, kind)).toBe(true);
+      }
+      expect(run.money).toBe(cash);
+      expect(run.tasks.every(task => task.cost === 0)).toBe(true);
+      const budget = remainingBuildCapacity(run);
+      expect(run.tasks.every(task => task.work <= budget)).toBe(true);
+      expect(run.tasks.reduce((sum, task) => sum + task.work, 0)).toBeGreaterThan(budget);
+      if (first === 'pay') expect(moveTask(run, run.tasks[1].id, -1)).toBe(true);
+      expect(blockEffects('core', 5).tokens).toBeLessThan(blockEffects('core', 4).tokens);
+      expect(blockEffects('pay', 5).small_pay).toBeGreaterThan(blockEffects('pay', 4).small_pay);
+      for (let tick = 0; tick < TUNING.sprint_s * 4 - 1; tick++) step(run, 0.25);
+      expect(run.tasks.find(task => task.block === first)?.status).toBe('ready');
+      expect(run.blocks.filter(block => ['core', 'pay'].includes(block.kind)).every(block => block.level === 4)).toBe(true);
+      step(run, 0.25);
+      const second = first === 'core' ? 'pay' : 'core';
+      expect(run.lastReport?.sprint).toBe(24);
+      expect(run.lastReport?.shipped).toEqual([first]);
+      expect(run.blocks.find(block => block.kind === first)?.level).toBe(PRODUCTION.max_level);
+      expect(run.blocks.find(block => block.kind === second)?.level).toBe(4);
+      expect(run.tasks.find(task => task.block === second)?.status).toBe('active');
     }
   });
 

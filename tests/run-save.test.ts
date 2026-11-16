@@ -114,7 +114,7 @@ describe('company save', () => {
 
   it('restores all twelve agents and purchased places in a new save', () => {
     const run = createRun(72, idea);
-    run.money = 2_000_000;
+    run.money = 4_000_000;
     while (expandOffice(run, 'desks')) { /* buy all available places */ }
     while (hire(run, 'fast')) { /* fill all available places */ }
     expect(agentSlots(run)).toBe(12);

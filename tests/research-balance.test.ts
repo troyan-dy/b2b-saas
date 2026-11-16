@@ -6,6 +6,7 @@ import { playBot, SENSIBLE, type BotStyle } from '../src/gyms/bot';
 import { createRun, IDEAS, step, TUNING, netPerS, priceMult } from '../src/systems/run/run';
 import { companyContext, companyTotals } from '../src/systems/company/company';
 import { segmentView } from '../src/systems/company/market';
+import { blockEffects, PRODUCTION } from '../src/systems/run/product';
 
 describe('paired strategy balance', () => {
   it('compares repeat research, one report and blind development on identical markets', () => {
@@ -19,7 +20,7 @@ describe('paired strategy balance', () => {
         for(let tick=0;tick<TUNING.last_sprint*TUNING.sprint_s*4 && !run.over;tick++){playBot(run,style);run.offer=null;step(run,.25);}
         const ctx=companyContext(run);
         if(name==='research' && i===0) {const folder=join(tmpdir(),'progress','b2b-research');mkdirSync(folder,{recursive:true});writeFileSync(join(folder,'example-economy.json'),JSON.stringify({eff:run.eff,price:priceMult(run),cards:run.cardStacks,mod:run.mod,blocks:run.blocks.map(b=>[b.kind,b.level]),infrastructure:run.infrastructure,idea:run.idea},null,2));}
-        return {profit:run.over==='profit',net:netPerS(run),money:run.money,clients:companyTotals(run).count,reports:run.research.history.length,blocks:run.blocks.length,upgrades:run.blocks.reduce((n,b)=>n+b.level-1,0),income:Object.fromEntries(['small','medium','large'].map(id=>[id,segmentView(run.market,ctx,id as 'small'|'medium'|'large').income]))};
+        return {profit:run.over==='profit',net:netPerS(run),money:run.money,clients:companyTotals(run).count,reports:run.research.history.length,blocks:run.blocks.length,upgrades:run.blocks.reduce((n,b)=>n+b.level-1,0),agents:run.agents.length,maxBlocks:run.blocks.filter(b=>b.live && b.level===PRODUCTION.max_level).length,usefulNonMaxBlocks:run.blocks.filter(b=>b.live && b.level<PRODUCTION.max_level && Object.values(blockEffects(b.kind,b.level)).some(value=>value>0 && value!==1)).length,income:Object.fromEntries(['small','medium','large'].map(id=>[id,segmentView(run.market,ctx,id as 'small'|'medium'|'large').income]))};
       });
       const mean=(key:'net'|'money'|'clients'|'reports'|'blocks'|'upgrades')=>Math.round(runs.reduce((n,r)=>n+r[key],0)/runs.length*100)/100;
       return {name,profit:runs.filter(r=>r.profit).length,net:mean('net'),money:mean('money'),clients:mean('clients'),reports:mean('reports'),blocks:mean('blocks'),upgrades:mean('upgrades'),runs};
@@ -34,6 +35,8 @@ describe('paired strategy balance', () => {
     expect(result[0].net).toBeGreaterThan(result[1].net);
     expect(result[0].net).toBeGreaterThan(result[2].net);
     expect(result.slice(3).every(row => row.profit >= 6)).toBe(true);
-    expect(result[0].upgrades).toBeLessThan(30);
+    const ordinaryRuns = result.flatMap(row => row.runs);
+    expect(ordinaryRuns.some(run => run.profit && run.agents === 12)).toBe(true);
+    expect(ordinaryRuns.some(run => run.profit && run.maxBlocks > 0 && run.usefulNonMaxBlocks > 0)).toBe(true);
   }, 60000);
 });

@@ -86,7 +86,7 @@ describe('workforce trade-offs', () => {
     run.money = first - 1;
     expect(expandOffice(run, 'desks')).toBe(false);
     expect(run.money).toBe(first - 1);
-    run.money = 2_000_000;
+    run.money = 4_000_000;
     let previous = 0;
     for (let slots = 4; slots <= 12; slots++) {
       const cost = officeQuote(run, 'desks')!;
