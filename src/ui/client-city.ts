@@ -61,7 +61,7 @@ export function createClientCity(
       const { x, y, width } = view.heading;
       el.innerHTML =
         `<header style="${at(x, y, width)}"><button class="city-total" data-segment="small">${L('КЛИЕНТЫ', 'CLIENTS')} · <strong>${whole(view.total)}</strong></button>` +
-        `<button data-fold="1" aria-expanded="${!view.collapsed}">${view.collapsed ? L('развернуть', 'expand') : L('свернуть', 'fold')}</button></header>` +
+        (view.nodes.length ? `<button data-fold="1" aria-expanded="${!view.collapsed}">${view.collapsed ? L('развернуть', 'expand') : L('свернуть', 'fold')}</button>` : '') + '</header>' +
         view.nodes
           .map(
             (node) =>

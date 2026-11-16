@@ -475,7 +475,11 @@ export function createWorkbench(
       false,
       'wb-back wb-client-close',
     ) +
-    '</header><div class="wb-panel-scroll wb-client-content"><p class="wb-client-count"></p>' +
+    '</header><nav class="wb-segment-tabs" aria-label="' + L('Размер компании', 'Company size') + '">' +
+    button('select-segment', 'small', L('Малые', 'Small')) +
+    button('select-segment', 'medium', L('Средние', 'Medium')) +
+    button('select-segment', 'large', L('Крупные', 'Large')) +
+    '</nav><div class="wb-panel-scroll wb-client-content"><p class="wb-client-count"></p>' +
     '<div class="wb-happiness"><span></span><meter min="0" max="100"></meter></div>' +
     '<section class="wb-client-needs"><h3>' +
     L('Что им нужно', 'What they need') +
@@ -562,6 +566,9 @@ export function createWorkbench(
       case 'confirm-price':
         send({ type: 'confirm-price', segment: id as SegmentId });
         break;
+      case 'select-segment':
+        send({ type: action, segment: id as SegmentId });
+        break;
       case 'expand-infrastructure':
         send({ type: 'expand-infrastructure' });
         break;
@@ -633,6 +640,8 @@ export function createWorkbench(
     clientId = segment.id;
     if (changed) client.scrollTop = 0;
     text(clientPanel.querySelector('h2')!, segment.title);
+    for (const tab of clientPanel.querySelectorAll<HTMLButtonElement>('[data-wb-action="select-segment"]'))
+      tab.setAttribute('aria-pressed', String(tab.dataset.wbId === segment.id));
     text(
       find('.wb-client-count'),
       L(

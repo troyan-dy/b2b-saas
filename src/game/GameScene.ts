@@ -1440,7 +1440,7 @@ export class GameScene extends Phaser.Scene {
   private syncCity(): void {
     const run = this.run;
     const board = this.board;
-    if (this.ended || (!customerCount(run) && !run.market.opened)) {
+    if (this.ended) {
       this.paper.setCity(null);
       return;
     }
@@ -1505,7 +1505,9 @@ export class GameScene extends Phaser.Scene {
     const [hx,hy] = board.onScreen(760 + Math.max(0, groups.length - 1) * 225 / 2, -425);
     const view: CityView = {
       total: customerCount(run), collapsed: this.cityCollapsed,
-      heading: {x: Math.min(hx, 1180), y: hy, width: Math.min(420, Math.max(275, groups.length * 225 * z))},
+      heading: groups.length
+        ? {x: Math.min(hx, 1180), y: hy, width: Math.min(420, Math.max(275, groups.length * 225 * z))}
+        : {x: 1155, y: 300, width: 275},
       groups: groups.map((group, column) => {
         const lastRow = this.cityCollapsed ? 0 : Math.min(4, group.count) - 1;
         const [sx,sy] = CLIENT_SLOTS[column * 4 + lastRow];
