@@ -567,7 +567,7 @@
 }
 .wb-segment-tabs { display: flex; gap: 6px; padding-bottom: 12px; }
 .wb-segment-tabs button { flex: 1; }
-.wb-segment-tabs button[aria-pressed='true'] { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+.wb-main .wb-segment-tabs button[aria-pressed='true'] { background: var(--ink); color: var(--paper); border-color: var(--ink); }
 .wb-client-popup .wb-client-count {
   font: 400 17px/1.35 var(--mono);
 }
