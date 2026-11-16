@@ -123,6 +123,8 @@ export interface WorkbenchView {
     readonly level?: number;
     readonly status?: 'queued' | 'active' | 'ready' | 'backlog';
     readonly taskId?: string;
+    readonly task?: WorkbenchTask;
+    readonly helpDisabled?: boolean;
     readonly api?: { cost: number; affordable: boolean };
   };
   readonly clientAnchor?: { readonly x: number; readonly y: number };
@@ -151,7 +153,7 @@ export type WorkbenchAction =
   | { type: 'preview-price'; segment: SegmentId; value: number }
   | { type: 'confirm-price'; segment: SegmentId }
   | { type: 'expand-infrastructure' }
-  | { type: 'cancel-task' | 'rush-task'; task: string }
+  | { type: 'cancel-task' | 'rush-task' | 'help-task'; task: string }
   | { type: 'select-segment'; segment: SegmentId };
 
 const esc = (value: string): string =>
@@ -211,7 +213,7 @@ function moduleCard(module: WorkbenchModule): string {
     module.title,
     primary(module.next || module.current),
     module.demand,
-    `${money(module.cost)} · ${whole(module.work)} ${L('работы', 'work')}`,
+    `${whole(module.work)} ${L('работы', 'work')} · ${L('хостинг', 'hosting')} ${rate(module.nextHosting ?? module.hosting)}${PER_S}`,
   ]
     .filter(Boolean)
     .join(' · ');
@@ -222,7 +224,6 @@ function moduleCard(module: WorkbenchModule): string {
       module.id,
       `<strong>${title}</strong><span class="wb-build-work" aria-label="${whole(module.work)} ${L('работы', 'work')}"><i aria-hidden="true"></i>${whole(module.work)}</span>` +
         `<span class="wb-build-effect${module.selected ? ' wb-picked-hint' : ''}">${module.selected ? L('кликни клетку на чертеже', 'click a cell on the blueprint') : effect}</span>` +
-        `<span class="wb-build-price">${money(module.cost)}</span>` +
         (module.reason ? `<span class="wb-build-reason wb-reason-${module.reason.tone}" title="${esc(module.reason.detail)}">${esc(module.reason.label)}</span>` : ''),
       module.disabled,
       'wb-build-main',
@@ -245,13 +246,11 @@ function moduleCard(module: WorkbenchModule): string {
 function moduleDetail(module: WorkbenchModule): string {
   const action =
     module.action !== 'none'
-      ? '<div class="wb-module-buy"><p><span class="wb-cash">' +
-        money(module.cost) +
-        '</span> · ' +
+      ? '<div class="wb-module-buy"><p>' +
         whole(module.work) +
         ' ' +
         L('работы', 'work') +
-        '</p><small>' + L('Цена растёт с уровнем и числом клиентов: обновление нужно развернуть для всей компании.', 'Higher levels and more customers increase rollout costs.') + '</small>' +
+        '</p><small>' + L('Работа команды · зарплата во время стройки · хостинг после выпуска', 'Team work · wages while building · hosting after release') + '</small>' +
         button(
           module.action,
           module.id,
@@ -401,6 +400,12 @@ function infrastructureCard(infra: NonNullable<WorkbenchView['infrastructure']>)
         (infra.api ? button('rush-task', infra.taskId, L('Строители ×2', 'Builders ×2') + ' · ' + money(infra.api.cost), !infra.api.affordable, 'wb-api-button', L('Ускорить работу агентов. Стройка и выпуск остаются обязательными.', 'Speed up agents. Construction and release are still required.')) : '') +
         '</div>'
       : '') +
+    (infra.task ? '<div class="wb-infrastructure-actions">' +
+      '<small>' + esc(infra.task.detail) + '</small>' +
+      (infra.status === 'active' ? '<small>' + L('Работа уже начата: менять порядок и откладывать можно только в очереди.', 'Work has started: only queued work can be reordered or deferred.') + '</small>' : '') +
+      (infra.status === 'active' || infra.status === 'queued' ? button('help-task', infra.task.id, L('Помочь · 1 сила', 'Help · 1 energy'), infra.helpDisabled) : '') +
+      (infra.status === 'queued' ? button('move-up', infra.task.id, '↑', !infra.task.canMoveUp, '', L('Делать раньше', 'Do sooner')) + button('move-down', infra.task.id, '↓', !infra.task.canMoveDown, '', L('Делать позже', 'Do later')) + button('defer', infra.task.id, L('Отложить', 'Defer'), !infra.task.canDefer) : '') +
+      (infra.status === 'backlog' ? button('resume', infra.task.id, L('Продолжить', 'Resume'), !infra.task.canResume) : '') + '</div>' : '') +
     '</article>'
   );
 }
@@ -525,6 +530,8 @@ export function createWorkbench(
     signatures.set(node, value);
     const focused = document.activeElement as HTMLElement | null;
     const key = focused && node.contains(focused) ? focused.dataset.wbKey : undefined;
+    const scrollTop = node.scrollTop;
+    const scrolls = new Map([...node.querySelectorAll<HTMLElement>('[data-wb-scroll]')].map(el => [el.dataset.wbScroll, el.scrollTop]));
     const expanded = new Map([...node.querySelectorAll<HTMLDetailsElement>('details[data-wb-key]')].map(detail => [detail.dataset.wbKey, detail.open]));
     node.innerHTML = value;
     for (const detail of node.querySelectorAll<HTMLDetailsElement>('details[data-wb-key]')) {
@@ -534,6 +541,8 @@ export function createWorkbench(
       [...node.querySelectorAll<HTMLElement>('[data-wb-key]')]
         .find((el) => el.dataset.wbKey === key)
         ?.focus({ preventScroll: true });
+    node.scrollTop = scrollTop;
+    for (const el of node.querySelectorAll<HTMLElement>('[data-wb-scroll]')) el.scrollTop = scrolls.get(el.dataset.wbScroll) ?? 0;
   };
   const click = (event: MouseEvent): void => {
     const target = (event.target as HTMLElement).closest<HTMLButtonElement>('button');
@@ -568,8 +577,13 @@ export function createWorkbench(
         break;
       case 'cancel-task':
       case 'rush-task':
+      case 'help-task':
+      case 'defer':
+      case 'resume':
         send({ type: action, task: id });
         break;
+      case 'move-up': case 'move-down':
+        send({ type: 'move', task: id, direction: action === 'move-up' ? -1 : 1 }); break;
     }
   };
   function renderCatalog(): void {

@@ -37,6 +37,7 @@ import { projectName, SEGMENT_TITLES, workbenchView, type WorkbenchSelection } f
 import { sprintCardsView } from '../ui/sprint-cards-view';
 import { buildReason } from '../ui/build-reasons';
 import { DRAFT_CARDS } from '../systems/run/draft';
+import { PRODUCTION } from '../systems/run/product';
 import type { CityView } from '../ui/client-city';
 import { companyContext, companyTotals, customerCount } from '../systems/company/company';
 import { SEGMENTS, schedulePrice, segmentView } from '../systems/company/market';
@@ -103,7 +104,7 @@ import {
 import { Board, type BlockOnSheet, type SlotOnSheet } from '../view/board';
 import type { Pt } from '../view/iso';
 import { Squares } from '../view/squares';
-import { AGENT_SLOTS, BUS_GAP, BUS_Y, CLIENT_SLOTS, DESK, MARKET, MONEY_RECT, STAGE_VIEW, TRUNK_X, VIEW_AT } from './layout';
+import { AGENT_SLOTS, BUS_GAP, BUS_Y, CLIENT_SLOTS, DESK, INFRASTRUCTURE, MARKET, MONEY_RECT, STAGE_VIEW, TRUNK_X, VIEW_AT } from './layout';
 
 const STEP = 1 / 60;
 
@@ -349,6 +350,10 @@ export class GameScene extends Phaser.Scene {
       case 'defer': changed = deferTask(run, action.task); break;
       case 'resume': changed = resumeTask(run, action.task); break;
       case 'cancel-task': changed = cancelTask(run, action.task); break;
+      case 'help-task':
+        changed = (activeWork(run) ?? run.tasks.find(task => task.status === 'queued'))?.id === action.task;
+        if (changed) this.byHand('build');
+        break;
       case 'rush-task':
         changed = rushTask(run, action.task);
         if (changed) this.paper.pop(1120, 360, L('Ускорение: строители работают ×2', 'Boost: builders work ×2'), 'good');
@@ -424,6 +429,15 @@ export class GameScene extends Phaser.Scene {
       this.onWorkbench({ type: 'rush-task', task: id.slice(5) });
       return;
     }
+    if (id === 'infrastructure') {
+      this.onWorkbench({ type: 'expand-infrastructure' });
+      return;
+    }
+    if (id.startsWith('help:') || id.startsWith('defer:') || id.startsWith('later:')) {
+      const [command, task] = id.split(':');
+      this.onWorkbench(command === 'later' ? { type: 'move', task, direction: 1 } : { type: command === 'help' ? 'help-task' : 'defer', task });
+      return;
+    }
     if (id.startsWith('cancel:') || id.startsWith('first:') || id.startsWith('resume:')) {
       const [command, task] = id.split(':');
       const changed = command === 'cancel' ? cancelTask(this.run, task) : command === 'first' ? moveTask(this.run, task, -1) : resumeTask(this.run, task);
@@ -471,7 +485,7 @@ export class GameScene extends Phaser.Scene {
     this.hands++;
     playSound('yes', this.hands % 6);
     const [fx, fy] = this.board.onScreen(DESK[0] - 40, DESK[1] - 130);
-    const to: Pt = lane === 'build' ? site ? this.board.top(site) : [DESK[0] + 100, DESK[1] - 150] : lane === 'fix' ? this.board.cell(0, 0) : MARKET;
+    const to: Pt = lane === 'build' ? site ? this.board.top(site) : task?.kind === 'infrastructure' ? INFRASTRUCTURE : [DESK[0] + 100, DESK[1] - 150] : lane === 'fix' ? this.board.cell(0, 0) : MARKET;
     const [tx, ty] = this.board.onScreen(...to);
     // code is Claude's colour; a post, a call and a fix are the human's own ink
     this.squares.fly({ x: fx - 10, y: fy - 10, w: 20, h: 20 }, { x: tx - 20, y: ty - 10, w: 40, h: 20 }, 1, lane === 'build' ? PALETTE.coral : PALETTE.ink, 160, [0.35, 0.45]);
@@ -667,7 +681,8 @@ export class GameScene extends Phaser.Scene {
           const agent = this.board.node(key);
           if (agent) {
             const [sx, sy] = this.board.onScreen(agent.x, agent.y - 100);
-            const [tx, ty] = this.board.onScreen(DESK[0] + 100, DESK[1] - 150);
+            const project = activeWork(run) ?? run.tasks.find(task => task.status === 'queued');
+            const [tx, ty] = this.board.onScreen(...(project?.kind === 'infrastructure' ? INFRASTRUCTURE : [DESK[0] + 100, DESK[1] - 150] as Pt));
             this.squares.fly({ x: sx, y: sy, w: 10, h: 10 }, { x: tx, y: ty, w: 20, h: 16 }, 1, PALETTE.coral, 60, [0.4, 0.65]);
           }
         } else if (this.board.hasRoute(key)) this.board.flow(key, PALETTE.coral, 620, land);
@@ -939,6 +954,7 @@ export class GameScene extends Phaser.Scene {
   private show(): void {
     const run = this.run;
     const board = this.board;
+    this.syncStage(1100);
     const z = board.zoom;
     this.paper.setZoom(z);
 
@@ -1037,6 +1053,11 @@ export class GameScene extends Phaser.Scene {
       this.paper.tag(id, Math.max(130, x), y - index * 54, `${projectName(task.card ?? task.kind)} ${this.taskCaption(task)}`, 'map-task');
     });
     this.paper.pruneTags('task:', keepTasks);
+    const infraTask = run.tasks.find(task => task.kind === 'infrastructure');
+    const [ix, iy] = board.onScreen(...INFRASTRUCTURE);
+    this.paper.tag('infrastructure', Math.max(130, ix), iy,
+      `<div class="map-infrastructure"><button data-map="infrastructure" ${infraTask ? 'disabled' : ''} title="${L('Общая инфраструктура · не занимает клетку продукта', 'Shared infrastructure · uses no product cell')}"><span class="infra-rack" aria-hidden="true">▰<br>▰<br>▰</span><b>${L('Инфраструктура', 'Infrastructure')} v${run.infrastructure}</b></button>` +
+      (infraTask ? this.taskCaption(infraTask) : `<small>${L('Расширить', 'Expand')} · ${money(Math.round(PRODUCTION.infrastructure.cost * PRODUCTION.infrastructure.cost_growth ** run.infrastructure))}</small>`) + '</div>', 'map-task');
 
     // the founder and the agents
     // the founder's caption starts at the left edge of the desk: the desk stands at the edge of the sheet
@@ -1167,12 +1188,16 @@ export class GameScene extends Phaser.Scene {
     const ordered = this.run.tasks.filter((entry) => entry.status === 'active' || entry.status === 'queued');
     const order = ordered.indexOf(task) + 1;
     const label = task.status === 'ready' ? L('✓ к релизу', '✓ for release') : task.status === 'backlog' ? L('отложено', 'on hold') : `${task.status === 'active' ? '▶' : `№${order}`} ${Math.min(task.done, task.work)}/${task.work}`;
-    const action = task.status === 'active' ? 'site' : task.block ? `inspect:${task.block}` : 'site';
-    const refund = task.status === 'active' || task.status === 'ready' ? L(` Уже потраченные ${money(task.cost)} не возвращаются.`, ` The ${money(task.cost)} already spent is not refunded.`) : '';
+    const isCurrent = (activeWork(this.run) ?? this.run.tasks.find(entry => entry.status === 'queued'))?.id === task.id;
+    const canHelp = isCurrent && handy(this.run, 'build') && this.run.energy >= 1 && !this.paused && !this.run.draft;
+    const action = task.block && task.status !== 'active' ? `inspect:${task.block}` : `help:${task.id}`;
+    const refund = task.cost > 0 && (task.status === 'active' || task.status === 'ready') ? L(` Уже потраченные ${money(task.cost)} не возвращаются.`, ` The ${money(task.cost)} already spent is not refunded.`) : '';
     const api = apiWorkQuote(this.run, task.id);
-    return `<button class="task-progress" data-map="${action}" title="${task.status === 'active' ? L('Помочь стройке', 'Help build') : L('Порядок и прогресс работы', 'Work order and progress')}">${label}</button>` +
+    const waiting = task.status === 'queued' && isCurrent && this.run.money < task.cost ? L(` · нужно ещё ${money(task.cost - this.run.money)}`, ` · needs ${money(task.cost - this.run.money)} more`) : '';
+    return `<button class="task-progress" data-map="${action}" ${action.startsWith('help:') && !canHelp ? 'disabled' : ''} title="${task.status === 'active' ? L('Помочь · 1 сила. Начатую работу нельзя переставить или отложить.', 'Help · 1 energy. Started work cannot be reordered or deferred.') : L('Порядок и прогресс работы', 'Work order and progress')}">${label}${waiting}</button>` +
       (task.status === 'queued' && this.run.tasks.filter((entry) => entry.status === 'queued').indexOf(task) > 0 ? `<button data-map="first:${task.id}" title="${L('Делать раньше', 'Do sooner')}">↑</button>` : '') +
       (task.status === 'backlog' ? `<button data-map="resume:${task.id}" title="${L('Продолжить', 'Resume')}">▶</button>` : '') +
+      (task.kind === 'infrastructure' && task.status === 'queued' ? `<button data-map="later:${task.id}" ${this.run.tasks.filter(entry => entry.status === 'queued').at(-1)?.id === task.id ? 'disabled' : ''} title="${L('Делать позже', 'Do later')}">↓</button><button data-map="defer:${task.id}" title="${L('Отложить', 'Defer')}">Ⅱ</button>` : '') +
       (api ? `<button class="task-api" data-map="rush:${task.id}" ${api.affordable ? '' : 'disabled'} title="${L('Ускорить строителей вдвое. Нужен агент на стройке; выпуск на релизе.', 'Double builder speed. Requires a builder; ships at release.')}">⚡ ×2 ${money(api.cost)}</button>` : '') +
       `<button class="task-cancel" data-map="cancel:${task.id}" title="${L('Отменить.', 'Cancel.')}${refund}" aria-label="${L('Отменить работу', 'Cancel work')}">×</button>`;
   }
@@ -1231,17 +1256,21 @@ export class GameScene extends Phaser.Scene {
     if (run.draft) return L('Выбери <b>одну из трёх карт</b>: время и деньги стоят до решения.', 'Choose <b>one of three cards</b>: time and money wait for your decision.');
     if (this.razing) return L('<b>Кликни блок на карте</b>, который разобрать. Его клиенты снова начнут ждать; Esc — отмена.', '<b>Click a block on the map</b> to demolish it. Its clients will wait again; Esc cancels.');
     if (this.picked) return L('<b>Кликни свободную клетку</b>. Подсвеченное соседство увеличит доход после выпуска.', '<b>Click a free cell</b>. Highlighted neighbors increase income after release.');
+    const task = activeWork(run) ?? run.tasks.find((entry) => entry.status === 'queued');
+    if (task?.status === 'queued' && run.money < task.cost) return L(
+      'Для старта ' + (task.kind === 'infrastructure' ? 'инфраструктуры' : 'работы') + ' не хватает <b>' + money(task.cost - run.money) + '</b>. Измени очередь, отложи или отмени работу.',
+      (task.kind === 'infrastructure' ? 'Infrastructure' : 'Work') + ' needs <b>' + money(task.cost - run.money) + '</b> more to start. Reorder, defer or cancel it.',
+    );
+    if (!task && run.tasks.some(entry => entry.status === 'ready')) return L('<b>Работа готова и ждёт релиза</b>. Выпущенное улучшение заработает после отсчёта.', '<b>Work is ready and waiting for release</b>. The upgrade activates when the countdown ends.');
+    if (!task && run.tasks.some(entry => entry.status === 'backlog')) return L('<b>Работа отложена</b>: не выполняется. Нажми ▶ над работой, чтобы вернуть её в очередь; отложенные здания сохраняют клетки.', '<b>Work is deferred</b>: no progress. Press ▶ above the task to resume; deferred buildings keep their cells.');
+    if (this.paused) return L('<b>Пауза</b>: время, работа и деньги стоят.', '<b>Paused</b>: time, work and money are stopped.');
+    if (task && !run.agents.some(agent => agent.lane === 'build')) return L('<b>На стройке нет агента</b>. Назначь строителя справа или помоги сам: Enter · 1 сила.', '<b>No agent is building</b>. Assign a builder on the right or help: Enter · 1 energy.');
     if (!has('core')) return L('Начни с <b>«Обёртки над Клодом»</b> справа, затем выбери клетку на чертеже.', 'Start with <b>“Claude Wrapper”</b> on the right, then choose a cell on the blueprint.');
     if (!has('landing')) return L('Поставь <b>«Лендинг»</b>: без него клиенты не найдут продукт.', 'Place the <b>“Landing Page”</b> so customers can find your product.');
     if (!has('pay')) return L('Поставь <b>«Приём оплаты»</b>: он включает подписки после выпуска.', 'Place <b>“Payments”</b>: it enables subscriptions after release.');
     if (run.down) return run.downWhy === 'supplier'
       ? L('<strong>Сбой поставщика</strong> до релиза: клиенты не платят. Можно пока улучшить продукт.', '<strong>Provider outage</strong> until release: customers are not paying. Improve your product while you wait.')
       : L('<strong>Продукт лежит</strong>: назначь агента на починку, снизь техдолг к следующему релизу.', '<strong>The product is down</strong>: assign an agent to fixes and reduce tech debt before release.');
-    const task = activeWork(run) ?? run.tasks.find((entry) => entry.status === 'queued');
-    if (task?.status === 'queued' && run.money < task.cost) return L(
-      'Для стройки не хватает <b>' + money(task.cost - run.money) + '</b>. Порядок и отмена — над блоками.',
-      'Construction needs <b>' + money(task.cost - run.money) + '</b> more. Change order or cancel above the blocks.',
-    );
     if (!isLive(run, 'pay')) return L('<b>Платежи ещё не выпущены</b>. Помоги стройке через Enter; готовые проекты включатся на релизе.', '<b>Payments have not shipped yet</b>. Help build with Enter; completed projects activate at release.');
     const totals = companyTotals(run);
     if (totals.utilization > 1) return L(
@@ -1392,7 +1421,7 @@ export class GameScene extends Phaser.Scene {
     // where the work of a lane goes on the sheet
     const targetOf = (lane: Lane): Pt | null => {
       if (lane === 'build') {
-        if (!site) return task ? [DESK[0] + 100, DESK[1] - 150] : null;
+        if (!site) return task ? task.kind === 'infrastructure' ? INFRASTRUCTURE : [DESK[0] + 100, DESK[1] - 150] : null;
         const [cx, cy] = board.cell(site.i, site.j);
         return [cx, cy + 56];
       }
@@ -1544,7 +1573,7 @@ export class GameScene extends Phaser.Scene {
     const rightEdge = groups ? CLIENT_SLOTS[(groups - 1) * 4][0] + 105 : 0;
     const centre = Math.max(v.x, rightEdge - (1322 - VIEW_AT[0]) / v.zoom);
     const duration = groups && this.board.onScreen(rightEdge, 0)[0] > 1322 ? 0 : ms;
-    this.board.view(v.zoom, centre, teamRows > 1 ? Math.max(v.y, 225) : v.y, VIEW_AT[0], VIEW_AT[1], duration, () => undefined);
+    this.board.view(v.zoom, centre, teamRows > 1 ? Math.max(v.y, want === 1 ? 300 : 225) : v.y, VIEW_AT[0], VIEW_AT[1], duration, () => undefined);
   }
 
   /** Subscriptions: green squares keep flying from the clients into the money. */

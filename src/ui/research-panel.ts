@@ -31,11 +31,13 @@ export function researchPanelHtml(view: ResearchView): string {
     (view.active && !card.active ? '<small class="wb-research-note">' + L('Прогресс обоих направлений сохранится.', 'Progress in both directions is kept.') + '</small>' : '') +
     '<p class="wb-research-state" role="status">' + esc(view.state) + '</p>' + progress +
     '<section class="wb-research-team"><h3>' + L('Кто исследует', 'Who researches') + '</h3>' +
+    '<div class="wb-research-actions">' + button('research-hand', '', L('Помочь · 1 сила', 'Help · 1 energy'), view.handDisabled) +
+    '<small>' + L('Запас сил: ', 'Energy: ') + view.energy + '</small></div>' +
+    '<details data-wb-key="research-agents"><summary data-wb-key="research-agents-toggle">' + L(`Выбрать агента · назначено ${view.agents.filter(agent => agent.assigned).length} из ${view.agents.length}`, `Choose agent · ${view.agents.filter(agent => agent.assigned).length} of ${view.agents.length} assigned`) + '</summary><div class="wb-research-agent-list" data-wb-scroll="research-roster">' +
     (view.agents.length ? view.agents.map(agent => '<div class="wb-research-agent"><div><span>' + esc(`№${agent.id} · ${agent.title}`) + '</span><small>' + esc(agent.occupation) + '</small></div>' +
       button('research-agent', String(agent.id), agent.assigned ? L('Назначен', 'Assigned') : L('Назначить', 'Assign'), agent.disabled) + '</div>').join('')
       : '<p>' + L('Агентов пока нет. Отчёт можно сделать основателем.', 'No agents yet. The founder can finish a report.') + '</p>') +
-    '<div class="wb-research-actions">' + button('research-hand', '', L('Помочь · 1 сила', 'Help · 1 energy'), view.handDisabled) +
-    '<small>' + L('Запас сил: ', 'Energy: ') + view.energy + '</small></div></section>' +
+    '</div></details></section>' +
     (card.findings.length ? '<section class="wb-research-findings"><h3>' + esc(card.label + ' · ' + card.status) + '</h3>' + list(card.findings) + '</section>' : '') +
     '<details data-wb-key="research-details"><summary data-wb-key="research-details-toggle">' + L('Как это работает', 'How it works') + '</summary><p>' +
     L('Агент занят только этим отчётом. После завершения ждёт бесплатно; новую работу поручаешь ты. Основание для повтора — перемены рынка, не таймер.', 'An agent works only on this report. After finishing, they wait for free until reassigned. Market changes unlock a new report; there is no expiry timer.') + '</p>' +

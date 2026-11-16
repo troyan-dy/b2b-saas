@@ -24,6 +24,7 @@ import {
   agentDebtPerWork,
   agentFixPerWork,
   busy,
+  handy,
   clientPay,
   flows,
   linkBonus,
@@ -448,6 +449,8 @@ export function workbenchView(run: Run, selection: WorkbenchSelection): Workbenc
       progress: infraTask ? infraTask.done / Math.max(1, infraTask.work) : 0,
       status: infraTask?.status,
       taskId: infraTask?.id,
+      task: tasks.find(task => task.id === infraTask?.id),
+      helpDisabled: Boolean(selection.paused || run.draft || run.energy < 1 || !handy(run, 'build') || (active ?? queued[0])?.id !== infraTask?.id),
       api: infraTask ? apiWorkQuote(run, infraTask.id) ?? undefined : undefined,
       label: infraTask
         ? taskLabel(infraTask.status)
