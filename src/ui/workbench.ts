@@ -3,6 +3,7 @@ import { L } from '../core/lang';
 import { BUILD_CATEGORIES, CATEGORY_TITLE, type BuildCategory } from '../content/build-categories';
 import type { BuildReason } from './build-reasons';
 import type { ResearchView } from './research-view';
+import { researchPanelHtml } from './research-panel';
 import { dec, money, PER_S, rate, whole } from './format';
 
 export type SegmentId = 'small' | 'medium' | 'large';
@@ -138,8 +139,9 @@ export interface WorkbenchView {
 }
 
 export type WorkbenchAction =
-  | { type: 'open-research' | 'research-hand' | 'research-agent' }
-  | { type: 'start-research'; kind: 'clients' | 'market' }
+  | { type: 'open-research' | 'research-hand' }
+  | { type: 'research-agent'; id: number }
+  | { type: 'start-research' | 'select-research'; kind: 'clients' | 'market' }
   | { type: 'expand-office'; kind: 'land' | 'desks' }
   | { type: 'place' | 'upgrade' | 'demolish' | 'inspect-module'; block: string }
   | { type: 'close-panel' }
@@ -432,18 +434,6 @@ export interface Workbench {
   set(view: WorkbenchView | null): void;
 }
 
-function researchHtml(view: ResearchView): string {
-  return '<h2>' + L('ИССЛЕДОВАНИЯ', 'RESEARCH') + '</h2><p>' + L('Отчёт занимает время. Пока агент исследует, он не строит и не продвигает продукт.', 'A report takes time. A researching agent cannot build or promote the product.') + '</p>' +
-    view.cards.map(card => '<article class="wb-research-card"><h3>' + esc(card.title) + '</h3><p>' + esc(card.status) + ' · ' + card.work + L(' работы', ' work') + '</p>' +
-      '<progress max="1" value="' + card.progress + '"></progress>' +
-      button('start-research', card.kind, card.active ? L('Исследуем…', 'Studying…') : card.available ? L('Начать', 'Start') : L('Данные актуальны', 'Up to date'), !card.available || card.active, 'wb-primary') +
-      (card.findings.length ? '<ul>' + card.findings.map(f => '<li>' + esc(f) + '</li>').join('') + '</ul>' : '<p>' + L('Сначала разговоры и наблюдения — затем выводы.', 'Talk and observe first, then draw conclusions.') + '</p>') + '</article>').join('') +
-    '<div class="wb-research-actions">' + button('research-hand', '', L('Помочь самому · 1 сила', 'Help yourself · 1 energy'), view.handDisabled) +
-    button('research-agent', '', view.working ? L('Агент назначен', 'Agent assigned') : L(`Назначить агента №${view.agent ?? '—'}`, `Assign agent #${view.agent ?? '—'}`), !view.active || !view.agent || view.working) + '</div>' +
-    '<p>' + L('После отчёта агент ждёт бесплатно. Другую работу ему нужно поручить самому.', 'After the report the agent waits for free. Reassign them to other work yourself.') + '</p>' +
-    (view.history.length ? '<details><summary>' + L('Предыдущие отчёты', 'Previous reports') + '</summary>' + view.history.map(report => '<h3>' + esc(report.title) + '</h3><ul>' + report.findings.map(f => '<li>' + esc(f) + '</li>').join('') + '</ul>').join('') + '</details>' : '');
-}
-
 /** The scene owns which detail is open. Input nodes survive simulation updates. */
 export function createWorkbench(
   shop: HTMLElement,
@@ -535,7 +525,11 @@ export function createWorkbench(
     signatures.set(node, value);
     const focused = document.activeElement as HTMLElement | null;
     const key = focused && node.contains(focused) ? focused.dataset.wbKey : undefined;
+    const expanded = new Map([...node.querySelectorAll<HTMLDetailsElement>('details[data-wb-key]')].map(detail => [detail.dataset.wbKey, detail.open]));
     node.innerHTML = value;
+    for (const detail of node.querySelectorAll<HTMLDetailsElement>('details[data-wb-key]')) {
+      if (expanded.has(detail.dataset.wbKey)) detail.open = expanded.get(detail.dataset.wbKey)!;
+    }
     if (key)
       [...node.querySelectorAll<HTMLElement>('[data-wb-key]')]
         .find((el) => el.dataset.wbKey === key)
@@ -548,9 +542,10 @@ export function createWorkbench(
     const id = target.dataset.wbId ?? '';
     if (view.draft) return;
     switch (action) {
-      case 'open-research': case 'research-hand': case 'research-agent':
+      case 'open-research': case 'research-hand':
         send({ type: action }); break;
-      case 'start-research': send({ type: action, kind: id as 'clients' | 'market' }); break;
+      case 'research-agent': send({ type: action, id: Number(id) }); break;
+      case 'select-research': case 'start-research': send({ type: action, kind: id as 'clients' | 'market' }); break;
       case 'expand-office': send({ type: action, kind: id as 'land' | 'desks' }); break;
       case 'category':
         category = id as BuildCategory | 'all';
@@ -760,7 +755,7 @@ export function createWorkbench(
         );
       }
       if (panel === 'agent' && view.agent) html(find('.wb-module-content'), agentDetail(view.agent));
-      if (panel === 'research') html(find('.wb-module-content'), researchHtml(view.research));
+      if (panel === 'research') html(find('.wb-module-content'), researchPanelHtml(view.research));
       const segment =
         view.segments.find((entry) => entry.id === view?.selectedSegment) ?? view.segments[0];
       if (panel === 'clients' && segment) {
