@@ -22,7 +22,7 @@ A tycoon about building an AI startup alone. The team is Claude. The money is yo
 2. Put a Claude wrapper on the blueprint. Add a landing page. Remember about payments later than you should.
 3. Turn a profit within 30 sprints. Or at least shut down gracefully and write a thread about it.
 
-<p align="center"><img src="docs/img/en/loop.webp" alt="How it works: you pick blocks and review one lane; Claude’s agents build, fix, promote and research for money every second; finished blocks ship at the release; clients come for the landing page, wait for their block and leave without it; subscriptions come in, tokens, hosting, agents and rent go out. Three things kill a startup: tokens, tech debt and waiting clients" width="100%"></p>
+<p align="center"><img src="docs/img/en/loop.webp" alt="How it works: you pick blocks and review one lane; Claude’s agents build, fix and promote for money every second; finished blocks ship at the release; clients come for the landing page, wait for their block and leave without it; subscriptions come in, tokens, hosting, agents and rent go out. Three things kill a startup: tokens, tech debt and waiting clients" width="100%"></p>
 
 ## What it looks like
 
