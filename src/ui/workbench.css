@@ -41,6 +41,8 @@
   font: 400 19px/1.25 var(--serif);
 }
 .wb-main button {
+  -webkit-user-select: none;
+  user-select: none;
   box-sizing: border-box;
   font: inherit;
   color: inherit;
@@ -646,8 +648,17 @@
 .wb-office { display: flex; flex-wrap: wrap; gap: 3px 12px; padding: 4px 0 9px; font-size: 11px; }
 .wb-infrastructure-actions { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px; padding: 4px 10px 9px; font-size: 12px; }
 .wb-infrastructure-actions small { width: 100%; color: var(--dim); }
-.map-infrastructure { max-width: 310px; text-align: center; white-space: normal; }
-.map-infrastructure > button:first-child { display: flex; align-items: center; gap: 8px; margin: auto; }
+.bl-tag.map-shared-work { width: 272px; padding: 2px; }
+.map-infrastructure { width: 100%; text-align: left; white-space: normal; font-size: 14px; }
+.map-infrastructure > button:first-child { display: flex; align-items: center; gap: 8px; padding: 0; }
+.map-infrastructure > button:first-child:disabled { opacity: 1; cursor: default; }
 .map-infrastructure b { font-weight: 400; }
 .map-infrastructure small { display: block; color: var(--dim); font-size: 12px; }
 .map-infrastructure .infra-rack { color: #527088; font: 24px/0.6 var(--mono); padding: 8px; border: 1px solid var(--rule); transform: skewY(-8deg); }
+.map-work-list { max-height: calc(var(--work-height, 180px) - 54px); overflow-y: auto; }
+.map-work-item { margin-top: 5px; padding-top: 4px; border-top: 1px solid var(--rule); }
+.map-work-name { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+.map-work-actions { display: flex; flex-wrap: wrap; align-items: center; }
+.map-work-actions button { padding: 3px; }
+.map-work-actions .task-api { font-size: 12px; }
+.map-work-item.is-ready .task-progress { color: var(--money); }

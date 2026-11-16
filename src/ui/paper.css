@@ -240,6 +240,12 @@
   pointer-events: auto;
   cursor: pointer;
 }
+.bl-tag [data-map],
+.bl-lanes [data-o],
+.bl-item {
+  -webkit-user-select: none;
+  user-select: none;
+}
 .bl-tag.map-task {
   display: flex;
   align-items: center;
