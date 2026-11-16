@@ -10,12 +10,18 @@ export const DESK: Pt = [-540, 330];
 
 /** laptops of the agents, in the order they are hired: a row under the product */
 export const AGENT_SLOTS: readonly Pt[] = [
-  [-400, 470],
-  [-235, 470],
-  [-70, 470],
-  [95, 470],
-  [260, 470],
-  [425, 470],
+  [-400, 400],
+  [-235, 400],
+  [-70, 400],
+  [95, 400],
+  [260, 400],
+  [425, 400],
+  [-400, 560],
+  [-235, 560],
+  [-70, 560],
+  [95, 560],
+  [260, 560],
+  [425, 560],
 ];
 
 /** connectors of the agents run along horizontal lines under the product, one line each, BUS_GAP px apart */

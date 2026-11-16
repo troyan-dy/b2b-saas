@@ -51,6 +51,7 @@ import {
   canHire,
   cellsMax,
   agentSlots,
+  officeQuote,
   expandOffice,
   OFFICE,
   startResearch,
@@ -492,6 +493,10 @@ export class GameScene extends Phaser.Scene {
     if (owner === 'hire') {
       if (hire(this.run, key as Tier)) playSound('buy', 4);
       else playSound('waste');
+      return;
+    }
+    if (owner === 'office') {
+      this.onWorkbench({ type: 'expand-office', kind: 'desks' });
       return;
     }
     const id = Number(owner.slice(1));
@@ -1313,11 +1318,19 @@ export class GameScene extends Phaser.Scene {
     const stage3 = `${rate(TUNING.stage3_mrr / TUNING.sprint_s)}${PER_S}`;
     const unlock =
       run.stage === 1
-        ? L('опытный и эксперт — после первого платящего клиента; места покупаются в полке', 'experienced and expert unlock after the first paying client; buy desks in the shelf')
+        ? L('опытный и эксперт — после первого платящего клиента', 'experienced and expert unlock after the first paying client')
         : run.stage === 2
           ? L(`город — при подписках ${stage3}; дополнительные места покупаются отдельно`, `city at ${stage3} subscriptions; extra desks are purchased separately`)
           : '';
     const rows: ShelfKeys[] = [
+      {
+        owner: 'office',
+        keys: [{ id: 'desks', title: officeQuote(run, 'desks') === null
+          ? L(`Все ${agentSlots(run)} мест открыты`, `All ${agentSlots(run)} desks unlocked`)
+          : L(`+ Рабочее место · ${money(officeQuote(run, 'desks')!)}`, `+ Agent desk · ${money(officeQuote(run, 'desks')!)}`),
+          tip: L('Ещё одно место для найма. Сам агент оплачивается отдельно.', 'One more hiring slot. Agent setup is paid separately.'),
+          off: officeQuote(run, 'desks') === null || run.money < officeQuote(run, 'desks')! }],
+      },
       {
         owner: 'hire',
         keys: TIERS.map((t) => ({ id: t, title: `+ ${TIER_NAME[t]} $${TUNING.tiers[t].cost_per_s}${PER_S}`, note: `${dec(TUNING.tiers[t].work_per_s / TUNING.tiers.fast.work_per_s)}× · ${t === 'think' ? L('без багов', 'no bugs') : t === 'normal' ? L('мало багов', 'few bugs') : L('много багов', 'many bugs')}`, bar: TUNING.tiers[t].work_per_s / TUNING.tiers.think.work_per_s, tip: TIER_NOTE[t] + L(` · найм ${OFFICE.hire[t]}`, ` · setup ${OFFICE.hire[t]}`), off: !canHire(run, t) })),
@@ -1401,7 +1414,7 @@ export class GameScene extends Phaser.Scene {
       const key = `a${a.id}`;
       const [x, y] = AGENT_SLOTS[k];
       const old = board.node(key);
-      if (old && old.x !== x) {
+      if (old && (old.x !== x || old.y !== y)) {
         // an agent was let go: the rest move up
         old.setPosition(x, y);
         this.faces.get(key)?.destroy();
@@ -1514,15 +1527,16 @@ export class GameScene extends Phaser.Scene {
     for (const client of this.run.clients) segments.add(client.type === 'corp' || client.type === 'gov' ? 'large' : client.type === 'mid' ? 'medium' : 'small');
     const groups = segments.size;
     const want = this.run.stage >= 3 || count > 4 || groups > 1 || this.run.land > 0 ? 3 : this.run.stage === 2 || count || this.run.market.opened ? 2 : 1;
-    if (this.stageShown === want && this.cityColumnsShown === groups) return;
-    this.stageShown = want;
+    const teamRows = this.run.agents.length > AGENT_SLOTS.length / 2 ? 2 : 1;
+    if (this.stageShown === want * 10 + teamRows && this.cityColumnsShown === groups) return;
+    this.stageShown = want * 10 + teamRows;
     this.cityColumnsShown = groups;
     const v = STAGE_VIEW[want - 1];
     // Reserve the whole caption, not just the building centre, before the shelf at x=1340.
     const rightEdge = groups ? CLIENT_SLOTS[(groups - 1) * 4][0] + 105 : 0;
     const centre = Math.max(v.x, rightEdge - (1322 - VIEW_AT[0]) / v.zoom);
     const duration = groups && this.board.onScreen(rightEdge, 0)[0] > 1322 ? 0 : ms;
-    this.board.view(v.zoom, centre, v.y, VIEW_AT[0], VIEW_AT[1], duration, () => undefined);
+    this.board.view(v.zoom, centre, teamRows > 1 ? Math.max(v.y, 225) : v.y, VIEW_AT[0], VIEW_AT[1], duration, () => undefined);
   }
 
   /** Subscriptions: green squares keep flying from the clients into the money. */

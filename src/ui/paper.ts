@@ -233,7 +233,9 @@ export function createPaper(under: HTMLElement, over: HTMLElement): Paper {
       // the list of blocks keeps its scroll position while the shelf is redrawn
       const box = shelfBody.querySelector('.bl-scroll');
       const at = box ? box.scrollTop : 0;
+      const shelfAt = shelfBody.scrollTop;
       shelfBody.innerHTML = html;
+      shelfBody.scrollTop = shelfAt;
       const next = shelfBody.querySelector('.bl-scroll');
       if (next) next.scrollTop = at;
     },

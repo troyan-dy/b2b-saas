@@ -588,8 +588,7 @@ export function createWorkbench(
     for (const tab of root.querySelectorAll<HTMLButtonElement>('.wb-category-tab')) tab.setAttribute('aria-pressed', String(tab.dataset.wbId === category));
     const office = view.office;
     html(find('.wb-office'),
-      button('expand-office', 'land', L(`Участок ${office.cells}/${office.totalCells}`, `Plot ${office.cells}/${office.totalCells}`) + (office.landCost === null ? ' ✓' : ` +${Math.min(3, office.totalCells - office.cells)} · ${money(office.landCost)}`), office.landCost === null || office.money < office.landCost, 'wb-text-button', L('Купить клетки под здания. Каждое расширение дороже.', 'Buy building cells. Each expansion costs more.')) +
-      button('expand-office', 'desks', L(`Места агентов ${office.slots}/${office.maxSlots}`, `Agent desks ${office.slots}/${office.maxSlots}`) + (office.deskCost === null ? ' ✓' : ` +1 · ${money(office.deskCost)}`), office.deskCost === null || office.money < office.deskCost, 'wb-text-button', L('Купить рабочее место. Найм агента оплачивается отдельно.', 'Buy a desk. Agent setup is paid separately.')));
+      button('expand-office', 'land', L(`Участок ${office.cells}/${office.totalCells}`, `Plot ${office.cells}/${office.totalCells}`) + (office.landCost === null ? ' ✓' : ` +${Math.min(3, office.totalCells - office.cells)} · ${money(office.landCost)}`), office.landCost === null || office.money < office.landCost, 'wb-text-button', L('Купить клетки под здания. Каждое расширение дороже.', 'Buy building cells. Each expansion costs more.')));
     html(find('.wb-builds'),
       (view.infrastructure && (category === 'all' || category === 'infra') ? infrastructureCard(view.infrastructure) : '') +
       (available.length ? available.map(moduleCard).join('') : '<p class="wb-empty">' + L('Кликни здание на карте, чтобы улучшить его.', 'Click a building on the map to upgrade it.') + '</p>'),
