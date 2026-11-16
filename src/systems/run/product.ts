@@ -30,12 +30,8 @@ export function upgradeWork(baseWork: number, currentLevel: number): number {
   return Math.ceil(baseWork * PRODUCTION.upgrade_work_mult[level]);
 }
 
-/** Larger live companies need more migration and rollout work; a queued quote stays fixed. */
-export function projectCost(run: Run, work: number, targetLevel = 1): number {
-  const clients = run.clients.length + run.market.groups.reduce((n,g) => n + g.profiles.reduce((s,p) => s + p.count, 0), 0);
-  const scale = 1 + Math.max(0, clients - PRODUCTION.scale_free_clients) * PRODUCTION.cost_per_client;
-  return Math.ceil(work * (targetLevel === 1 ? PRODUCTION.construction_cost_per_work : PRODUCTION.upgrade_cost_per_work) * PRODUCTION.level_cost_mult[targetLevel - 1] * scale);
-}
+/** Ordinary projects are paid through working agents and ongoing operating costs. */
+export const projectCost: (run: Run, work: number, targetLevel?: number) => number = () => 0;
 
 export function restoreCardStacks(run: Run): void {
   run.cardStacks ??= {};

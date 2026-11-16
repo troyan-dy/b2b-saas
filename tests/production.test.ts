@@ -250,16 +250,17 @@ describe('production queue and sprint choices', () => {
     expect(draftCards(run)).toHaveLength(3);
   });
 
-  it('ships five levels with increasingly expensive work and refuses a sixth', () => {
+  it('ships five levels with increasing work and no project fee and refuses a sixth', () => {
     const run = fresh(['core']);
-    let previousCost = 0;
+    let previousWork = 0;
     for (let level = 1; level < 5; level++) {
       run.draft = null;
       expect(upgrade(run, 'core')).toBe(true);
       const task = run.tasks[0];
       expect(task.work).toBe(upgradeWork(workNeed(run, 'core'), level));
-      expect(task.cost).toBeGreaterThan(previousCost);
-      previousCost = task.cost;
+      expect(task.work).toBeGreaterThan(previousWork);
+      expect(task.cost).toBe(0);
+      previousWork = task.work;
       finishWork(run);
       expect(run.blocks[0].level).toBe(level);
       release(run);
@@ -432,9 +433,38 @@ describe('production queue and sprint choices', () => {
     expect(buildCapacity(run)).toBe(0);
   });
 
-  it('waits for money without charging or working, then starts the same queued task', () => {
+  it('starts ordinary building and upgrades without cash and keeps their work requirement', () => {
+    for (const upgrading of [false, true]) {
+      const run = fresh(upgrading ? ['core'] : []);
+      run.money = 0;
+      if (upgrading) upgrade(run, 'core');
+      else place(run, 'core', 0, 0);
+      expect(run.tasks[0].cost).toBe(0);
+      const work = run.tasks[0].work;
+      expect(work).toBeGreaterThan(1);
+      expect(crunch(run)).toBe(true);
+      expect(run.tasks[0].status).toBe('active');
+      expect(run.tasks[0].done).toBe(1);
+      expect(run.money).toBe(0);
+    }
+  });
+
+  it('still pays working agents, living costs and hosting during a free upgrade', () => {
+    const run = fresh(['core', 'landing', 'pay']);
+    expect(upgrade(run, 'pay')).toBe(true);
+    const before = run.money;
+    const hosting = run.host;
+    expect(hosting).toBeGreaterThan(0);
+    step(run, 1);
+    expect(run.money).toBeCloseTo(before - TUNING.living_per_s - hosting - TUNING.tiers.fast.cost_per_s);
+    expect(run.tasks[0].cost).toBe(0);
+    expect(run.tasks[0].status).toBe('active');
+  });
+
+  it('keeps an unaffordable infrastructure order ahead of free work until reordered', () => {
     const run = fresh(['core']);
     run.money = 1;
+    expandInfrastructure(run);
     upgrade(run, 'core');
     expect(crunch(run)).toBe(false);
     expect(run.tasks[0].status).toBe('queued');
@@ -445,6 +475,15 @@ describe('production queue and sprint choices', () => {
     crunch(run);
     expect(run.money).toBe(1000 - cost);
     expect(run.tasks[0].status).toBe('active');
+
+    const reordered = fresh(['core']);
+    reordered.money = 1;
+    expandInfrastructure(reordered);
+    upgrade(reordered, 'core');
+    expect(moveTask(reordered, reordered.tasks[1].id, -1)).toBe(true);
+    expect(crunch(reordered)).toBe(true);
+    expect(activeWork(reordered)?.kind).toBe('upgrade');
+    expect(reordered.money).toBe(1);
   });
 
   it('makes infrastructure repeatable with increasing cost and work only after release', () => {

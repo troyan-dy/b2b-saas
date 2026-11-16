@@ -29,13 +29,13 @@ function company(level: number): Run {
 }
 
 describe('expanded product toolkit', () => {
-  it('makes higher levels cost more work and makes rollout to a larger audience cost more', () => {
+  it('makes higher levels require more work while ordinary rollout stays free at any audience size', () => {
     const run = createRun(7, idea);
-    const costs = [2, 3, 4, 5].map(level => projectCost(run, upgradeWork(20, level - 1), level));
-    for (let i = 1; i < costs.length; i++) expect(costs[i]).toBeGreaterThan(costs[i - 1]);
-    const small = projectCost(run, 20);
+    const work = [2, 3, 4, 5].map(level => upgradeWork(20, level - 1));
+    for (let i = 1; i < work.length; i++) expect(work[i]).toBeGreaterThan(work[i - 1]);
+    expect(projectCost(run, 20)).toBe(0);
     run.market.groups[0].profiles[0].count = 200;
-    expect(projectCost(run, 20)).toBeGreaterThan(small);
+    for (let level = 1; level <= 5; level++) expect(projectCost(run, 20, level)).toBe(0);
   });
   it('keeps new requests buildable and makes every new block available across seeded runs', () => {
     const dealt = new Set<string>();
