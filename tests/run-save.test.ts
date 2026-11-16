@@ -82,6 +82,48 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('company save', () => {
+  it.each(['queued', 'backlog', 'active', 'ready'] as const)(
+    'removes old ordinary task fees in %s state without refunding paid money',
+    (status) => {
+      const run = createRun(72, idea, ['template']);
+      expect(upgrade(run, 'core')).toBe(true);
+      expect(place(run, 'landing', 1, 0)).toBe(true);
+      expect(expandInfrastructure(run)).toBe(true);
+      expect(saveRun(run)).toBe(true);
+      const saved = savedData();
+      const tasks = saved.run.tasks as Run['tasks'];
+      for (const task of tasks.filter((task) => task.kind !== 'infrastructure')) {
+        task.cost = 9999;
+        task.status = status;
+        task.done = status === 'ready' ? task.work : status === 'active' ? 1 : 0;
+      }
+      // Only one active task is valid in the old queue as well.
+      if (status === 'active') {
+        tasks[1].status = 'queued';
+        tasks[1].done = 0;
+      }
+      saved.run.money = 20;
+      memory.set(RUN_SAVE_KEY, JSON.stringify(saved));
+      const loaded = loadRun()!;
+      expect(loaded).not.toBeNull();
+      expect(loaded.money).toBe(20);
+      expect(loaded.tasks.slice(0, 2).map((task) => task.cost)).toEqual([0, 0]);
+      expect(loaded.tasks[2].cost).toBe(tasks[2].cost);
+      expect(loaded.tasks[0].status).toBe(status);
+      expect(loaded.tasks[0].done).toBe(tasks[0].done);
+      if (status === 'queued') {
+        expect(crunch(loaded)).toBe(true);
+        expect(loaded.money).toBe(20);
+      }
+      if (status === 'backlog') {
+        expect(cancelTask(loaded, loaded.tasks[0].id)).toBe(true);
+        expect(loaded.money).toBe(20);
+      }
+      expect(saveRun(loaded)).toBe(true);
+      expect(loadRun()!.money).toBe(20);
+    },
+  );
+
   it('restores the next random choices after mixed draws, including state zero', () => {
     const rng = createRng(73);
     rng.next();

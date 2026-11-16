@@ -122,6 +122,7 @@ export function hasWork(run: Run): boolean {
 
 export function enqueueTask(run: Run, task: Omit<WorkTask, 'id' | 'done' | 'status'>): WorkTask {
   const queued: WorkTask = { ...task, id: `task-${run.nextTask++}`, done: 0, status: 'queued' };
+  if (queued.kind === 'build' || queued.kind === 'upgrade') queued.cost = 0;
   run.tasks.push(queued);
   return queued;
 }
@@ -186,6 +187,8 @@ export function cancelTask(run: Run, id: string): boolean {
 /** A planned block reserves its chosen cell. Only the active order receives work. */
 export function syncProduction(run: Run): void {
   for (const task of run.tasks) {
+    // Normalize old quotes without changing cash already spent in the saved run.
+    if (task.kind === 'build' || task.kind === 'upgrade') task.cost = 0;
     if (!task.block) continue;
     const block = run.blocks.find((b) => b.kind === task.block);
     if (!block) continue;
