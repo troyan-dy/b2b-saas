@@ -1,0 +1,25 @@
+{
+  "work": { "clients": 6, "market": 8 },
+  "history_limit": 12,
+  "finding_limit": 3,
+  "shift_sprints": [7, 13, 19, 25],
+  "warning_lead": 1,
+  "seed_salt": 1947,
+  "share_variation": 0.3,
+  "initial_price_variation": 0.12,
+  "initial_demand_variation": 0.2,
+  "demand_change": 0.25,
+  "demand_min": 0.65,
+  "demand_max": 1.7,
+  "price_change": 0.12,
+  "price_min": -0.25,
+  "price_max": 0.3,
+  "shift_level_cap": 4,
+  "initial_need_level": 1,
+  "forecast_prices": [0.75, 1, 1.25, 1.5, 1.75, 2, 2.25, 2.5],
+  "segment_needs": {
+    "small": ["onb", "bot", "excel", "mobile", "push", "dark", "ref", "ab", "help"],
+    "medium": ["api", "crm", "roles", "excel", "dash", "c1", "webhook", "portal"],
+    "large": ["crm", "bot", "sso", "audit", "shield", "api", "roles", "monitor"]
+  }
+}
