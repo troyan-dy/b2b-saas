@@ -220,7 +220,6 @@ export class LookdevScene extends Phaser.Scene {
           block('sso', '<u></u>10', 'on'),
           block('dash', '<u></u>6', 'can'),
           block('api', '<u></u>8', 'can'),
-          { id: 'unknown', title: '???', note: 'расспроси клиентов — узнаешь, чего им не хватает', price: '', state: 'off' },
         ],
       },
       {
