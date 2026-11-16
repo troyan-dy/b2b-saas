@@ -55,6 +55,8 @@ export interface WorkbenchSelection {
   news?: WorkbenchNews;
   panel?: 'module' | 'clients' | 'agent' | 'research' | null;
   selectedAgent?: number;
+  researchKind?: 'clients' | 'market';
+  paused?: boolean;
   selectedModule?: string;
   clientAnchor?: { x: number; y: number };
   applied?: { title: string; impact: string } | null;
@@ -397,7 +399,7 @@ export function workbenchView(run: Run, selection: WorkbenchSelection): Workbenc
   const active = activeWork(run);
   const agent = run.agents.find((item) => item.id === selection.selectedAgent);
   return {
-    research: researchView(run),
+    research: researchView(run, { selectedKind: selection.researchKind, paused: selection.paused }),
     office: { cells: cellsMax(run), totalCells: run.pool.length + 3, slots: agentSlots(run), landCost: officeQuote(run, 'land'), deskCost: officeQuote(run, 'desks'), money: run.money, maxSlots: OFFICE.desks.max },
     panel: selection.panel,
     agent: agent ? {

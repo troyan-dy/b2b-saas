@@ -315,13 +315,20 @@ export class GameScene extends Phaser.Scene {
     unlockSound();
     let changed = true;
     switch (action.type) {
-      case 'open-research': this.workbenchSelection.panel = 'research'; break;
-      case 'start-research': changed = startResearch(run, action.kind); break;
+      case 'open-research':
+        this.workbenchSelection.panel = 'research';
+        this.workbenchSelection.researchKind ??= run.research.active ?? 'clients';
+        break;
+      case 'select-research': this.workbenchSelection.researchKind = action.kind; break;
+      case 'start-research':
+        changed = startResearch(run, action.kind);
+        if (changed) this.workbenchSelection.researchKind = action.kind;
+        break;
       case 'research-hand': this.byHand('research'); break;
       case 'research-agent': {
-        const agent = run.agents.find(a => a.lane === 'research') ?? run.agents[0];
+        const agent = run.agents.find(a => a.id === action.id);
         changed = Boolean(agent && run.research.active);
-        if (changed) setLane(run, agent.id, 'research');
+        if (changed && agent) setLane(run, agent.id, 'research');
         break;
       }
       case 'expand-office': changed = expandOffice(run, action.kind); break;
@@ -1096,10 +1103,11 @@ export class GameScene extends Phaser.Scene {
     if (!this.ended) this.teach();
 
     this.paper.setShelf(this.shelfView());
-    if (!this.ended && (run.t - this.workbenchAt >= 0.2 || this.draftShown !== Boolean(run.draft))) {
+    if (!this.ended && (run.t - this.workbenchAt >= 0.2 || this.draftShown !== Boolean(run.draft) || this.workbenchSelection.paused !== this.paused)) {
       this.workbenchAt = run.t;
       this.draftShown = Boolean(run.draft);
       this.workbenchSelection.picked = this.picked;
+      this.workbenchSelection.paused = this.paused;
       this.paper.setWorkbench(workbenchView(run, this.workbenchSelection));
       this.paper.setSprintCards(sprintCardsView(run, this.workbenchSelection.news, this.workbenchSelection.applied));
     }
