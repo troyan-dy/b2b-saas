@@ -792,8 +792,13 @@ export function createWorkbench(
             (detail ? modulePanel : clientPanel)
               .querySelector<HTMLButtonElement>('.wb-back')
               ?.focus({ preventScroll: true });
-          else if (beforePanel?.isConnected) beforePanel.focus({ preventScroll: true });
-          else catalog.querySelector('h2')?.focus({ preventScroll: true });
+          else {
+            const origin = beforePanel?.isConnected ? beforePanel : beforePanel?.dataset.o && beforePanel.dataset.l
+              ? shop.querySelector<HTMLElement>(`[data-o="${CSS.escape(beforePanel.dataset.o)}"][data-l="${CSS.escape(beforePanel.dataset.l)}"]`)
+              : null;
+            if (origin) origin.focus({ preventScroll: true });
+            else catalog.querySelector('h2')?.focus({ preventScroll: true });
+          }
         }
         if (panel === 'module') find('.wb-module-content').scrollTop = 0;
         panelKey = nextPanelKey;

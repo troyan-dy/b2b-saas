@@ -221,7 +221,7 @@ export function createPaper(under: HTMLElement, over: HTMLElement): Paper {
         for (const r of s.rows ?? []) {
           const drop = r.keys.some((k) => k.id === 'drop');
           const cols = `${r.label ? '92px ' : ''}repeat(${r.keys.length - (drop ? 1 : 0)}, minmax(0, 1fr))${drop ? ' 30px' : ''}`;
-          html += `<div class="bl-lanes${r.lock ? ' lock' : ''}" style="grid-template-columns:${cols}">`;
+          html += `<div class="bl-lanes${drop ? ' bl-agent-row' : ''}${r.lock ? ' lock' : ''}" style="grid-template-columns:${cols}">`;
           if (r.label) html += `<p>${r.label}</p>`;
           for (const k of r.keys) {
             const cls = `${k.id === r.on ? 'on' : ''}${k.off ? ' off' : ''}${k.id === 'drop' ? ' drop' : ''}`;
@@ -234,10 +234,14 @@ export function createPaper(under: HTMLElement, over: HTMLElement): Paper {
       const box = shelfBody.querySelector('.bl-scroll');
       const at = box ? box.scrollTop : 0;
       const shelfAt = shelfBody.scrollTop;
+      const focused = shelfBody.contains(document.activeElement) ? document.activeElement as HTMLElement : null;
       shelfBody.innerHTML = html;
       shelfBody.scrollTop = shelfAt;
       const next = shelfBody.querySelector('.bl-scroll');
       if (next) next.scrollTop = at;
+      if (focused?.dataset.o && focused.dataset.l) {
+        shelfBody.querySelector<HTMLElement>(`[data-o="${CSS.escape(focused.dataset.o)}"][data-l="${CSS.escape(focused.dataset.l)}"]`)?.focus({ preventScroll: true });
+      }
     },
     setWorkbench(view) {
       const active = workbench.active;

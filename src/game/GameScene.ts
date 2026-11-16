@@ -1078,7 +1078,9 @@ export class GameScene extends Phaser.Scene {
       // an agent with nothing to do on its lane waits for free: the caption says both
       const idle = !busy(run, a);
       // on a wide sheet the laptops stand close: their captions are set smaller
-      this.paper.tag(id, x, y, `<button class="map-agent" data-map="agent:${a.id}" title="${L('Производительность агента', 'Agent performance')}"><b>${LANE_NAME[a.lane]}</b><i${idle ? ' class="bad"' : ''}>${NO}${a.id} · ${idle ? '$0' : TIER_NAME[a.tier]}</i></button>`, z < 0.8 ? 'small act' : 'act');
+      const labelWidth = (AGENT_SLOTS[1][0] - AGENT_SLOTS[0][0]) * z - 14;
+      const label = `${NO}${a.id} · ${TIER_NAME[a.tier]} · ${LANE_NAME[a.lane]}`;
+      this.paper.tag(id, x, y, `<button class="map-agent" style="width:${labelWidth}px" data-map="agent:${a.id}" title="${label}"><span class="map-agent-heading"><b>${LANE_NAME[a.lane]}</b><small>${NO}${a.id}</small></span><i${idle ? ' class="bad"' : ''}>${idle ? '$0' : TIER_NAME[a.tier]}</i></button>`, z < 0.8 ? 'small act' : 'act');
     });
     this.paper.pruneTags('a', keepA);
 
@@ -1374,7 +1376,7 @@ export class GameScene extends Phaser.Scene {
       },
       ...run.agents.map((a) => ({
         owner: `a${a.id}`,
-        label: `<button class="agent-inspect" data-o="info" data-l="${a.id}" title="${L('Производительность и стоимость', 'Performance and cost')}"><b>${NO}${a.id}</b> ${TIER_NAME[a.tier]} ⓘ</button>`,
+        label: `<button class="agent-inspect" data-o="info" data-l="${a.id}" title="${TIER_NAME[a.tier]} · ${L('Производительность и стоимость', 'Performance and cost')}"><b>${NO}${a.id}</b><small>${TIER_NAME[a.tier]}</small><i aria-hidden="true">ⓘ</i></button>`,
         keys: [...LANES.map((l) => ({ id: l as string, title: LANE_NAME[l] })), { id: 'drop', title: '×' }],
         on: a.lane as string,
       })),
