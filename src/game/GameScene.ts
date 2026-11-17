@@ -167,6 +167,7 @@ export class GameScene extends Phaser.Scene {
   private readonly idle = new Set<number>();
   private routeSig = '';
   private stageShown = 0;
+  private mapMoved = false;
   private cityColumnsShown = 0;
   private termUntil = 0;
   private newsAt = 0;
@@ -209,6 +210,26 @@ export class GameScene extends Phaser.Scene {
 
   create(): void {
     this.board = new Board(this);
+    this.paper.enableMapPan((dx, dy) => {
+      if (this.ended || this.run.draft || this.paused) return;
+      const z = this.board.zoom;
+      const [ox, oy] = this.board.onScreen(0, 0);
+      const points = [...this.run.blocks, ...freeCells(this.run)].map(c => this.board.cell(c.i, c.j));
+      const left = Math.min(DESK[0] - 140, ...points.map(p => p[0] - 120));
+      const right = Math.max(200, ...points.map(p => p[0] + 120), ...this.cityNodes.map(n => n.x + 120));
+      const top = Math.min(-250, ...points.map(p => p[1] - 160), ...this.cityNodes.map(n => n.y - n.height));
+      const bottom = Math.max(450, ...points.map(p => p[1] + 80), ...AGENT_SLOTS.slice(0, this.run.agents.length).map(p => p[1] + 80));
+      const cx = Phaser.Math.Clamp((VIEW_AT[0] - ox - dx) / z, left, right);
+      const cy = Phaser.Math.Clamp((VIEW_AT[1] - oy - dy) / z, top, bottom);
+      this.mapMoved = true;
+      this.board.view(z, cx, cy, ...VIEW_AT, 0, () => undefined);
+      this.show();
+    }, () => {
+      this.mapMoved = false;
+      this.stageShown = 0;
+      this.syncStage(0);
+      this.show();
+    });
     this.squares = new Squares(this, this.rng, 400);
 
     // the founder: the only human on the sheet
@@ -1607,6 +1628,7 @@ export class GameScene extends Phaser.Scene {
 
   /** A new stage: the camera pulls back and shows more of the sheet. */
   private syncStage(ms: number): void {
+    if (this.mapMoved) return;
     const count = customerCount(this.run);
     const segments = new Set<string>(this.run.market.groups.filter((group) => group.profiles.some((profile) => profile.count > 0)).map((group) => group.id));
     for (const client of this.run.clients) segments.add(client.type === 'corp' || client.type === 'gov' ? 'large' : client.type === 'mid' ? 'medium' : 'small');

@@ -13,6 +13,11 @@
   background-color: var(--paper);
 }
 .bl-hud { pointer-events: none; }
+.bl-pan-surface { position: absolute; inset: 260px 580px 58px 0; pointer-events: auto; touch-action: none; cursor: grab; }
+.bl-over.is-panning, .bl-over.is-panning * { cursor: grabbing; user-select: none; }
+.bl-over .bl-cell, .bl-over .bl-tag, .bl-over .client-city button { touch-action: none; }
+.bl-map-controls { position: absolute; left: 24px; bottom: 64px; z-index: 2; display: flex; align-items: center; gap: 12px; padding: 4px 8px; font: 15px var(--mono); background: var(--paper); }
+.bl-map-controls button { pointer-events: auto; cursor: pointer; font: inherit; color: var(--ink); background: var(--paper); border: 1px solid var(--rule); border-radius: 4px; padding: 4px 8px; }
 .bl-goal, .bl-sprint, .bl-ledger { background: var(--paper); }
 
 /* money: the biggest text on the screen; squares fly over it */
