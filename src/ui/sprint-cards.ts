@@ -27,6 +27,7 @@ export interface SprintCardsView {
     readonly cards: readonly SprintCardView[];
     readonly summary: string;
     readonly firstSubscriptions?: string;
+    readonly promises?: string[];
     readonly news?: { readonly title: string; readonly text: string } | null;
   } | null;
   readonly cards: readonly SprintCardView[];
@@ -259,7 +260,7 @@ export function createSprintCards(parent: HTMLElement, onChoose: (id: string) =>
           `<p>${L('Выбери одну. Усиления копятся и работают сразу.', 'Choose one. Upgrades stack and work immediately.')}</p></header>` +
           `<div class="sc-choices">${deal.cards.map((card, index) => cardHtml(card, index)).join('')}</div>` +
           `<p class="sc-deal-rule">${L('Зелёное — выгода. Терракотовое — цена. Все собранные карты и постройки остаются с тобой.', 'Green is the benefit. Terracotta is the cost. All collected cards and buildings stay with you.')}</p>` +
-          `<footer class="sc-report">${deal.firstSubscriptions ? `<strong>${esc(deal.firstSubscriptions)}</strong>` : ''}${esc(deal.summary)}${deal.news ? `<span>${esc(deal.news.text)}</span>` : ''}</footer></div>`;
+          `<footer class="sc-report">${deal.firstSubscriptions ? `<strong>${esc(deal.firstSubscriptions)}</strong>` : ''}${deal.promises?.length ? `<p class="sc-promises">${deal.promises.map(esc).join(' · ')}</p>` : ''}${esc(deal.summary)}${deal.news ? `<span>${esc(deal.news.text)}</span>` : ''}</footer></div>`;
         draft.querySelector<HTMLButtonElement>('[data-sc-choice]')?.focus({ preventScroll: true });
       } else (beforeDraft?.isConnected && beforeDraft !== document.body ? beforeDraft : opener).focus({ preventScroll: true });
     },
