@@ -70,6 +70,8 @@ export function installPause(settings: Settings) {
   }
   resume.onclick = close;
   dialog.oncancel = event => { event.preventDefault(); close(); };
+  const held = new Set<string>();
+  window.addEventListener('blur', () => held.clear());
   const keyboard = (event: KeyboardEvent): void => {
     if (event.code === 'Escape') {
       event.preventDefault();
@@ -78,7 +80,12 @@ export function installPause(settings: Settings) {
         if (dialog.open) close();
         else void open();
       }
-    } else if (dialog.open) event.stopImmediatePropagation();
+    } else if (dialog.open || held.has(event.code)) {
+      event.stopImmediatePropagation();
+      if (!dialog.open) event.preventDefault();
+      if (event.type === 'keydown') held.add(event.code);
+      else held.delete(event.code);
+    }
   };
   window.addEventListener('keydown', keyboard, true);
   window.addEventListener('keyup', keyboard, true);
