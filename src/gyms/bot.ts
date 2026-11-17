@@ -60,6 +60,8 @@ export interface BotStyle {
   fix: boolean;
   /** answers clients and the bank; otherwise the cards wait for the player */
   calls: boolean;
+  /** Tests the tempting press answer against the standard founder on the same start. */
+  pressRisk?: boolean;
 }
 
 export const SENSIBLE: BotStyle = { links: true, fix: true, calls: true };
@@ -105,13 +107,14 @@ export function playBot(run: Run, style: BotStyle = SENSIBLE): void {
   }
   const dilemma = dilemmaOf(run);
   if (style.calls && dilemma) {
-    const cost = -dilemma.options[dilemma.bot].fx.reduce(
+    const option = style.pressRisk && dilemma.id === 'press' ? 1 : dilemma.bot;
+    const cost = -dilemma.options[option].fx.reduce(
       (sum, fx) => sum + (fx.k === 'money' ? fx.n : 0),
       0,
     );
     answerDilemma(
       run,
-      cost <= 0 || canFund(run, cost, 0) ? dilemma.bot : dilemma.options.length - 1,
+      cost <= 0 || canFund(run, cost, 0) ? option : dilemma.options.length - 1,
     );
   }
 
