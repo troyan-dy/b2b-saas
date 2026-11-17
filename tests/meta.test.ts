@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { collectionLessons, emptyMeta, finish, learn, LESSONS, migrate, pastPitch, raise, traitChoices, traitLevels, TRAITS } from '../src/systems/meta/meta';
+import { claimResultTrait, recordResult, restoreResult, collectionLessons, emptyMeta, finish, learn, LESSONS, migrate, pastPitch, raise, traitChoices, traitLevels, TRAITS } from '../src/systems/meta/meta';
 import { answerLastChance, chooseCard, createRun, IDEAS, isLive, priceMult, shelf, step, TUNING, type Idea } from '../src/systems/run/run';
 
 const idea: Idea = { tech: IDEAS.tech[0], form: IDEAS.form[3], aud: IDEAS.aud[0] };
@@ -17,6 +17,26 @@ function goBroke(seed: number): ReturnType<typeof createRun> {
 }
 
 describe('founder', () => {
+  it('restores a final report and grants its reward exactly once across reloads', () => {
+    const run = goBroke(12);
+    run.stats.value = 90000;
+    run.stats.profitAt = 12;
+    const meta = emptyMeta();
+    recordResult(run, meta);
+    let loaded = migrate(JSON.parse(JSON.stringify(meta)));
+    recordResult(run, loaded);
+    expect(loaded.runs).toHaveLength(1);
+    expect(restoreResult(loaded)?.stats.value).toBe(0);
+    expect(loaded.runs[0]).toMatchObject({ value: 0, profitAt: 12 });
+    const choices = traitChoices(meta, run.seed);
+    expect(traitChoices(loaded, run.seed)).toEqual(choices);
+    loaded.pending!.stage = 'trait';
+    claimResultTrait(loaded, choices[0].id);
+    loaded = migrate(JSON.parse(JSON.stringify(loaded)));
+    claimResultTrait(loaded, choices[0].id);
+    expect(loaded.traits[choices[0].id]).toBe(1);
+    expect(loaded.pending?.stage).toBe('claimed');
+  });
   it('keeps earned ear and buyers while retiring new ear awards and preserving old rag titles', () => {
     const meta = migrate({ v: 2, runs: [], lessons: ['ear', 'buyers'], traits: {} });
     expect(meta.lessons).toEqual(['ear', 'buyers']);

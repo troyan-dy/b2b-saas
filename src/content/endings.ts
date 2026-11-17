@@ -1,6 +1,8 @@
 import { L } from '../core/lang';
 import { money, PER_S, plural, rate } from '../ui/format';
-import { pitch, TUNING, type Ending, type Run } from '../systems/run/run';
+import { pitch, TUNING, type Ending } from '../systems/run/run';
+
+import type { FinalRun } from '../systems/meta/meta';
 
 /** The founder's post at the end of a startup. Every ending is a genre of its own. */
 
@@ -21,7 +23,7 @@ const TIMES = L<Forms>(['раз', 'раза', 'раз'], ['time', 'times', 'time
 const FEATURES = L<Forms>(['функцию', 'функции', 'функций'], ['feature', 'features', 'features']);
 const BLOCK_WORD = L<Forms>(['блок', 'блока', 'блоков'], ['block', 'blocks', 'blocks']);
 
-export function endingPost(run: Run): string[] {
+export function endingPost(run: FinalRun): string[] {
   const lines = mainPost(run);
   const s = run.stats;
   // what was said on the calls and what became of the flat: a postscript to any ending
@@ -51,7 +53,7 @@ export function endingPost(run: Run): string[] {
   return lines;
 }
 
-function mainPost(run: Run): string[] {
+function mainPost(run: FinalRun): string[] {
   const name = pitch(run.idea);
   const s = run.stats;
   // the same genre in other words: which wording a startup gets is decided by its seed, line by line
@@ -60,6 +62,13 @@ function mainPost(run: Run): string[] {
   const downs = `${s.downs} ${plural(s.downs, TIMES)}`;
   switch (run.over) {
     case 'sold':
+      if (run.downWhy === 'supplier') return L([
+        `1/ ${name} встретил финал без поставщика. Подписки временно остановились.`,
+        '2/ Два предыдущих релиза принесли прибыль. После восстановления подписки снова покроют расходы.',
+      ], [
+        `1/ ${name} reached the finish during a supplier outage. Subscription revenue paused.`,
+        '2/ The two previous releases were profitable. Subscriptions will cover costs again when service resumes.',
+      ]);
       return L(
         [
           say(0, `Мы стали частью большой семьи. Тред.`, `Важный день для нашей команды из одного человека. Тред.`),
@@ -97,14 +106,14 @@ function mainPost(run: Run): string[] {
       return L(
         [
           say(0, `Честный апдейт. Тред.`, `Немного прозрачности. Тред.`),
-          `1/ ${name} прожил ${clock(run.t)} и всё ещё в минусе.`,
+          `1/ ${name} прожил ${clock(run.t)}. ${s.profitAt > 0 ? 'Прибыль была, но финишировали в минусе.' : 'До прибыли так и не добрались.'}`,
           say(1, `2/ Формально мы живы. Я называю это «стадией поиска модели».`, `2/ Мы не убыточны, мы «инвестируем в рост». Из моих сбережений.`),
           `3/ Подписки: <em>${peak}</em> в секунду на пике. Токены: <strong>${money(s.tokens)}</strong> за всё время. Считайте сами.`,
           say(3, `4/ Сбережения кончатся раньше, чем этот тред наберёт просмотры.`, `4/ Если вы инвестор — мои сообщения открыты. Если клиент — тем более.`),
         ],
         [
           say(0, `An honest update. Thread.`, `A bit of transparency. Thread.`),
-          `1/ ${name} has lived for ${clock(run.t)} and is still in the red.`,
+          `1/ ${name} lived for ${clock(run.t)}. ${s.profitAt > 0 ? 'We turned a profit earlier and finished in the red.' : 'We never reached profitability.'}`,
           say(1, `2/ Technically we are alive. I call it “the business-model search stage”.`, `2/ We are not losing money, we are “investing in growth”. Out of my savings.`),
           `3/ Subscriptions: <em>${peak}</em> per second at the peak. Tokens: <strong>${money(s.tokens)}</strong> all-time. Do the math.`,
           say(3, `4/ The savings will run out before this thread gets any views.`, `4/ If you are an investor — my DMs are open. If you are a client — even more so.`),
@@ -139,7 +148,7 @@ function mainPost(run: Run): string[] {
 }
 
 /** The result of a startup in one big number and the words under it. */
-export function endingScore(run: Run): [string, string] {
+export function endingScore(run: FinalRun): [string, string] {
   const s = run.stats;
   switch (run.over) {
     case 'sold':
@@ -147,16 +156,17 @@ export function endingScore(run: Run): [string, string] {
     case 'profit':
       return [`<em>${money(s.value)}</em>`, L('оценка компании на финише — побей её в следующем стартапе', 'the company’s valuation at the finish — beat it in the next startup')];
     case 'late':
-      return [money(s.value), L('оценка компании на финише; в плюс она так и не вышла', 'the company’s valuation at the finish; it never turned a profit')];
+      return [money(s.value), s.profitAt > 0 ? L('оценка на финише · раньше компания выходила в плюс', 'final valuation · previously operated at a profit') : L('оценка на финише · прибыльных релизов не было', 'final valuation · no profitable releases')];
     default:
       return [clock(run.t), L('столько прожил стартап', 'how long the startup lived')];
   }
 }
-export function endingStats(run: Run): string {
+export function endingStats(run: FinalRun): string {
   const s = run.stats;
   const peak = `${rate(s.peakMrr / TUNING.sprint_s)}${PER_S}`;
+  const value = run.over === 'sold' ? L(` · оценка ${money(s.value)}`, ` · valuation ${money(s.value)}`) : '';
   return L(
-    `прожил ${clock(run.t)} · клиентов ${s.clients}, ушло ${s.left} · пик подписок ${peak} · блоков ${s.shipped} · доработок ${s.reworks} · падений ${s.downs}`,
-    `lived ${clock(run.t)} · clients ${s.clients}, left ${s.left} · peak subscriptions ${peak} · blocks ${s.shipped} · upgrades ${s.reworks} · outages ${s.downs}`,
+    `прожил ${clock(run.t)} · клиентов ${s.clients}, ушло ${s.left} · пик подписок ${peak} · блоков ${s.shipped} · доработок ${s.reworks} · падений ${s.downs}${value}`,
+    `lived ${clock(run.t)} · clients ${s.clients}, left ${s.left} · peak subscriptions ${peak} · blocks ${s.shipped} · upgrades ${s.reworks} · outages ${s.downs}${value}`,
   );
 }

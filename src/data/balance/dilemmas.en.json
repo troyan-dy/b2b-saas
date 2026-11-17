@@ -67,7 +67,7 @@
     "text": "Is it true that your product is just a wrapper around Claude?",
     "options": [
       { "label": "“Yes. And proud of it”", "note": "+1 lead", "result": "The founder honestly called the product a wrapper. The market rewarded the courage with one lead" },
-      { "label": "“We have our own model”", "note": "+3 leads · may be exposed: 35% chance, two clients leave", "result": "The startup claimed to have its own model. The model is suspiciously polite", "fx": [{}, { "say": "left: “you lied to us”", "text": "A journalist found the phrase “as an AI assistant made by Anthropic” in the product’s answers. Two clients left" }] },
+      { "label": "“We have our own model”", "note": "+3 leads", "result": "The startup claimed to have its own model. The model is suspiciously polite", "fx": [{}, { "say": "left: “you lied to us”", "text": "A journalist found the phrase “as an AI assistant made by Anthropic” in the product’s answers." }] },
       { "label": "No comment", "note": "everything stays as it is", "result": "" }
     ]
   },

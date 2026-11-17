@@ -4,7 +4,7 @@ import traitsEn from '../../data/balance/traits.en.json';
 import traitsData from '../../data/balance/traits.json';
 import { L, worded } from '../../core/lang';
 import { createRng } from '../../core/rng';
-import { ACTIVE_TECHS, IDEAS, pitch, type Ending, type Run } from '../run/run';
+import { ACTIVE_TECHS, IDEAS, pitch, valuation, type Ending, type Run } from '../run/run';
 
 /**
  * The founder between startups: the same developer goes from run to run and keeps what was learned —
@@ -23,11 +23,22 @@ export interface Past {
   peakMrr: number;
   clients: number;
   soldFor: number;
+  profitAt?: number;
   /** what the company was valued at when it ended; records made before valuations have none */
   value?: number;
 }
 
+export type FinalRun = Pick<Run, 'idea' | 'stats' | 't' | 'over' | 'mortgaged' | 'seed' | 'downWhy'>;
+
+export interface PendingResult {
+  run: Omit<FinalRun, 'idea'>;
+  lessons: string[];
+  stage: 'report' | 'trait' | 'claimed';
+  trait?: string;
+}
+
 export interface Meta {
+  pending?: PendingResult;
   v: number;
   runs: Past[];
   /** ids of the lessons learned so far */
@@ -89,6 +100,7 @@ export function migrate(raw: unknown): Meta {
     runs: r.runs.filter((p) => typeof p?.pitch === 'string' && typeof p?.lived === 'number'),
     lessons: r.lessons.filter((id) => known.has(id)),
     traits,
+    ...(r.pending?.run?.stats && r.runs.at(-1)?.idea ? { pending: r.pending } : {}),
   };
 }
 
@@ -101,11 +113,12 @@ export function loadMeta(): Meta {
   }
 }
 
-export function saveMeta(meta: Meta): void {
+export function saveMeta(meta: Meta): boolean {
   try {
     localStorage.setItem(KEY, JSON.stringify(meta));
+    return true;
   } catch {
-    // the past lives until the page is closed
+    return false;
   }
 }
 
@@ -154,10 +167,38 @@ export function finish(run: Run, meta: Meta): Lesson[] {
     peakMrr: run.stats.peakMrr,
     clients: run.stats.clients,
     soldFor: run.stats.soldFor,
-    value: run.stats.value,
+    profitAt: run.stats.profitAt,
+    value: valuation(run),
   });
   for (const l of got) meta.lessons.push(l.id);
   return got;
+}
+
+/** The record and its unclaimed reward are written together before the sheet closes. */
+export function recordResult(run: Run, meta: Meta): PendingResult {
+  if (meta.pending) return meta.pending;
+  const lessons = finish(run, meta).map(lesson => lesson.id);
+  const { seed, t, over, mortgaged, downWhy } = run;
+  const stats = { ...run.stats, value: valuation(run) };
+  return meta.pending = { run: { seed, t, over, mortgaged, downWhy, stats }, lessons, stage: 'report' };
+}
+
+export function restoreResult(meta: Meta): FinalRun | null {
+  const pending = meta.pending;
+  const ids = meta.runs.at(-1)?.idea;
+  if (!pending || !ids) return null;
+  const tech = IDEAS.tech.find(card => card.id === ids[0]);
+  const form = IDEAS.form.find(card => card.id === ids[1]);
+  const aud = IDEAS.aud.find(card => card.id === ids[2]);
+  return tech && form && aud ? { ...pending.run, idea: { tech, form, aud } } : null;
+}
+
+export function claimResultTrait(meta: Meta, id: string): void {
+  const pending = meta.pending;
+  if (pending?.stage !== 'trait' || !traitChoices(meta, pending.run.seed).some(trait => trait.id === id)) return;
+  raise(meta, id);
+  pending.stage = 'claimed';
+  pending.trait = id;
 }
 
 /** The three words of a past startup in the language the game runs in now; a record without card ids keeps its own words. */

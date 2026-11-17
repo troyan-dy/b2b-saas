@@ -9,6 +9,7 @@ import eventsEn from '../../data/balance/events.en.json';
 import eventsData from '../../data/balance/events.json';
 import ideasEn from '../../data/balance/ideas.en.json';
 import ideasData from '../../data/balance/ideas.json';
+import industryOrders from '../../data/balance/industry-orders.json';
 import tuningData from '../../data/balance/run.json';
 import officeData from '../../data/balance/office.json';
 import traitsData from '../../data/balance/traits.json';
@@ -234,6 +235,7 @@ export interface Client {
 }
 
 export interface Report {
+  profitableStreak?: number;
   sprint: number;
   shipped: string[];
   /** Completed non-building projects; these do not have a cell on the sheet. */
@@ -312,6 +314,7 @@ export interface Run {
   seed: number;
   rng: Rng;
   idea: Idea;
+  firstIndustryOrder?: boolean;
   perks: readonly string[];
   /** levels of the founder's traits this startup is played with */
   traits: Readonly<Record<string, number>>;
@@ -471,6 +474,7 @@ export function createRun(
   traits: Readonly<Record<string, number>> = {},
 ): Run {
   const rng = createRng(seed);
+  const order = industryOrders[idea.aud.id as keyof typeof industryOrders];
   const askable = Object.keys(RULES).filter((k) => RULES[k].role === 'ask');
   const corp = Object.keys(RULES).filter((k) => RULES[k].role === 'corp');
   const asks = shuffle(rng, askable).slice(0, 3);
@@ -486,10 +490,12 @@ export function createRun(
   for (const k of others)
     if (EFFECTS[k]?.seats && [...must].filter((x) => EFFECTS[x]?.seats).length < 2) must.add(k);
   const pool = [...must, ...others.filter((k) => !must.has(k))].slice(0, TUNING.pool_size);
+  if (order && !pool.includes(order.kind)) pool[pool.length - 1] = order.kind;
   const run: Run = {
     seed,
     rng,
     idea,
+    ...(order ? { firstIndustryOrder: true } : {}),
     perks,
     traits,
     t: 0,
@@ -738,6 +744,17 @@ export function tokens(run: Run): number {
   let sum = companyTotals(run).tokens;
   for (const c of run.clients) sum += clientTokens(run, c);
   return sum;
+}
+
+export function tokensAfterProcessingCard(run: Run, id: 'batch' | 'instant'): number {
+  const projected: Run = {
+    ...run,
+    stats: { ...run.stats },
+    strategy: { ...run.strategy, processing: id },
+    cardStacks: { ...run.cardStacks, [id]: (run.cardStacks[id] ?? 0) + 1 },
+  };
+  refresh(projected);
+  return tokens(projected);
 }
 
 /** An agent is paid for the tokens it burns: one with nothing to do on its lane burns none. */
@@ -1172,6 +1189,12 @@ export function answerCall(run: Run, sure: boolean): void {
   seat(run, c);
 }
 
+export function firstIndustryOrder(run: Run): { kind: string; text: string } | undefined {
+  if (!run.firstIndustryOrder) return undefined;
+  const order = industryOrders[run.idea.aud.id as keyof typeof industryOrders];
+  if (order) return { kind: order.kind, text: L(order.ru, order.en) };
+}
+
 /** sprints a promised block may take; a founder who has kept his word before is given one more */
 export function promiseSprints(run: Run): number {
   return run.perks.includes('word') ? TUNING.call.sure_patience_perk : TUNING.call.sure_patience;
@@ -1189,7 +1212,24 @@ export function mortgageSeconds(run: Run): number {
 
 /** the dilemma on the table, with its words and options */
 export function dilemmaOf(run: Run): Dilemma | null {
-  return run.dilemma ? (DILEMMAS.find((d) => d.id === run.dilemma?.id) ?? null) : null;
+  const dilemma = DILEMMAS.find((d) => d.id === run.dilemma?.id) ?? null;
+  if (dilemma?.id !== 'press') return dilemma;
+  const releases = Math.max(0, Math.min(TUNING.dilemma.risk_releases, TUNING.last_sprint - run.sprint + 1));
+  return {
+    ...dilemma,
+    options: dilemma.options.map((option) => {
+      const risk = option.fx.find((effect) => effect.k === 'risk');
+      if (!risk) return option;
+      const percent = Math.round((1 - (1 - risk.p) ** releases) * 100);
+      return {
+        ...option,
+        note: L(
+          `${option.note} · ${percent}% за ${releases} рел. · до ${risk.n} договоров под угрозой`,
+          `${option.note} · ${percent}% over ${releases} release(s) · up to ${risk.n} contracts at risk`,
+        ),
+      };
+    }),
+  };
 }
 
 function fits(run: Run, d: Dilemma): boolean {
@@ -1285,7 +1325,7 @@ export function answerDilemma(run: Run, option: number): void {
           if (run.rng.next() < f.p) walk(c, f.say);
         break;
       case 'risk':
-        run.risks.push({ left: 3, p: f.p, n: f.n, say: f.say, text: f.text });
+        run.risks.push({ left: TUNING.dilemma.risk_releases, p: f.p, n: f.n, say: f.say, text: f.text });
         break;
     }
   }
@@ -1536,8 +1576,13 @@ function release(run: Run): void {
     r.left--;
     if (run.rng.next() >= r.p) continue;
     r.left = 0;
-    run.events.push({ type: 'exposed', text: r.text });
-    for (const c of run.clients.slice(0, r.n)) {
+    const leaving = run.clients.slice(0, r.n);
+    const headline = r.text.replace(/ (Двое клиентов ушли|Two clients left)\.?$/, '');
+    run.events.push({
+      type: 'exposed',
+      text: L(`${headline} · Ушло клиентов: ${leaving.length}`, `${headline} · Clients who left: ${leaving.length}`),
+    });
+    for (const c of leaving) {
       report.left++;
       report.reasons.push('');
       run.stats.left++;
@@ -1618,12 +1663,13 @@ function release(run: Run): void {
     while (run.leads >= 1 && run.clients.length < max) {
       run.leads -= 1;
       const c = makeClient(run);
+      const order = c.id === 1 ? firstIndustryOrder(run) : undefined;
+      if (order) c.want = order.kind;
       // a client that needs what is not there may call first and ask; it comes when the founder answers
       if (
         run.call === null &&
-        run.stage >= 2 &&
         !isLive(run, c.want) &&
-        run.rng.next() < TUNING.call.chance
+        (order || (run.stage >= 2 && run.rng.next() < TUNING.call.chance))
       ) {
         run.call = c;
         run.events.push({ type: 'call', name: c.name, kind: c.want });
@@ -1678,12 +1724,17 @@ function release(run: Run): void {
   report.debt = run.debt;
   report.down = run.down;
   run.stats.peakMrr = Math.max(run.stats.peakMrr, income);
-  if (run.stats.profitAt === 0 && netPerS(run) >= 0 && income > 0) run.stats.profitAt = run.t;
+  const previousStreak = run.lastReport?.sprint === run.sprint - 1
+    ? (run.lastReport.profitableStreak ?? 0)
+    : 0;
+  const net = netPerS(run);
+  report.profitableStreak = net > 0 ? previousStreak + 1 : 0;
+  if (run.stats.profitAt === 0 && net >= 0 && income > 0) run.stats.profitAt = run.t;
   run.lastReport = report;
   run.events.push({ type: 'release', report });
 
   if (run.sprint >= TUNING.last_sprint) {
-    finishAtSprintLimit(run);
+    finishAtSprintLimit(run, previousStreak);
     return;
   }
   run.sprint++;
@@ -1766,7 +1817,7 @@ function news(run: Run): void {
 }
 
 /** The final release and legacy endless saves use the same result without another draft. */
-export function finishAtSprintLimit(run: Run): void {
+export function finishAtSprintLimit(run: Run, previousStreak = 0): void {
   if (run.over || run.sprint < TUNING.last_sprint) return;
   run.sprint = TUNING.last_sprint;
   run.sprintT = TUNING.sprint_s;
@@ -1775,7 +1826,11 @@ export function finishAtSprintLimit(run: Run): void {
   run.call = null;
   run.dilemma = null;
   run.lastChance = null;
-  end(run, netPerS(run) >= 0 ? 'profit' : 'late');
+  // A last-release outage from the supplier leaves no time to respond.
+  // Judge the released product at normal availability, with the actual customers and costs.
+  const recoverable = previousStreak >= TUNING.final_stable_releases &&
+    run.downWhy === 'supplier' && netPerS({ ...run, down: false }) > 0;
+  end(run, netPerS(run) > 0 || recoverable ? 'profit' : 'late');
 }
 
 function end(run: Run, ending: Ending): void {

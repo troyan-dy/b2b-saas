@@ -7,7 +7,7 @@ import {
   STRATEGY_IDS,
   upgradeWork,
 } from '../src/systems/run/product';
-import { dealDraft, DRAFT_CARDS, releaseCard } from '../src/systems/run/draft';
+import { dealDraft, DRAFT_CARDS, operationDelta, releaseCard } from '../src/systems/run/draft';
 import { enqueueTask } from '../src/systems/run/production';
 import { playBot } from '../src/gyms/bot';
 import {
@@ -25,14 +25,18 @@ import {
   crunch,
   deferTask,
   demolish,
+  dilemmaOf,
   draftCards,
   expandInfrastructure,
   fire,
+  finishAtSprintLimit,
+  firstIndustryOrder,
   hire,
   IDEAS,
   isSite,
   leadsPerWork,
   moveTask,
+  netPerS,
   place,
   queueView,
   refreshRun,
@@ -43,6 +47,7 @@ import {
   setReview,
   step,
   tokens,
+  tokensAfterProcessingCard,
   TUNING,
   upgrade,
   workNeed,
@@ -91,6 +96,93 @@ function select(run: Run, id: string): void {
 }
 
 describe('production queue and sprint choices', () => {
+  it.each([
+    ['dent', 'mobile', true],
+    ['dent', 'mobile', false],
+    ['compliance', 'roles', true],
+    ['compliance', 'roles', false],
+  ] as const)('offers an industry-specific first contract for %s (%s)', (audience, kind, builds) => {
+    const run = createRun(7, {
+      tech: IDEAS.tech[0], form: IDEAS.form[0],
+      aud: IDEAS.aud.find((entry) => entry.id === audience)!,
+    });
+    run.newsWait = 100;
+    for (const block of ['core', 'landing']) {
+      const cell = freeCells(run)[0];
+      expect(place(run, block, cell.i, cell.j)).toBe(true);
+      finishWork(run);
+      release(run);
+      select(run, 'maintenance');
+    }
+    expect(run.call?.want).toBe(kind);
+    expect(firstIndustryOrder(run)?.kind).toBe(kind);
+    const id = run.call!.id;
+    answerCall(run, true);
+    if (builds) {
+      const cell = freeCells(run)[0];
+      expect(place(run, kind, cell.i, cell.j)).toBe(true);
+      finishWork(run);
+    }
+    release(run);
+    if (builds) {
+      expect(run.events).toContainEqual({ type: 'kept', id });
+      expect(run.clients.find((client) => client.id === id)?.happy).toBe(true);
+    } else {
+      select(run, 'maintenance');
+      release(run);
+      expect(run.events.some((event) => event.type === 'refund' && event.id === id)).toBe(true);
+      expect(run.clients.some((client) => client.id === id)).toBe(false);
+    }
+  });
+  it.each([0, 2, 10])('forecasts the actual one-off effects with %i points to recover', (points) => {
+    const run = fresh();
+    run.debt = points;
+    run.energy = Math.max(0, TUNING.crunch.max - points);
+    for (const id of ['maintenance', 'rest']) {
+      const card = DRAFT_CARDS.find((entry) => entry.id === id)!;
+      const delta = operationDelta(run, card);
+      const expected = [run.debt + delta.debt, run.energy + delta.energy];
+      select(run, id);
+      expect([run.debt, run.energy]).toEqual(expected);
+    }
+  });
+
+  it.each([0, 20])('forecasts token costs before picking another batch card with %i copies', (copies) => {
+    const run = fresh(['core', 'landing', 'pay']);
+    run.clients = [{
+      id: 1, texture: 'clinic', name: 'Client', type: 'corp', pay: 5000,
+      want: 'core', wantLevel: 1, patience: 3, happy: true, slot: 0, deal: 1, promised: false,
+    }];
+    run.cardStacks.batch = copies;
+    refreshRun(run);
+    const before = tokens(run);
+    const projected = tokensAfterProcessingCard(run, 'batch');
+    expect(copies ? projected === before : projected < before).toBe(true);
+    expect(run.cardStacks.batch).toBe(copies);
+    select(run, 'batch');
+    expect(tokens(run)).toBeCloseTo(projected);
+  });
+
+  it.each([[28, 73], [29, 58], [30, 35]])('shows the cumulative press risk at sprint %i', (sprint, chance) => {
+    const run = fresh();
+    run.sprint = sprint;
+    run.dilemma = { id: 'press', client: 0, name: '' };
+    expect(dilemmaOf(run)?.options[1].note).toContain(`${chance}%`);
+  });
+
+  it.each([0, 1, 2])('reports the actual number of contracts lost when exposed with %i clients', (count) => {
+    const run = fresh(['core', 'landing', 'pay']);
+    run.clients = Array.from({ length: count }, (_, i) => ({
+      id: i + 10, texture: 'clinic', name: `Client ${i}`, type: 'corp', pay: 5000,
+      want: 'core', wantLevel: 1, patience: 3, happy: true, slot: i, deal: 1, promised: false,
+    }));
+    run.dilemma = { id: 'press', client: 0, name: '' };
+    answerDilemma(run, 1);
+    run.risks[0].p = 1;
+    release(run);
+    const exposed = run.events.find((event) => event.type === 'exposed');
+    expect(exposed?.text).toMatch(new RegExp(`(?:Ушло клиентов|Clients who left): ${count}$`));
+  });
   it('grants cash immediately once without creating or charging a production task', () => {
     for (const id of ['consulting', 'credits']) {
       const run = fresh();
@@ -294,6 +386,8 @@ describe('production queue and sprint choices', () => {
         form: IDEAS.form.find(card => card.id === 'tinder')!,
         aud: IDEAS.aud.find(card => card.id === 'dent')!,
       });
+      // Preserve the recorded legacy company behind this late queue regression.
+      delete run.firstIndustryOrder;
       for (let tick = 0; tick < TUNING.last_sprint * TUNING.sprint_s * 4 && !run.over; tick++) {
         playBot(run);
         run.offer = null;
@@ -596,6 +690,44 @@ describe('production queue and sprint choices', () => {
     expect(run.money).toBeGreaterThan(0);
     expect(run.over).toBe('late');
     expect(run.draft).toBeNull();
+  });
+
+  it('counts only consecutive profitable releases toward resilience', () => {
+    const run = fresh(['core', 'landing', 'pay']);
+    run.newsWait = 100;
+    run.clients = [{
+      id: 1, texture: 'clinic', name: 'Client', type: 'corp', pay: 5000,
+      want: 'core', wantLevel: 1, patience: 3, happy: true, slot: 0, deal: 1, promised: false,
+    }];
+    release(run);
+    expect(run.lastReport?.profitableStreak).toBe(1);
+    select(run, 'credits');
+    release(run);
+    expect(run.lastReport?.profitableStreak).toBe(2);
+    select(run, 'maintenance');
+    run.debt = TUNING.debt.down_at;
+    release(run);
+    expect(run.lastReport?.profitableStreak).toBe(0);
+  });
+
+  it.each([
+    ['supplier', 2, 5000, 'profit'],
+    ['supplier', 1, 5000, 'late'],
+    ['supplier', 2, 1, 'late'],
+    ['debt', 2, 5000, 'late'],
+  ] as const)('judges final %s outage after %i profitable releases ($%i contract)', (reason, streak, pay, outcome) => {
+    const run = fresh(['core', 'landing', 'pay']);
+    run.sprint = TUNING.last_sprint;
+    run.clients = [{
+      id: 1, texture: 'clinic', name: 'Client', type: 'corp', pay,
+      want: 'core', wantLevel: 1, patience: 3, happy: true, slot: 0, deal: 1, promised: false,
+    }];
+    run.down = true;
+    run.downWhy = reason;
+    expect(netPerS(run)).toBeLessThan(0);
+    finishAtSprintLimit(run, streak);
+    expect(run.over).toBe(outcome);
+    expect(run.down).toBe(true);
   });
 
   it('cancels every unshipped building state, releases its cell and never refunds spent cash', () => {
