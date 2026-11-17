@@ -1,6 +1,6 @@
 import { CARD_ART } from '../content/cards';
 import { CREDITS } from '../content/credits';
-import { clock, ENDING_TITLE, endingPost, endingScore, endingStats } from '../content/endings';
+import { clock, ENDING_TITLE, endingPost, endingScore, endingStats, releaseRevenueRecord } from '../content/endings';
 import { AGAIN_SAYS } from '../content/texts';
 import { L } from '../core/lang';
 import { dec, money, rate } from '../ui/format';
@@ -100,7 +100,8 @@ export async function resume(term: Terminal, meta: Meta): Promise<void> {
               : L('<strong>банкротство</strong>', '<strong>bankruptcy</strong>');
       const history = r.ending === 'late' && r.profitAt !== undefined
         ? (r.profitAt > 0 ? L(' · раньше была прибыль', ' · previously profitable') : L(' · прибыльных релизов не было', ' · no profitable releases')) : '';
-      term.print(`${pastPitch(r)} — ${how}, ${clock(r.lived)}${r.value !== undefined ? ` · ${L('оценка', 'valuation')} ${money(r.value)}` : ''}${history}`, 'small');
+      const revenue = Number.isFinite(r.peakMrr) ? ` · ${releaseRevenueRecord(r.peakMrr)}` : '';
+      term.print(`${pastPitch(r)} — ${how}, ${clock(r.lived)}${r.value !== undefined ? ` · ${L('оценка', 'valuation')} ${money(r.value)}` : ''}${revenue}${history}`, 'small');
     }
   }
   // the traits: what grows with every startup

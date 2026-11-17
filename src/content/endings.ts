@@ -53,12 +53,17 @@ export function endingPost(run: FinalRun): string[] {
   return lines;
 }
 
+/** peakMrr is sampled in the release report, before the player picks the next card. */
+export function releaseRevenueRecord(peakMrr: number): string {
+  return L('Рекорд выручки на релизе', 'Highest revenue at release') + ' ' + rate(peakMrr / TUNING.sprint_s) + PER_S;
+}
+
 function mainPost(run: FinalRun): string[] {
   const name = pitch(run.idea);
   const s = run.stats;
   // the same genre in other words: which wording a startup gets is decided by its seed, line by line
   const say = (k: number, ...options: string[]): string => options[(run.seed >>> k) % options.length];
-  const peak = rate(s.peakMrr / TUNING.sprint_s);
+  const record = releaseRevenueRecord(s.peakMrr);
   const downs = `${s.downs} ${plural(s.downs, TIMES)}`;
   switch (run.over) {
     case 'sold':
@@ -89,14 +94,14 @@ function mainPost(run: FinalRun): string[] {
       return L(
         [
           say(0, `Как я вышел на прибыль без инвесторов. Тред.`, `Мы прибыльны. Да, так тоже можно. Тред.`),
-          `1/ ${name}: ${s.clients} ${plural(s.clients, CLIENT_WORD)} за всё время, пик подписок <em>${peak}</em> в секунду.`,
+          `1/ ${name}: ${s.clients} ${plural(s.clients, CLIENT_WORD)} за всё время. ${record}.`,
           `2/ Секрет прост: ${s.shipped} ${plural(s.shipped, BLOCK_WORD)}, один человек и ни одного выходного.`,
           s.downs > 0 ? `3/ Да, продукт лежал ${downs}. Это называлось «плановые работы».` : `3/ Продукт ни разу не лежал. Я сам не понимаю как.`,
           say(3, `4/ Курс «Повтори мой путь» — по ссылке в профиле.`, `4/ Инвесторы, которые не отвечали, теперь пишут сами. Отвечаю не сразу — из принципа.`),
         ],
         [
           say(0, `How I got to profit without investors. Thread.`, `We are profitable. Yes, that is allowed too. Thread.`),
-          `1/ ${name}: ${s.clients} ${plural(s.clients, CLIENT_WORD)} all-time, peak subscriptions <em>${peak}</em> per second.`,
+          `1/ ${name}: ${s.clients} ${plural(s.clients, CLIENT_WORD)} all-time. ${record}.`,
           `2/ The secret is simple: ${s.shipped} ${plural(s.shipped, BLOCK_WORD)}, one person and not a single day off.`,
           s.downs > 0 ? `3/ Yes, the product was down ${downs}. It was called “scheduled maintenance”.` : `3/ The product never went down. I don’t understand how either.`,
           say(3, `4/ My course “Repeat My Journey” — link in bio.`, `4/ The investors who never replied are now writing to me. I take my time answering — on principle.`),
@@ -108,14 +113,14 @@ function mainPost(run: FinalRun): string[] {
           say(0, `Честный апдейт. Тред.`, `Немного прозрачности. Тред.`),
           `1/ ${name} прожил ${clock(run.t)}. ${s.profitAt > 0 ? 'Прибыль была, но финишировали в минусе.' : 'До прибыли так и не добрались.'}`,
           say(1, `2/ Формально мы живы. Я называю это «стадией поиска модели».`, `2/ Мы не убыточны, мы «инвестируем в рост». Из моих сбережений.`),
-          `3/ Подписки: <em>${peak}</em> в секунду на пике. Токены: <strong>${money(s.tokens)}</strong> за всё время. Считайте сами.`,
+          `3/ ${record}. Токены: <strong>${money(s.tokens)}</strong> за всё время. Считайте сами.`,
           say(3, `4/ Сбережения кончатся раньше, чем этот тред наберёт просмотры.`, `4/ Если вы инвестор — мои сообщения открыты. Если клиент — тем более.`),
         ],
         [
           say(0, `An honest update. Thread.`, `A bit of transparency. Thread.`),
           `1/ ${name} lived for ${clock(run.t)}. ${s.profitAt > 0 ? 'We turned a profit earlier and finished in the red.' : 'We never reached profitability.'}`,
           say(1, `2/ Technically we are alive. I call it “the business-model search stage”.`, `2/ We are not losing money, we are “investing in growth”. Out of my savings.`),
-          `3/ Subscriptions: <em>${peak}</em> per second at the peak. Tokens: <strong>${money(s.tokens)}</strong> all-time. Do the math.`,
+          `3/ ${record}. Tokens: <strong>${money(s.tokens)}</strong> all-time. Do the math.`,
           say(3, `4/ The savings will run out before this thread gets any views.`, `4/ If you are an investor — my DMs are open. If you are a client — even more so.`),
         ],
       );
@@ -163,10 +168,10 @@ export function endingScore(run: FinalRun): [string, string] {
 }
 export function endingStats(run: FinalRun): string {
   const s = run.stats;
-  const peak = `${rate(s.peakMrr / TUNING.sprint_s)}${PER_S}`;
+  const record = releaseRevenueRecord(s.peakMrr);
   const value = run.over === 'sold' ? L(` · оценка ${money(s.value)}`, ` · valuation ${money(s.value)}`) : '';
   return L(
-    `прожил ${clock(run.t)} · клиентов ${s.clients}, ушло ${s.left} · пик подписок ${peak} · блоков ${s.shipped} · доработок ${s.reworks} · падений ${s.downs}${value}`,
-    `lived ${clock(run.t)} · clients ${s.clients}, left ${s.left} · peak subscriptions ${peak} · blocks ${s.shipped} · upgrades ${s.reworks} · outages ${s.downs}${value}`,
+    `прожил ${clock(run.t)} · клиентов ${s.clients}, ушло ${s.left} · ${record} · блоков ${s.shipped} · доработок ${s.reworks} · падений ${s.downs}${value}`,
+    `lived ${clock(run.t)} · clients ${s.clients}, left ${s.left} · ${record} · blocks ${s.shipped} · upgrades ${s.reworks} · outages ${s.downs}${value}`,
   );
 }
