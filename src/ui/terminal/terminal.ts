@@ -64,6 +64,7 @@ export function createTerminal(root: HTMLElement, sound: (name: 'ui' | 'yes') =>
   const bar = el.querySelector('.tm-bar span') as HTMLElement;
   const body = el.querySelector('.tm-body') as HTMLElement;
   const foot = el.querySelector('.tm-foot') as HTMLElement;
+  let transition = 0;
 
   /** the thing that is waiting for input right now */
   let onKey: ((e: KeyboardEvent) => void) | null = null;
@@ -87,16 +88,18 @@ export function createTerminal(root: HTMLElement, sound: (name: 'ui' | 'yes') =>
       return el.classList.contains('on');
     },
     open(title) {
+      transition++;
       bar.textContent = title;
       el.classList.remove('leave');
       el.classList.add('on', 'enter');
     },
     leave() {
+      const leaving = ++transition;
       return new Promise((resolve) => {
         el.classList.remove('enter');
         el.classList.add('leave');
         afterGameTime(() => {
-          el.classList.remove('on', 'leave');
+          if (transition === leaving) el.classList.remove('on', 'leave');
           resolve();
         }, 900);
       });
