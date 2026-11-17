@@ -266,8 +266,8 @@ export class GameScene extends Phaser.Scene {
       [
         CLAUDE,
         ...L(
-          ['Привет. Я твоя команда — вся.', `Выбери справа «${BLOCK_BY_ID.core.name}»`, 'и поставь её на чертёж. Клик по', 'стройке или Enter — помочь руками.'],
-          ['Hi. I am your team — all of it.', `Pick “${BLOCK_BY_ID.core.name}” on the right`, 'and put it on the blueprint. Click', 'the site or press Enter to help.'],
+          ['Привет. Я твоя команда — вся.', `Выбери справа «${BLOCK_BY_ID.core.name}»`, 'и поставь её на чертёж.', `Чтобы помочь, жми «${HAND_NAME.build}».`],
+          ['Hi. I am your team — all of it.', `Pick “${BLOCK_BY_ID.core.name}” on the right`, 'and put it on the blueprint.', `Press “${HAND_NAME.build}” to help build.`],
         ),
       ],
       600,
@@ -1257,20 +1257,29 @@ export class GameScene extends Phaser.Scene {
     if (!task && run.tasks.some(entry => entry.status === 'ready')) return L('<b>Работа готова и ждёт релиза</b>. Выпущенное улучшение заработает после отсчёта.', '<b>Work is ready and waiting for release</b>. The upgrade activates when the countdown ends.');
     if (!task && run.tasks.some(entry => entry.status === 'backlog')) return L('<b>Работа отложена</b>: не выполняется. Нажми ▶ над работой, чтобы вернуть её в очередь; отложенные здания сохраняют клетки.', '<b>Work is deferred</b>: no progress. Press ▶ above the task to resume; deferred buildings keep their cells.');
     if (this.paused) return L('<b>Пауза</b>: время, работа и деньги стоят.', '<b>Paused</b>: time, work and money are stopped.');
-    if (task && !run.agents.some(agent => agent.lane === 'build')) return L('<b>На стройке нет агента</b>. Назначь строителя справа или помоги сам: Enter · 1 сила.', '<b>No agent is building</b>. Assign a builder on the right or help: Enter · 1 energy.');
+    if (task && !run.agents.some(agent => agent.lane === 'build')) return L(
+      `<b>На стройке нет агента</b>. Назначь строителя или нажми <b>«${HAND_NAME.build}»</b> справа внизу · 1 сила.`,
+      `<b>No agent is building</b>. Assign a builder or press <b>“${HAND_NAME.build}”</b> at the bottom right · 1 energy.`,
+    );
     if (!has('core')) return L(`Выбери <b>«${BLOCK_BY_ID.core.name}»</b> справа, затем клетку на чертеже.`, `Pick <b>“${BLOCK_BY_ID.core.name}”</b> on the right, then choose a cell on the blueprint.`);
     if (!has('landing')) return L('Поставь <b>«Лендинг»</b>: без него клиенты не найдут продукт.', 'Place the <b>“Landing Page”</b> so customers can find your product.');
     if (!has('pay')) return L('Поставь <b>«Приём оплаты»</b>: он включает подписки после выпуска.', 'Place <b>“Payments”</b>: it enables subscriptions after release.');
     if (run.down) return run.downWhy === 'supplier'
       ? L('<strong>Сбой поставщика</strong> до релиза: клиенты не платят. Можно пока улучшить продукт.', '<strong>Provider outage</strong> until release: customers are not paying. Improve your product while you wait.')
       : L('<strong>Продукт лежит</strong>: назначь агента на починку, снизь техдолг к следующему релизу.', '<strong>The product is down</strong>: assign an agent to fixes and reduce tech debt before release.');
-    if (!isLive(run, 'pay')) return L('<b>Платежи ещё не выпущены</b>. Помоги стройке через Enter; готовые проекты включатся на релизе.', '<b>Payments have not shipped yet</b>. Help build with Enter; completed projects activate at release.');
+    if (!isLive(run, 'pay')) return L(
+      `<b>Платежи ещё не выпущены</b>. Помоги стройке кнопкой <b>«${HAND_NAME.build}»</b> справа внизу. Готовые проекты включатся на релизе.`,
+      `<b>Payments have not shipped yet</b>. Use <b>“${HAND_NAME.build}”</b> at the bottom right to help build. Completed projects activate at release.`,
+    );
     const totals = companyTotals(run);
     if (totals.utilization > 1) return L(
       '<strong>Перегруз ' + Math.round(totals.utilization * 100) + '%</strong>: расширь «Инфраструктуру» справа. Выпуск — на релизе; деньги ускоряют строителей.',
       '<strong>Load ' + Math.round(totals.utilization * 100) + '%</strong>: expand “Infrastructure” on the right. Ships at release; money speeds up builders.',
     );
-    if (task && !task.block) return L('Основатель расширяет компанию. <b>Enter — помочь</b>.', 'The founder is expanding the company. <b>Enter to help</b>.');
+    if (task && !task.block) return L(
+      `Основатель расширяет компанию. Чтобы помочь, нажми <b>«${HAND_NAME.build}»</b> справа внизу.`,
+      `The founder is expanding the company. Press <b>“${HAND_NAME.build}”</b> at the bottom right to help.`,
+    );
     if (customerCount(run) === 0) return L('После выпуска ядра и лендинга придут первые клиенты. <b>Продвижение</b> пополняет воронку, нужные функции помогают им остаться.', 'The first clients arrive after core and landing ship. <b>Promotion</b> fills the funnel; useful features help them stay.');
     if (net < 0) return L(
       `До прибыли не хватает <b>${rate(-net)}${PER_S}</b>. Нажми <b>«Клиенты»</b> на карте или на их здания: там запросы, сроки и выручка.`,
