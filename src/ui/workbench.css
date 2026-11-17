@@ -645,7 +645,8 @@
   font-size: 12px;
   line-height: 1.35;
 }
-.wb-office { display: flex; flex-wrap: wrap; gap: 3px 12px; padding: 4px 0 9px; font-size: 11px; }
+.wb-office { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 8px; padding: 5px 0 9px; font: 14px var(--mono); }
+.wb-main .wb-plot-button { padding: 5px 8px; background: #e8eee3; border: 1px solid #819781; color: #36563d; font: 15px var(--mono); }
 .wb-client-popup .wb-reasons { font-size: 16px; line-height: 1.4; color: var(--ink); }
 .wb-infrastructure-actions { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px; padding: 4px 10px 9px; font-size: 12px; }
 .wb-infrastructure-actions small { width: 100%; color: var(--dim); }

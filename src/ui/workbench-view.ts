@@ -178,17 +178,17 @@ function moduleView(
   const liveLevel = block?.live ? block.level : 0;
   const nextLevel = planned?.level ?? Math.min(PRODUCTION.max_level, liveLevel + 1);
   const work = planned?.work ?? (block?.live ? reworkNeed(run, block) : workNeed(run, kind));
-  const canPlace = shelf(run).includes(kind) && run.blocks.length < cellsMax(run);
+  const unlocked = shelf(run).includes(kind);
+  const needsLand = unlocked && run.blocks.length >= cellsMax(run);
+  const canPlace = unlocked && !needsLand;
   const maxed = liveLevel >= PRODUCTION.max_level;
   let label: string | undefined;
   if (planned) label = taskLabel(planned.status);
   else if (!liveLevel && !canPlace)
     label =
-      run.blocks.length >= cellsMax(run)
-        ? L('Нет клетки', 'No free cell')
-        : RULES[kind].stage > run.stage
-          ? L(`Этап ${RULES[kind].stage}`, `Stage ${RULES[kind].stage}`)
-          : L('Сначала ядро', 'Core first');
+      needsLand ? L('Нет клетки', 'No free cell')
+        : RULES[kind].stage > run.stage ? L(`Этап ${RULES[kind].stage}`, `Stage ${RULES[kind].stage}`)
+        : L('Сначала ядро', 'Core first');
   const specializations =
     kind === 'core'
       ? STRATEGY_IDS.filter((id) => strategyCount(run, id) > 0).map((id) => `${DRAFT_CARDS.find((card) => card.id === id)?.title} ×${strategyCount(run, id)}`).join(' · ')
@@ -228,6 +228,7 @@ function moduleView(
     actionLabel: label,
     disabled: Boolean(run.over || run.draft || planned || maxed || (!liveLevel && !canPlace)),
     selected: picked === kind,
+    needsLand,
     specialization: specializations,
     links: moduleLinks(run, kind),
     canDemolish: Boolean(block?.live && !block.up && !planned && RULES[kind].role !== 'base'),
@@ -418,7 +419,7 @@ export function workbenchView(run: Run, selection: WorkbenchSelection): Workbenc
   const active = activeWork(run);
   const agent = run.agents.find((item) => item.id === selection.selectedAgent);
   return {
-    office: { cells: cellsMax(run), totalCells: run.pool.length + 3, slots: agentSlots(run), landCost: officeQuote(run, 'land'), deskCost: officeQuote(run, 'desks'), money: run.money, maxSlots: OFFICE.desks.max },
+    office: { cells: cellsMax(run), used: run.blocks.length, gain: Math.min(OFFICE.land.cells, run.pool.length + 3 - cellsMax(run)), totalCells: run.pool.length + 3, slots: agentSlots(run), landCost: officeQuote(run, 'land'), deskCost: officeQuote(run, 'desks'), money: run.money, maxSlots: OFFICE.desks.max },
     panel: selection.panel,
     agent: agent ? {
       id: agent.id,
