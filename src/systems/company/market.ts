@@ -36,7 +36,7 @@ export interface MarketGroup {
   came: number;
   left: number;
   demand?: number;
-  lastShift?: { sprint: number; theme: MarketSignal['theme']; before: number; after: number; block?: string };
+  lastShift?: { sprint: number; theme: MarketSignal['theme'] | 'share'; before: number; after: number; block?: string };
 }
 export interface MarketState {
   groups: MarketGroup[];
@@ -230,9 +230,11 @@ export function evolveMarket(
     const eligible = profile.needs.filter((need) => toolkit.includes(need.block) && need.level < marketEvolution.shift_level_cap);
     if (eligible.length) {
       const need = rng.pick(eligible);
-      group.lastShift = { sprint, theme, before: need.level, after: ++need.level, block: need.block };
+      const before = need.level;
+      need.level++;
+      group.lastShift = { sprint, theme, before, after: need.level, block: need.block };
     } else {
-      group.lastShift = { sprint, theme: 'demand', before: profile.share, after: profile.share };
+      group.lastShift = { sprint, theme: 'share', before: profile.share, after: profile.share, block: profile.needs[0].block };
     }
     // Demand shifts towards this existing cohort; its old requirements stay useful.
     profile.share *= 1 + marketEvolution.share_variation;
