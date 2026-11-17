@@ -235,6 +235,7 @@ export interface Client {
 }
 
 export interface Report {
+  firstSubscriptions?: boolean;
   profitableStreak?: number;
   sprint: number;
   shipped: string[];
@@ -1722,6 +1723,7 @@ function release(run: Run): void {
   }
 
   report.mrr = income;
+  if (income > 0 && run.stats.peakMrr === 0) report.firstSubscriptions = true;
   report.tokens = tokens(run);
   report.debt = run.debt;
   report.down = run.down;

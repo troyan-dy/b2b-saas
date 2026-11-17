@@ -258,6 +258,7 @@
   max-width: 1150px;
   margin: 5px auto 0;
 }
+.sc-report strong { display: block; color: #b5d3bc; font: 19px/1.4 var(--mono); }
 .sc-album-sheet {
   width: 1510px;
   height: 940px;

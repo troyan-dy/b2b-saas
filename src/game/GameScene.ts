@@ -1082,7 +1082,16 @@ export class GameScene extends Phaser.Scene {
     const orderHint = order?.kind === 'mobile' ? L('Первый заказ стоматологии: запись пациентов с телефона', 'First dental order: book patients from a phone')
       : order?.kind === 'roles' ? L('Первый заказ комплаенса: разные права для автора и согласующего', 'First compliance order: separate permissions for author and approver') : '';
     const detail = valuationNote ? valuationNote + record : orderHint;
-    this.paper.setGoal(this.nextStep(net) + (detail ? `<br><small>${detail}</small>` : ''));
+    const promises = run.clients.filter(client => client.promised && !client.happy).sort((a, b) => a.patience - b.patience);
+    this.paper.setGoal(this.nextStep(net) + (detail && !promises.length ? `<br><small>${detail}</small>` : ''));
+    this.paper.setPromises(promises.map(client => {
+      const deadline = Math.min(TUNING.last_sprint, run.sprint + client.patience - 1);
+      const block = BLOCK_BY_ID[client.want]?.name ?? client.want;
+      return { block: client.want, label: L(
+        `Обещано: ${client.name} · ${block} v${client.wantLevel} · к релизу ${deadline} без сбоев`,
+        `Promised: ${client.name} · ${block} v${client.wantLevel} · by release ${deadline} without outages`,
+      ) };
+    }));
     this.paper.setLedger(this.ledger());
     if (!this.ended) this.teach();
 

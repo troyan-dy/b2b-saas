@@ -4,7 +4,7 @@ import { LESSONS, TRAITS, traitGives } from '../systems/meta/meta';
 import { DRAFT_CARDS, previewCardChange, type CardChange, type DraftCard } from '../systems/run/draft';
 import { PRODUCTION, strategyCount, type StrategyId } from '../systems/run/product';
 import { TUNING, type Run } from '../systems/run/run';
-import { dec, whole } from './format';
+import { dec, PER_S, rate, whole } from './format';
 import type { SprintCardsView, SprintCardView } from './sprint-cards';
 
 export const SPRINT_CARD_ART: Record<string, string> = {
@@ -248,6 +248,10 @@ export function sprintCardsView(
       ? {
           sprint: run.sprint,
           limit: TUNING.last_sprint,
+          firstSubscriptions: report?.firstSubscriptions ? L(
+            `Первые подписки: ${rate(report.mrr / TUNING.sprint_s)}${PER_S} выручки`,
+            `First subscriptions: ${rate(report.mrr / TUNING.sprint_s)}${PER_S} in revenue`,
+          ) : undefined,
           cards: run.draft.flatMap((id) => {
             const card = DRAFT_CARDS.find((entry) => entry.id === id);
             return card ? [cardView(run, card, true)] : [];

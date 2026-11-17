@@ -54,6 +54,7 @@ export interface Paper {
   setSprint(label: string, part: number): void;
   /** one line under the ruler: what the player is after right now (HTML) */
   setGoal(html: string): void;
+  setPromises(promises: readonly { block: string; label: string }[]): void;
   /** the ledger next to the money: every line of income and spending, and the debt (HTML rows) */
   setLedger(html: string): void;
   setNews(text: string, hint?: string): void;
@@ -117,6 +118,11 @@ export function createPaper(under: HTMLElement, over: HTMLElement): Paper {
   const sprintLabel = hud.querySelector('.bl-sprint i') as HTMLElement;
   const sprintBar = hud.querySelector('.bl-sprint s') as HTMLElement;
   const goal = hud.querySelector('.bl-goal') as HTMLElement;
+  const goalText = document.createElement('div');
+  const promiseRow = document.createElement('div');
+  promiseRow.className = 'bl-promises';
+  goal.append(goalText, promiseRow);
+  let promiseSignature = '';
   const ledger = hud.querySelector('.bl-ledger') as HTMLElement;
   const shop = top.querySelector('.bl-shop') as HTMLElement;
   const shelfBody = shop.querySelector('.bl-shelf-body') as HTMLElement;
@@ -188,7 +194,22 @@ export function createPaper(under: HTMLElement, over: HTMLElement): Paper {
     setGoal(html) {
       if (html === last.goal) return;
       last.goal = html;
-      goal.innerHTML = html;
+      goalText.innerHTML = html;
+    },
+    setPromises(promises) {
+      const signature = JSON.stringify(promises);
+      if (signature === promiseSignature) return;
+      promiseSignature = signature;
+      const focused = promiseRow.contains(document.activeElement) ? (document.activeElement as HTMLElement).dataset.block : undefined;
+      promiseRow.replaceChildren(...promises.map(({ block, label }) => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.dataset.block = block;
+        button.textContent = label;
+        button.onclick = () => paper.onWorkbench({ type: 'inspect-module', block });
+        return button;
+      }));
+      if (focused) promiseRow.querySelector<HTMLElement>(`[data-block="${CSS.escape(focused)}"]`)?.focus({ preventScroll: true });
     },
     setLedger(html) {
       if (html === last.ledger) return;
