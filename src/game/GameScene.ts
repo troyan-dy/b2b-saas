@@ -34,7 +34,7 @@ import { apiWorkQuote, rushTask } from '../systems/run/run';
 import type { Paper, ShelfKeys, ShelfSection } from '../ui/paper';
 import type { WorkbenchAction } from '../ui/workbench';
 import { projectName, SEGMENT_TITLES, workbenchView, type WorkbenchSelection } from '../ui/workbench-view';
-import { sprintCardsView } from '../ui/sprint-cards-view';
+import { cardChangeText, sprintCardsView } from '../ui/sprint-cards-view';
 import { buildReason } from '../ui/build-reasons';
 import { DRAFT_CARDS } from '../systems/run/draft';
 import { PRODUCTION } from '../systems/run/product';
@@ -612,7 +612,8 @@ export class GameScene extends Phaser.Scene {
       case 'card-applied': {
         const card = DRAFT_CARDS.find((entry) => entry.id === e.id);
         if (card) {
-          this.workbenchSelection.applied = { title: card.title, impact: card.impact };
+          const impact = e.change ? cardChangeText(e.change) : card.impact;
+          this.workbenchSelection.applied = { title: card.title, impact };
           this.time.delayedCall(5000, () => {
             this.workbenchSelection.applied = null;
             this.workbenchAt = -Infinity;
@@ -621,8 +622,8 @@ export class GameScene extends Phaser.Scene {
           this.paper.popMoney();
           this.board.pulse();
           if (card.money) this.paper.pop(670, 198, `+${money(card.money)}`, 'good');
-          else if (card.debt) this.paper.pop(1170, 208, L(`Техдолг ${card.debt}`, `Tech debt ${card.debt}`), 'good');
-          else if (card.energy) this.paper.pop(670, 230, L('Силы восстановлены', 'Energy restored'), 'good');
+          else if (e.change && e.change.before !== e.change.after && (card.debt || card.energy))
+            this.paper.pop(card.debt ? 1170 : 670, card.debt ? 208 : 230, impact, 'good');
         }
         break;
       }
