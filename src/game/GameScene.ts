@@ -1062,10 +1062,10 @@ export class GameScene extends Phaser.Scene {
     // money and time
     const net = netPerS(run);
     let sub: string;
-    if (net >= 0) sub = `<b class="good">+${money(net)}</b> ${L('в секунду · в плюсе', 'per second · in the black')}`;
+    if (net >= 0) sub = `<b class="good">+${rate(net)}${PER_S}</b> ${L('чистыми', 'net')}`;
     else {
       const left = run.money / -net;
-      sub = `<b class="hot">${money(net)}</b> ${L('в секунду · денег на', 'per second · money for')} <b>${Math.floor(left / 60)}:${String(Math.floor(left % 60)).padStart(2, '0')}</b>`;
+      sub = `<b class="hot">${rate(net)}${PER_S}</b> ${L('чистыми · запас при таком темпе', 'net · cash at this rate')} <b>${Math.floor(left / 60)}:${String(Math.floor(left % 60)).padStart(2, '0')}</b>`;
     }
     this.paper.setMoney(money(run.money), sub, run.money <= 0);
     const leftS = Math.ceil(TUNING.sprint_s - run.sprintT);
@@ -1304,8 +1304,8 @@ export class GameScene extends Phaser.Scene {
     if (task && !task.block) return L('Основатель расширяет компанию. <b>Enter — помочь</b>.', 'The founder is expanding the company. <b>Enter to help</b>.');
     if (customerCount(run) === 0) return L('После выпуска ядра и лендинга придут первые клиенты. <b>Продвижение</b> пополняет воронку, нужные функции помогают им остаться.', 'The first clients arrive after core and landing ship. <b>Promotion</b> fills the funnel; useful features help them stay.');
     if (net < 0) return L(
-      'До прибыли не хватает <b>' + rate(-net) + '/с</b>. Открой облако: посмотри потребности и прогноз тарифа перед повышением цены.',
-      '<b>' + rate(-net) + '/s</b> short of profit. Open a cloud to inspect needs and forecast the tariff before raising it.',
+      `До прибыли не хватает <b>${rate(-net)}${PER_S}</b>. Нажми <b>«Клиенты»</b> на карте или на их здания: там запросы, сроки и выручка.`,
+      `<b>${rate(-net)}${PER_S}</b> short of profit. Click <b>“Clients”</b> on the map or their buildings for needs, deadlines and revenue.`,
     );
     if (run.sprint === TUNING.last_sprint) return L(
       '<em>Последний спринт</em> · выпусти готовые улучшения. После релиза — итог компании.',

@@ -349,21 +349,23 @@ function segmentPanel(
     delay: L('задержка', 'delay'),
     debt: L('техдолг', 'debt'),
   };
-  const contracts = run.clients
-    .filter((client) => contractSegment(client) === id)
-    .map((client) => ({
-      title: `${client.name} · ${rate(clientPay(run, client) / TUNING.sprint_s)}${PER_S}`,
-      detail: client.happy
-        ? L('Доволен · отдельный фиксированный тариф', 'Happy · separate fixed tariff')
-        : L(
-              `${client.promised ? 'Обещано' : 'Ждёт'} ${shortName(client.want)} v${client.wantLevel} · ${client.patience} спр. · тариф отдельный`,
-              `${client.promised ? 'Promised' : 'Waiting for'} ${shortName(client.want)} v${client.wantLevel} · ${client.patience} sprints · separate tariff`,
-            ),
-    }));
+  const signed = run.clients.filter((client) => contractSegment(client) === id);
+  const contractIncome = signed.reduce((sum, client) => sum + clientPay(run, client), 0);
+  const contracts = signed.map((client) => ({
+    title: `${client.name} · ${rate(clientPay(run, client) / TUNING.sprint_s)}${PER_S}`,
+    detail: client.happy
+      ? L('Доволен', 'Happy')
+      : L(
+          `${client.promised ? 'Обещано' : 'Ждёт'} ${shortName(client.want)} v${client.wantLevel} · ${client.patience} спр.`,
+          `${client.promised ? 'Promised' : 'Waiting for'} ${shortName(client.want)} v${client.wantLevel} · ${client.patience} sprints`,
+        ),
+  }));
   return {
     id,
     title: SEGMENT_TITLES[id],
     count: segment.count + contracts.length,
+    marketIncome: segment.income / TUNING.sprint_s,
+    contractIncome: contractIncome / TUNING.sprint_s,
     happiness: segment.satisfaction,
     delta: segment.delta,
     leads: segment.leads,
@@ -373,7 +375,10 @@ function segmentPanel(
     pricePending: segment.pendingPrice !== null,
     priceDisabled: Boolean(run.draft || run.over),
     priceLabel: `${rate(segment.unitPrice / TUNING.sprint_s)}${PER_S}`,
-    forecast: L(`По общему тарифу при ×${dec(previewPrice)}: ≈${rate(forecast.income / TUNING.sprint_s)}/с, отток ≈${forecast.lost}. Именные договоры ниже сюда не входят. Оценка на следующий релиз при текущем продукте и аудитории.`, `At the shared tariff ×${dec(previewPrice)}: ≈${rate(forecast.income / TUNING.sprint_s)}/s, ≈${forecast.lost} leaving. Named contracts below are not included. Next-release estimate for the current product and audience.`),
+    forecast: L(
+      `Следующий релиз при ×${dec(previewPrice)}: ≈${rate(forecast.income / TUNING.sprint_s)}${PER_S} по общему тарифу, отток ≈${forecast.lost}.`,
+      `Next release at ×${dec(previewPrice)}: ≈${rate(forecast.income / TUNING.sprint_s)}${PER_S} at the shared tariff, ≈${forecast.lost} leaving.`,
+    ),
     needs: segmentNeeds(run, ctx, id, modules),
     reasons: conditions.concat(Object.entries(segment.reasons)
       .filter(([, value]) => value >= 0.5)

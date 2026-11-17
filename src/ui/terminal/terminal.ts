@@ -143,16 +143,18 @@ export function createTerminal(root: HTMLElement, sound: (name: 'ui' | 'yes') =>
     },
     ask(options, hint = '') {
       return new Promise((resolve) => {
+        const shortcut = (index: number): string => index === 9 ? '0' : String(index + 1);
         const box = document.createElement('div');
         box.className = 'tm-ask';
         box.innerHTML = options
           .map(
             (o, k) =>
-              `<div class="tm-opt" data-k="${k}"><u>❯</u><span>${k + 1}.</span><span>${o.title}</span>${o.note ? `<small>${o.note}</small>` : ''}</div>`,
+              `<div class="tm-opt" data-k="${k}"><u>❯</u><span>${shortcut(k)}.</span><span>${o.title}</span>${o.note ? `<small>${o.note}</small>` : ''}</div>`,
           )
           .join('');
         body.append(box);
-        foot.innerHTML = `<kbd>1</kbd>–<kbd>${options.length}</kbd> ${L('выбрать', 'choose')} · <kbd>Enter</kbd> ${L('подтвердить', 'confirm')}${hint ? ` · ${hint}` : ''}`;
+        const digits = `<kbd>1</kbd>–<kbd>${Math.min(options.length, 9)}</kbd>${options.length > 9 ? ' / <kbd>0</kbd>' : ''}`;
+        foot.innerHTML = `${digits} ${L('выбрать', 'choose')} · <kbd>Enter</kbd> ${L('подтвердить', 'confirm')}${hint ? ` · ${hint}` : ''}`;
         const rows = [...box.querySelectorAll('.tm-opt')] as HTMLElement[];
         let at = 0;
         const mark = (): void => rows.forEach((r, k) => r.classList.toggle('on', k === at));
@@ -172,8 +174,9 @@ export function createTerminal(root: HTMLElement, sound: (name: 'ui' | 'yes') =>
           }, 70);
         };
         onKey = (e) => {
-          const digit = /^(?:Digit|Numpad)([1-9])$/.exec(e.code);
-          if (digit && Number(digit[1]) <= options.length) pick(Number(digit[1]) - 1);
+          const digit = /^(?:Digit|Numpad)([0-9])$/.exec(e.code);
+          const option = digit ? (Number(digit[1]) || 10) - 1 : -1;
+          if (option >= 0 && option < options.length) pick(option);
           else if (e.code === 'ArrowDown' || e.code === 'KeyS') {
             at = (at + 1) % options.length;
             mark();
