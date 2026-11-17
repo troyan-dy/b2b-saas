@@ -1,4 +1,4 @@
-B2B SaaS 0.5.0 — third-party licences
+B2B SaaS 0.6.0 — third-party licences
 
 Music — CC0 (public domain), OpenGameArt.org:
   "Chiploop" by iamoneabe — https://opengameart.org/content/chiploop

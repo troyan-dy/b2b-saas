@@ -1,3 +1,4 @@
+import { afterGameTime } from '../core/pause-clock';
 import { L } from '../core/lang';
 import './sprint-cards.css';
 
@@ -104,13 +105,13 @@ export function createSprintCards(parent: HTMLElement, onChoose: (id: string) =>
   let beforeDraft: HTMLElement | null = null;
   let beforeAlbum: HTMLElement | null = null;
   let appliedKey = '';
-  let appliedTimer = 0;
+  let cancelApplied: (() => void) | undefined;
 
   function updateApplied(value: SprintCardsView['applied']): void {
     const key = value ? `${value.title}\n${value.impact}` : '';
     if (key === appliedKey) return;
     appliedKey = key;
-    window.clearTimeout(appliedTimer);
+    cancelApplied?.();
     applied.hidden = !value;
     if (!value) return;
     const card = view?.cards.find((entry) => entry.title === value.title);
@@ -118,7 +119,7 @@ export function createSprintCards(parent: HTMLElement, onChoose: (id: string) =>
       `<span>${L('КАРТА СРАБОТАЛА', 'CARD APPLIED')} · ${esc(value.title)}</span>` +
       `<strong>${esc(value.impact)}</strong>` +
       (card ? `<small>${esc(card.duration)}</small>` : '');
-    appliedTimer = window.setTimeout(() => {
+    cancelApplied = afterGameTime(() => {
       applied.hidden = true;
     }, 4500);
   }
@@ -187,12 +188,6 @@ export function createSprintCards(parent: HTMLElement, onChoose: (id: string) =>
 
   const onKey = (event: KeyboardEvent): void => {
     if (root.hidden || (!albumOpen && !view?.draft)) return;
-    if (albumOpen && event.key === 'Escape') {
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      closeOverlay();
-      return;
-    }
     const overlay = albumOpen ? album : draft;
     if (event.key === 'Tab') {
       const focusable = [...overlay.querySelectorAll<HTMLButtonElement>('button:not(:disabled)')];
@@ -265,7 +260,7 @@ export function createSprintCards(parent: HTMLElement, onChoose: (id: string) =>
       } else (beforeDraft?.isConnected && beforeDraft !== document.body ? beforeDraft : opener).focus({ preventScroll: true });
     },
     destroy(): void {
-      window.clearTimeout(appliedTimer);
+      cancelApplied?.();
       window.removeEventListener('keydown', onKey, true);
       applied.remove();
       root.remove();

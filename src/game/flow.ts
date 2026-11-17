@@ -12,21 +12,15 @@ import { playerCollectionSummary, playerCollectionView } from '../ui/player-coll
 
 /** What the player does outside a run: the menu, the idea, the ending, the résumé. All of it in the terminal. */
 
-export interface MenuState {
-  readonly sound: boolean;
-  readonly music: boolean;
-  /** the name of the background loop */
-  readonly track: string;
-}
 
-export type MenuChoice = 'start' | 'continue' | 'sound' | 'music' | 'track' | 'lang';
+export type MenuChoice = 'start' | 'continue' | 'settings' | 'lang';
 
 const RESUME = L('Резюме основателя', 'Founder’s résumé');
 const NEW_STARTUP = L('Новый стартап', 'New startup');
 const BACK = L('назад', 'back');
 const CLAUDE = L('<b>❯ Клод</b>', '<b>❯ Claude</b>');
 
-export async function menu(term: Terminal, meta: Meta, state: MenuState, version: string, saved: Run | null = null): Promise<MenuChoice> {
+export async function menu(term: Terminal, meta: Meta, version: string, saved: Run | null = null): Promise<MenuChoice> {
   for (;;) {
     term.clear();
     term.print('B2B SaaS', 'big');
@@ -44,9 +38,7 @@ export async function menu(term: Terminal, meta: Meta, state: MenuState, version
       },
       { title: L('Коллекция карт', 'Card collection'), note: playerCollectionSummary(meta) },
       { title: RESUME, note: meta.runs.length > 0 ? L(`стартапов: ${meta.runs.length}`, `startups: ${meta.runs.length}`) : L('пока пустое', 'empty so far') },
-      { title: L(`Звук: ${state.sound ? 'включён' : 'выключен'}`, `Sound: ${state.sound ? 'on' : 'off'}`) },
-      { title: L(`Музыка: ${state.music ? 'включена' : 'выключена'}`, `Music: ${state.music ? 'on' : 'off'}`) },
-      { title: L(`Трек: ${state.track}`, `Track: ${state.track}`), note: L('Enter — следующий', 'Enter — next') },
+      { title: L('Настройки звука', 'Audio settings'), note: L('Музыка и эффекты', 'Music and effects') },
       { title: L('Титры', 'Credits') },
       // the note is in the other language: whoever cannot read the menu finds the way out of it
       { title: L('Язык: русский', 'Language: English'), note: L('switch to English', 'переключить на русский') },
@@ -57,16 +49,14 @@ export async function menu(term: Terminal, meta: Meta, state: MenuState, version
     if (k === 0) return 'start';
     if (k === 1) await term.collection(playerCollectionView(meta, saved));
     if (k === 2) await resume(term, meta);
-    if (k === 3) return 'sound';
-    if (k === 4) return 'music';
-    if (k === 5) return 'track';
-    if (k === 6) {
+    if (k === 3) return 'settings';
+    if (k === 4) {
       term.clear();
       term.print(L('Титры', 'Credits'), 'mid');
       for (const line of CREDITS) term.print(line, 'small');
       await term.wait(BACK);
     }
-    if (k === 7) return 'lang';
+    if (k === 5) return 'lang';
   }
 }
 
