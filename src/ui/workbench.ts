@@ -80,7 +80,17 @@ export interface WorkbenchSegment {
   readonly pricePending?: boolean;
   readonly priceDisabled?: boolean;
   readonly priceLabel?: string;
-  readonly contracts?: readonly { readonly title: string; readonly detail: string }[];
+  readonly contracts?: readonly {
+    readonly title: string;
+    readonly detail: string;
+    readonly status?: string;
+    readonly button?: {
+      readonly block: string;
+      readonly action: WorkbenchBuildAction | 'inspect-module';
+      readonly label: string;
+      readonly disabled: boolean;
+    };
+  }[];
 }
 
 export interface WorkbenchNews {
@@ -680,8 +690,12 @@ export function createWorkbench(
             '<li><strong>' +
             esc(contract.title) +
             '</strong><p>' +
-            esc(contract.detail) +
-            '</p></li>',
+            esc([contract.detail, contract.status].filter(Boolean).join(' · ')) +
+            '</p>' +
+            (contract.button
+              ? button(contract.button.action, contract.button.block, esc(contract.button.label), contract.button.disabled)
+              : '') +
+            '</li>',
         )
         .join(''),
     );

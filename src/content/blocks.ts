@@ -53,7 +53,7 @@ const RU: readonly BlockKind[] = [
   {
     id: 'core',
     short: 'ядро',
-    name: 'Обёртка над Клодом',
+    name: 'Обёртка Клода',
     note: 'ядро продукта: поле ввода и чужая модель',
     group: 'core',
     height: 54,

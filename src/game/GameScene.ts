@@ -266,8 +266,8 @@ export class GameScene extends Phaser.Scene {
       [
         CLAUDE,
         ...L(
-          ['Привет. Я твоя команда — вся.', 'Выбери справа «Обёртку над Клодом»', 'и поставь её на чертёж. Клик по', 'стройке или Enter — помочь руками.'],
-          ['Hi. I am your team — all of it.', 'Pick “Claude Wrapper” on the right', 'and put it on the blueprint. Click', 'the site or press Enter to help.'],
+          ['Привет. Я твоя команда — вся.', `Выбери справа «${BLOCK_BY_ID.core.name}»`, 'и поставь её на чертёж. Клик по', 'стройке или Enter — помочь руками.'],
+          ['Hi. I am your team — all of it.', `Pick “${BLOCK_BY_ID.core.name}” on the right`, 'and put it on the blueprint. Click', 'the site or press Enter to help.'],
         ),
       ],
       600,
@@ -1258,7 +1258,7 @@ export class GameScene extends Phaser.Scene {
     if (!task && run.tasks.some(entry => entry.status === 'backlog')) return L('<b>Работа отложена</b>: не выполняется. Нажми ▶ над работой, чтобы вернуть её в очередь; отложенные здания сохраняют клетки.', '<b>Work is deferred</b>: no progress. Press ▶ above the task to resume; deferred buildings keep their cells.');
     if (this.paused) return L('<b>Пауза</b>: время, работа и деньги стоят.', '<b>Paused</b>: time, work and money are stopped.');
     if (task && !run.agents.some(agent => agent.lane === 'build')) return L('<b>На стройке нет агента</b>. Назначь строителя справа или помоги сам: Enter · 1 сила.', '<b>No agent is building</b>. Assign a builder on the right or help: Enter · 1 energy.');
-    if (!has('core')) return L('Начни с <b>«Обёртки над Клодом»</b> справа, затем выбери клетку на чертеже.', 'Start with <b>“Claude Wrapper”</b> on the right, then choose a cell on the blueprint.');
+    if (!has('core')) return L(`Выбери <b>«${BLOCK_BY_ID.core.name}»</b> справа, затем клетку на чертеже.`, `Pick <b>“${BLOCK_BY_ID.core.name}”</b> on the right, then choose a cell on the blueprint.`);
     if (!has('landing')) return L('Поставь <b>«Лендинг»</b>: без него клиенты не найдут продукт.', 'Place the <b>“Landing Page”</b> so customers can find your product.');
     if (!has('pay')) return L('Поставь <b>«Приём оплаты»</b>: он включает подписки после выпуска.', 'Place <b>“Payments”</b>: it enables subscriptions after release.');
     if (run.down) return run.downWhy === 'supplier'

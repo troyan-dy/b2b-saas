@@ -202,7 +202,7 @@ function moduleView(
     title: blockName(kind),
     shortTitle:
       kind === 'core'
-        ? L('Обёртка Клода', 'Claude wrapper')
+        ? blockName(kind)
         : shortName(kind).replace(/^./, (letter) => letter.toUpperCase()),
     level: liveLevel,
     current: liveLevel
@@ -354,15 +354,27 @@ function segmentPanel(
   };
   const signed = run.clients.filter((client) => contractSegment(client) === id);
   const contractIncome = signed.reduce((sum, client) => sum + clientPay(run, client), 0);
-  const contracts = signed.map((client) => ({
-    title: `${client.name} · ${rate(clientPay(run, client) / TUNING.sprint_s)}${PER_S}`,
-    detail: client.happy
-      ? L('Доволен', 'Happy')
-      : L(
-          `${client.promised ? 'Обещано' : 'Ждёт'} ${shortName(client.want)} v${client.wantLevel} · ${client.patience} спр.`,
-          `${client.promised ? 'Promised' : 'Waiting for'} ${shortName(client.want)} v${client.wantLevel} · ${client.patience} sprints`,
-        ),
-  }));
+  const contracts = signed.map((client) => {
+    const title = `${client.name} · ${rate(clientPay(run, client) / TUNING.sprint_s)}${PER_S}`;
+    if (client.happy) return { title, detail: L('Доволен', 'Happy') };
+    const detail = L(
+      `${client.promised ? 'Обещано' : 'Ждёт'} ${blockName(client.want)} v${client.wantLevel} · ${client.patience} спр.`,
+      `${client.promised ? 'Promised' : 'Waiting for'} ${blockName(client.want)} v${client.wantLevel} · ${client.patience} sprints`,
+    );
+    const module = modules.find((entry) => entry.id === client.want);
+    const block = client.want;
+    if (!module) return { title, detail, status: L('Нет в наборе', 'Not in toolkit') };
+    if (module.level >= client.wantLevel) return { title, detail, status: L('Уровень выпущен', 'Level shipped') };
+    if (module.taskId) return {
+      title, detail, status: module.actionLabel,
+      button: { block, action: 'inspect-module' as const, label: L('Открыть задачу', 'Open task'), disabled: false },
+    };
+    const next = `v${module.level + 1}`;
+    const label = module.actionLabel ?? (module.action === 'place'
+      ? L(`Разместить ${next}`, `Place ${next}`)
+      : L(`Улучшить до ${next}`, `Upgrade to ${next}`));
+    return { title, detail, button: { block, action: module.action, label, disabled: module.disabled } };
+  });
   return {
     id,
     title: SEGMENT_TITLES[id],
