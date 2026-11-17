@@ -234,6 +234,7 @@ export interface Client {
 }
 
 export interface Report {
+  profitableStreak?: number;
   sprint: number;
   shipped: string[];
   /** Completed non-building projects; these do not have a cell on the sheet. */
@@ -1675,12 +1676,17 @@ function release(run: Run): void {
   report.debt = run.debt;
   report.down = run.down;
   run.stats.peakMrr = Math.max(run.stats.peakMrr, income);
-  if (run.stats.profitAt === 0 && netPerS(run) >= 0 && income > 0) run.stats.profitAt = run.t;
+  const previousStreak = run.lastReport?.sprint === run.sprint - 1
+    ? (run.lastReport.profitableStreak ?? 0)
+    : 0;
+  const net = netPerS(run);
+  report.profitableStreak = net > 0 ? previousStreak + 1 : 0;
+  if (run.stats.profitAt === 0 && net >= 0 && income > 0) run.stats.profitAt = run.t;
   run.lastReport = report;
   run.events.push({ type: 'release', report });
 
   if (run.sprint >= TUNING.last_sprint) {
-    finishAtSprintLimit(run);
+    finishAtSprintLimit(run, previousStreak);
     return;
   }
   run.sprint++;
@@ -1763,7 +1769,7 @@ function news(run: Run): void {
 }
 
 /** The final release and legacy endless saves use the same result without another draft. */
-export function finishAtSprintLimit(run: Run): void {
+export function finishAtSprintLimit(run: Run, previousStreak = 0): void {
   if (run.over || run.sprint < TUNING.last_sprint) return;
   run.sprint = TUNING.last_sprint;
   run.sprintT = TUNING.sprint_s;
@@ -1772,7 +1778,11 @@ export function finishAtSprintLimit(run: Run): void {
   run.call = null;
   run.dilemma = null;
   run.lastChance = null;
-  end(run, netPerS(run) >= 0 ? 'profit' : 'late');
+  // A last-release outage from the supplier leaves no time to respond.
+  // Judge the released product at normal availability, with the actual customers and costs.
+  const recoverable = previousStreak >= TUNING.final_stable_releases &&
+    run.downWhy === 'supplier' && netPerS({ ...run, down: false }) > 0;
+  end(run, netPerS(run) > 0 || recoverable ? 'profit' : 'late');
 }
 
 function end(run: Run, ending: Ending): void {

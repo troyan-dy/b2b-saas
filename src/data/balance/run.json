@@ -1,6 +1,7 @@
 {
   "sprint_s": 32,
   "last_sprint": 30,
+  "final_stable_releases": 2,
   "start_money": 3600,
   "min_work_mult": 0.2,
   "living_per_s": 4,
