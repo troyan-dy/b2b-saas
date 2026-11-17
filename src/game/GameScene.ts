@@ -223,9 +223,15 @@ export class GameScene extends Phaser.Scene {
       const cy = Phaser.Math.Clamp((VIEW_AT[1] - oy - dy) / z, top, bottom);
       this.mapMoved = true;
       this.board.view(z, cx, cy, ...VIEW_AT, 0, () => undefined);
+      if (this.infrastructureArea) {
+        const [nx, ny] = this.board.onScreen(0, 0);
+        this.infrastructureArea.x += nx - ox;
+        this.infrastructureArea.y += ny - oy;
+      }
       this.show();
     }, () => {
       this.mapMoved = false;
+      this.infrastructureArea = null;
       this.stageShown = 0;
       this.syncStage(0);
       this.show();
@@ -1043,7 +1049,7 @@ export class GameScene extends Phaser.Scene {
     // on a wide sheet the first laptop stands close to the desk: the caption is cut to the bone
     const you = L('<b>ты</b>', '<b>you</b>');
     const mine = z < 0.8 ? `${you}: ${LANE_NAME[run.review]}` : `${you} · ${L('проверяешь', 'reviewing')} ${LANE_ACC[run.review]}`;
-    this.paper.tag('me', Math.max(10, mx), my, `${mine}<i>${ENERGY} ${pips}</i>`, 'left');
+    this.paper.tag('me', mx, my, `${mine}<i>${ENERGY} ${pips}</i>`, 'left');
     this.syncAgents();
     const keepA = new Set<string>();
     run.agents.forEach((a, k) => {
@@ -1227,7 +1233,7 @@ export class GameScene extends Phaser.Scene {
         top = Math.max(top, area.bottom + 10);
       }
     }
-    const area = anchors.find(fits) ?? gaps.sort((a, b) => b.height - a.height)[0];
+    const area = this.mapMoved && this.infrastructureArea ? this.infrastructureArea : anchors.find(fits) ?? gaps.sort((a, b) => b.height - a.height)[0];
     if (!area) return;
     const { x, y, height } = area;
     this.infrastructureArea = area;
@@ -1366,8 +1372,8 @@ export class GameScene extends Phaser.Scene {
       ['Tech debt is rising. Fixes remove it.', 'Review halves new bugs.', 'Experienced agents fix faster; experts faster still.'],
     ))) return;
     if (run.blocks.length >= cellsMax(run) && tell('t:full', L(
-      ['Чертёж полон. Улучшай здания', 'на месте — кликни любое.', 'Ненужное можно разобрать', 'из его карточки.'],
-      ['The blueprint is full. Click', 'a building to improve it in place.', 'You can demolish unneeded', 'buildings from their details.'],
+      officeQuote(run, 'land') !== null ? ['Чертёж полон. Открой «Блоки»', 'и нажми «Расширить участок».'] : ['Чертёж полон. Улучшай здания', 'на месте — кликни любое.'],
+      officeQuote(run, 'land') !== null ? ['The blueprint is full. Open Blocks', 'and choose “Expand plot”.'] : ['The blueprint is full. Click', 'a building to improve it in place.'],
     ))) return;
     if (run.clients.some((client) => !client.happy) && tell('t:ask', L(
       ['Ключевой договор недоволен.', 'Нажми на здание клиента:', 'в окне виден его запрос', 'и сколько спринтов он готов ждать.'],
@@ -1608,7 +1614,7 @@ export class GameScene extends Phaser.Scene {
     const view: CityView = {
       total: customerCount(run), collapsed: this.cityCollapsed,
       heading: groups.length
-        ? {x: Math.min(hx, 1180), y: hy, width: Math.min(420, Math.max(275, groups.length * 225 * z))}
+        ? {x: this.mapMoved ? hx : Math.min(hx, 1180), y: hy, width: Math.min(420, Math.max(275, groups.length * 225 * z))}
         : {x: 1155, y: 300, width: 275},
       groups: groups.map((group, column) => {
         const lastRow = this.cityCollapsed ? 0 : Math.min(4, group.count) - 1;
