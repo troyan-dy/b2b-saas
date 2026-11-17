@@ -1,3 +1,4 @@
+import { gamePaused } from '../core/pause-clock';
 import Phaser from 'phaser';
 import { BLOCK_BY_ID } from '../content/blocks';
 import {
@@ -118,7 +119,6 @@ const OF = L('из', 'of');
 const NO = L('№', '#');
 const ENERGY = L('силы', 'energy');
 const CALL = L('ЗВОНОК', 'CALL');
-const onOff = (on: boolean, ru: [string, string]): string => L(on ? ru[0] : ru[1], on ? 'on' : 'off');
 
 /** How a client of each type stands on the sheet: the height of its picture and how many squares one payment is. */
 export const CLIENT_LOOK: Record<ClientType, { height: number; squares: number }> = {
@@ -130,16 +130,13 @@ export const CLIENT_LOOK: Record<ClientType, { height: number; squares: number }
 };
 
 export interface GameHooks {
+  onHidden?: () => void;
   /** Resuming a save does not replay the first-run tutorial. */
   restored?: boolean;
   bestValuation?: number;
   /** called every simulated step, before it: a bot plays here */
   beforeStep?: (run: Run) => void;
   onEnd: (run: Run) => void;
-  /** the player drops the startup from the pause card */
-  onQuit: () => void;
-  /** the sound and the music can be switched from the pause card */
-  audio?: { readonly sound: boolean; readonly music: boolean; readonly track: string; toggle(what: 'sound' | 'music' | 'track'): void };
 }
 
 /**
@@ -180,8 +177,6 @@ export class GameScene extends Phaser.Scene {
   private ended = false;
   /** squares the founder has done by hand: the pitch of the click climbs with them */
   private hands = 0;
-  /** Esc: the game stands still and asks what next */
-  private pauseCard = false;
   /** what clients say aloud: a line over the building of client `id` until the clock reaches `until` */
   private readonly quotes = new Map<number, { text: string; until: number }>();
   private readonly workbenchSelection: WorkbenchSelection = { picked: null, selectedSegment: 'small', previewPrices: {} };
@@ -260,12 +255,8 @@ export class GameScene extends Phaser.Scene {
       this.show();
     };
     this.input.keyboard?.on('keydown', (e: KeyboardEvent) => this.onKeyDown(e));
-    // the tab is hidden: the startup waits — money must not burn while nobody is looking
     document.addEventListener('visibilitychange', () => {
-      if (document.hidden && !this.ended) {
-        this.pauseCard = true;
-        this.paused = true;
-      }
+      if (document.hidden && !this.ended) this.hooks.onHidden?.();
     });
 
     for (const b of this.run.blocks) this.landed.set(b.kind, b.done);
@@ -287,6 +278,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   update(_time: number, deltaMs: number): void {
+    if (gamePaused) return;
     if (this.ended) {
       this.squares.step(deltaMs / 1000);
       this.board.step(deltaMs / 1000);
@@ -335,7 +327,6 @@ export class GameScene extends Phaser.Scene {
     if (action.type === 'choose-card') {
       if (chooseCard(run, action.id)) {
         this.acc = 0;
-        this.pauseCard = false;
         this.paused = false;
         playSound('buy', 2);
         this.workbenchAt = -Infinity;
@@ -547,22 +538,6 @@ export class GameScene extends Phaser.Scene {
     if (this.run.draft || this.ended) return;
     this.workbenchAt = -Infinity;
     playSound('ui');
-    if (this.pauseCard) {
-      const audio = this.hooks.audio;
-      if (k === this.pauseOptions().length - 1) {
-        this.hooks.onQuit();
-        return;
-      }
-      // the switches leave the pause on: the player hears the change and goes back when ready
-      if (audio && k === 1) audio.toggle('music');
-      else if (audio && k === 2) audio.toggle('track');
-      else if (audio && k === 3) audio.toggle('sound');
-      else {
-        this.pauseCard = false;
-        this.paused = false;
-      }
-      return;
-    }
     // one card at a time, the most urgent first: the bank, a client on the line, the buyer
     if (this.run.lastChance !== null) answerLastChance(this.run, k === 0);
     else if (this.run.call) answerCall(this.run, k === 1);
@@ -584,29 +559,6 @@ export class GameScene extends Phaser.Scene {
       return;
     }
     if (['Enter', 'NumpadEnter', 'Space'].includes(e.code) && e.target instanceof HTMLElement && e.target.closest('button, input, summary')) return;
-    if (e.code === 'Escape') {
-      if (this.paper.closeCardOverlay()) return;
-      if (this.workbenchSelection.panel) {
-        this.workbenchSelection.panel = null;
-        this.workbenchAt = -Infinity;
-        return;
-      }
-      // first Esc drops the picked block or the wrecking tool, the next one stops the clock
-      if (this.picked || this.razing) {
-        this.picked = null;
-        this.razing = null;
-      }
-      else {
-        this.pauseCard = !this.pauseCard;
-        this.paused = this.pauseCard;
-      }
-      return;
-    }
-    if (this.pauseCard) {
-      const k = /^Digit([1-9])$/.exec(e.code);
-      if (k && Number(k[1]) <= this.pauseOptions().length) this.onAnswer(Number(k[1]) - 1);
-      return;
-    }
     if (e.code === 'Enter' || e.code === 'NumpadEnter') {
       if (!e.repeat) this.byHand();
       return;
@@ -1089,10 +1041,10 @@ export class GameScene extends Phaser.Scene {
     // money and time
     const net = netPerS(run);
     let sub: string;
-    if (net >= 0) sub = `<b class="good">+${money(net)}</b> ${L('в секунду · в плюсе', 'per second · in the black')}`;
+    if (net >= 0) sub = `<b class="good">+${rate(net)}${PER_S}</b> ${L('чистыми', 'net')}`;
     else {
       const left = run.money / -net;
-      sub = `<b class="hot">${money(net)}</b> ${L('в секунду · денег на', 'per second · money for')} <b>${Math.floor(left / 60)}:${String(Math.floor(left % 60)).padStart(2, '0')}</b>`;
+      sub = `<b class="hot">${rate(net)}${PER_S}</b> ${L('чистыми · запас ≈', 'net · cash for ≈')} <b>${Math.floor(left / 60)}:${String(Math.floor(left % 60)).padStart(2, '0')}</b>`;
     }
     this.paper.setMoney(money(run.money), sub, run.money <= 0);
     const leftS = Math.ceil(TUNING.sprint_s - run.sprintT);
@@ -1132,13 +1084,7 @@ export class GameScene extends Phaser.Scene {
       this.paper.setSprintCards(sprintCardsView(run, this.workbenchSelection.news, this.workbenchSelection.applied));
     }
     if (run.draft) this.paper.call(null);
-    else if (this.pauseCard) {
-      this.paper.call({
-        who: L('ПАУЗА', 'PAUSE'),
-        text: L('Деньги не горят, пока ты думаешь. В жизни так не бывает.', 'Money doesn’t burn while you think. Real life doesn’t work that way.'),
-        options: this.pauseOptions(),
-      });
-    } else if (run.lastChance !== null) {
+    else if (run.lastChance !== null) {
       this.paper.call({ who: `${CALL} · ${L('БАНК', 'THE BANK')}`, text: BANK_TEXT.replace('%s', money(run.lastChance)).replace('%t', String(mortgageSeconds(run))), options: BANK_ANSWERS });
     } else if (run.call) {
       const name = BLOCK_BY_ID[run.call.want]?.name;
@@ -1262,19 +1208,6 @@ export class GameScene extends Phaser.Scene {
     this.infrastructurePoint = [(x - 140 - ox) / z, (targetY - oy) / z];
   }
 
-  /** what the pause card offers: back to the startup, the two switches of the sound, out to the menu */
-  private pauseOptions(): string[] {
-    const audio = this.hooks.audio;
-    const switches = audio
-      ? [
-          `${L('Музыка', 'Music')}: ${onOff(audio.music, ['включена', 'выключена'])}`,
-          `${L('Трек', 'Track')}: ${audio.track} <span>— ${L('следующий', 'next')}</span>`,
-          `${L('Звук', 'Sound')}: ${onOff(audio.sound, ['включён', 'выключен'])}`,
-        ]
-      : [];
-    return [L('Вернуться к стартапу', 'Back to the startup'), ...switches, L('Сохранить и выйти в меню', 'Save and return to menu')];
-  }
-
   /** The ledger next to the money: every line of income and spending per second, and the debt with its limit. */
   private ledger(): string {
     const run = this.run;
@@ -1314,7 +1247,7 @@ export class GameScene extends Phaser.Scene {
     const run = this.run;
     const has = (kind: string): boolean => run.blocks.some((block) => block.kind === kind);
     if (run.draft) return L('Выбери <b>одну из трёх карт</b>: время и деньги стоят до решения.', 'Choose <b>one of three cards</b>: time and money wait for your decision.');
-    if (this.razing) return L('<b>Разобрать здание</b>: клик или Enter. Его клиенты снова начнут ждать. Esc — отмена.', '<b>Demolish building</b>: click or press Enter. Its customers will wait again. Esc cancels.');
+    if (this.razing) return L('<b>Разобрать здание</b>: клик или Enter. Его клиенты снова начнут ждать.', '<b>Demolish building</b>: click or press Enter. Its customers will wait again.');
     if (this.picked) return L('<b>Выбери свободную клетку</b>: клик или Tab и Enter. Подсвеченное соседство увеличит доход после выпуска.', '<b>Choose a free cell</b>: click, or use Tab and Enter. Highlighted neighbors increase income after release.');
     const task = activeWork(run) ?? run.tasks.find((entry) => entry.status === 'queued');
     if (task?.status === 'queued' && run.money < task.cost) return L(
@@ -1340,8 +1273,8 @@ export class GameScene extends Phaser.Scene {
     if (task && !task.block) return L('Основатель расширяет компанию. <b>Enter — помочь</b>.', 'The founder is expanding the company. <b>Enter to help</b>.');
     if (customerCount(run) === 0) return L('После выпуска ядра и лендинга придут первые клиенты. <b>Продвижение</b> пополняет воронку, нужные функции помогают им остаться.', 'The first clients arrive after core and landing ship. <b>Promotion</b> fills the funnel; useful features help them stay.');
     if (net < 0) return L(
-      'До прибыли не хватает <b>' + rate(-net) + '/с</b>. Открой облако: посмотри потребности и прогноз тарифа перед повышением цены.',
-      '<b>' + rate(-net) + '/s</b> short of profit. Open a cloud to inspect needs and forecast the tariff before raising it.',
+      `До прибыли не хватает <b>${rate(-net)}${PER_S}</b>. Нажми <b>«Клиенты»</b> на карте или на их здания: там запросы, сроки и выручка.`,
+      `<b>${rate(-net)}${PER_S}</b> short of profit. Click <b>“Clients”</b> on the map or their buildings for needs, deadlines and revenue.`,
     );
     if (run.sprint === TUNING.last_sprint) return L(
       '<em>Последний спринт</em> · выпусти готовые улучшения. После релиза — итог компании.',

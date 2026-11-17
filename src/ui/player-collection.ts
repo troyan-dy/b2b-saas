@@ -99,7 +99,7 @@ export function createPlayerCollection(
   back.textContent = L('← В меню', '← Back to menu');
   const hint = document.createElement('span');
   hint.className = 'pc-footer-hint';
-  hint.innerHTML = `<kbd>Esc</kbd> ${L('назад', 'back')} · <kbd>←</kbd><kbd>→</kbd> ${L('разделы', 'sections')}`;
+  hint.innerHTML = `<kbd>Esc</kbd> ${L('пауза', 'pause')} · <kbd>←</kbd><kbd>→</kbd> ${L('разделы', 'sections')}`;
   foot.replaceChildren(back, hint);
   const tabs = [...root.querySelectorAll<HTMLButtonElement>('[data-section]')];
   const filterButtons = [...root.querySelectorAll<HTMLButtonElement>('[data-filter]')];
@@ -160,12 +160,6 @@ export function createPlayerCollection(
   tabs[0]?.focus({ preventScroll: true });
   return {
     key(event: KeyboardEvent): void {
-      if (event.code === 'Escape') {
-        event.preventDefault();
-        event.stopPropagation();
-        close();
-        return;
-      }
       const target = event.target as HTMLElement;
       const digit = /^(?:Digit|Numpad)([1-9])$/.exec(event.code);
       if (digit && Number(digit[1]) <= tabs.length) {

@@ -12,10 +12,12 @@ import './game/pitch.css';
 import { readArgs } from './core/args';
 import { L, LANG } from './core/lang';
 import { installMetrics } from './core/metrics';
-import { nextTrack, setMusicOn, setTrack, startMusic, trackTitle } from './core/music';
+import { startMusic } from './core/music';
+import { afterGameTime } from './core/pause-clock';
+import { installPause } from './ui/pause';
 import { createRng } from './core/rng';
 import { loadSettings, saveSettings, type Settings } from './core/settings';
-import { playSound, setSoundOn, unlockSound } from './core/sound';
+import { playSound, unlockSound } from './core/sound';
 import { ending, menu, mixIdea } from './game/flow';
 import { packSale } from './game/sale';
 import { GameScene } from './game/GameScene';
@@ -41,6 +43,8 @@ document
   ?.setAttribute('content', L('B2B SaaS — тайкун про то, как в одиночку собрать свой стартап на ИИ', 'B2B SaaS — a tycoon about building your own AI startup single-handedly'));
 installMetrics();
 
+const settings = loadSettings();
+const pause = installPause(settings);
 const rng = createRng(args.seed);
 const stage = document.getElementById('stage')!;
 const ui = document.getElementById('ui')!;
@@ -113,30 +117,6 @@ function switchLanguage(settings: Settings): void {
 
 /** The whole game: the terminal with the menu and the idea, the run on the sheet, the ending in the terminal. */
 async function play(): Promise<void> {
-  const settings = loadSettings();
-  // one place switches the sound: the menu and the pause card both come here
-  const audio = {
-    get sound(): boolean {
-      return settings.sound;
-    },
-    get music(): boolean {
-      return settings.music;
-    },
-    get track(): string {
-      return trackTitle(settings.track);
-    },
-    toggle(what: 'sound' | 'music' | 'track'): void {
-      if (what === 'track') settings.track = nextTrack(settings.track);
-      else settings[what] = !settings[what];
-      setSoundOn(settings.sound);
-      setTrack(settings.track);
-      setMusicOn(settings.music);
-      saveSettings(settings);
-    },
-  };
-  setSoundOn(settings.sound);
-  setTrack(settings.track);
-  setMusicOn(settings.music);
   const meta = loadMeta();
   const persistent = !(__TOOLS__ && (args.gym !== '' || args.bot || args.capture));
   const saved = persistent ? loadRun() : null;
@@ -170,7 +150,7 @@ async function play(): Promise<void> {
   }
   if (!takeAgain() || args.menu || saved) {
     for (;;) {
-      const choice = await menu(term, meta, audio, __VERSION__, saved);
+      const choice = await menu(term, meta, __VERSION__, saved);
       if (choice === 'continue') {
         if (!saved) continue;
         selected = saved;
@@ -183,7 +163,7 @@ async function play(): Promise<void> {
         // the page is leaving: nothing more is asked on this one
         return;
       }
-      audio.toggle(choice);
+      await pause.open();
     }
   }
   if (!selected) {
@@ -213,6 +193,7 @@ async function play(): Promise<void> {
   };
   let finished = false;
   const scene = new GameScene(run, rng, paper, {
+    onHidden: () => void pause.open(),
     restored,
     bestValuation: meta.runs.reduce((best, entry) => Math.max(best, entry.value ?? 0), 0),
     // the bot is a tool of the gyms and captures: the release has no code path to it
@@ -220,18 +201,18 @@ async function play(): Promise<void> {
     onEnd: (r: Run) => {
       if (finished) return;
       finished = true;
+      pause.setQuit(null);
       stopSaving();
       finishRun(r);
       // the last frame of the startup stays on the sheet for a moment, then the terminal takes over
       if (r.over === 'sold') void packSale(over, r).then(showResult);
-      else window.setTimeout(() => void showResult(), 1400);
+      else afterGameTime(() => void showResult(), 1400);
     },
-    onQuit: () => {
-      persist();
-      stopSaving();
-      reload(false);
-    },
-    audio,
+  });
+  pause.setQuit(() => {
+    persist();
+    stopSaving();
+    reload(false);
   });
   scene.speed = args.speed;
   if (__TOOLS__ && args.debug) mountGymKeys(scene, run, true);
@@ -255,16 +236,18 @@ else if (__TOOLS__ && args.gym === 'build') {
   const paper = createPaper(under, over);
   const term = createTerminal(over, (name) => playSound(name));
   const scene = new GameScene(run, rng, paper, {
+    onHidden: () => void pause.open(),
     beforeStep: args.bot ? (r) => playBot(r, style) : undefined,
     // the gym shows the ending too, but writes nothing into the founder's record
     onEnd: (r: Run) => {
       const meta = emptyMeta();
       recordResult(r, meta);
-      window.setTimeout(() => void ending(term, restoreResult(meta)!, meta, false).then(() => window.location.reload()), 1400);
+      afterGameTime(() => void ending(term, restoreResult(meta)!, meta, false).then(() => window.location.reload()), 1400);
     },
-    onQuit: () => window.location.reload(),
+
   });
   scene.speed = args.speed;
+  pause.setQuit(() => window.location.reload());
   mountGymKeys(scene, run, args.debug);
   window.__GAME__.run = run;
   start(scene);

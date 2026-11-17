@@ -6,9 +6,22 @@ export function enableMapPan(top: HTMLElement, move: (dx: number, dy: number) =>
   top.prepend(surface);
   const controls = document.createElement('div');
   controls.className = 'bl-map-controls';
-  controls.innerHTML = '<span>' + L('Перетащи карту', 'Drag map') + '</span><button type="button">⌖ ' + L('К компании', 'Centre on company') + '</button>';
+  controls.innerHTML = '<span>' + L('Двигай карту мышью или стрелками', 'Drag the map or use the arrows') + '</span>';
   top.append(controls);
-  controls.querySelector('button')!.onclick = centre;
+  const control = (label: string, title: string, action: () => void) => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.textContent = label;
+    button.title = title;
+    button.setAttribute('aria-label', title);
+    button.onclick = action;
+    controls.append(button);
+  };
+  control('←', L('Карта влево', 'View left'), () => move(180, 0));
+  control('↑', L('Карта вверх', 'View up'), () => move(0, 140));
+  control('↓', L('Карта вниз', 'View down'), () => move(0, -140));
+  control('→', L('Карта вправо', 'View right'), () => move(-180, 0));
+  control('⌖ ' + L('К компании', 'Centre on company'), L('Вернуться к компании', 'Centre on company'), centre);
 
   const mapTarget = (e: Event) => (e.target as Element).closest('.bl-pan-surface,.bl-cell,.bl-tag,.client-city');
   let id = -1, x = 0, y = 0, dragging = false, suppress = false;

@@ -69,6 +69,8 @@ export interface WorkbenchSegment {
   readonly delta: number;
   readonly leads: number;
   readonly market: number;
+  readonly marketIncome: number;
+  readonly contractIncome: number;
   /** Current and proposed absolute tariff multipliers, not a percentage change. */
   readonly price: number;
   readonly previewPrice: number;
@@ -497,12 +499,19 @@ export function createWorkbench(
     button('select-segment', 'medium', L('Средние', 'Medium')) +
     button('select-segment', 'large', L('Крупные', 'Large')) +
     '</nav><div class="wb-panel-scroll wb-client-content"><p class="wb-client-count"></p>' +
+    '<p class="wb-current-price wb-client-revenue"></p>' +
+    '<section class="wb-contracts"><h3>' +
+    L('Именные договоры', 'Named contracts') +
+    '</h3><p>' +
+    L('У каждого договора свой чек. Выпускай нужные им функции до срока, чтобы сохранить выручку.',
+      'Each contract pays its own rate. Ship its requested features on time to keep the revenue.') +
+    '</p><ul></ul></section>' +
     '<div class="wb-happiness"><span></span><meter min="0" max="100"></meter></div>' +
     '<section class="wb-client-needs"><h3>' +
     L('Что им нужно', 'What they need') +
     '</h3><p class="wb-reasons"></p><ul class="wb-needs"></ul></section>' +
     '<section class="wb-price"><label for="wb-price">' +
-    L('Тариф', 'Tariff') +
+    L('Общий тариф', 'Shared tariff') +
     '<output for="wb-price"></output></label>' +
     '<input id="wb-price" type="range" min="0.75" max="2.5" step="0.05" data-wb-price="small">' +
     '<p class="wb-current-price"></p><p class="wb-forecast" role="status"></p>' +
@@ -514,14 +523,6 @@ export function createWorkbench(
       'wb-primary',
     ) +
     '</section>' +
-    '<section class="wb-contracts"><h3>' +
-    L('Именные договоры', 'Named contracts') +
-    '</h3><p>' +
-    L(
-      'Их фиксированные тарифы считаются отдельно. Ползунок выше на них не влияет.',
-      'Their fixed tariffs are counted separately. The slider above does not affect them.',
-    ) +
-    '</p><ul></ul></section>' +
     '<p class="wb-market-numbers"></p></div>';
   over.append(clientPanel);
 
@@ -602,12 +603,10 @@ export function createWorkbench(
   };
   function renderCatalog(): void {
     if (!view || view.draft) return;
-    const builds = view.modules.filter((module) => module.action === 'place' && (!module.disabled || module.needsLand));
-    const upgrades = view.modules.filter((module) => module.action === 'upgrade' && !module.disabled);
-    const requested = upgrades.filter((module) => module.reason);
-    const available = [...(requested.length ? requested : builds.length ? [] : upgrades), ...builds]
+    const available = view.modules
       .filter((module) => category === 'all' || module.category === category)
-      .sort((a, b) => Number(Boolean(b.reason)) - Number(Boolean(a.reason)));
+      .sort((a, b) => Number(a.disabled) - Number(b.disabled) ||
+        Number(Boolean(b.reason)) - Number(Boolean(a.reason)));
     for (const tab of root.querySelectorAll<HTMLButtonElement>('.wb-category-tab')) tab.setAttribute('aria-pressed', String(tab.dataset.wbId === category));
     const office = view.office;
     html(find('.wb-office'), plotControl(office));
@@ -631,25 +630,6 @@ export function createWorkbench(
   clientPanel.addEventListener('keydown', (event) => {
     if ((event.target as HTMLElement).closest('button, input')) event.stopPropagation();
   });
-  window.addEventListener(
-    'keydown',
-    (event) => {
-      if (
-        !view ||
-        over.style.visibility === 'hidden' ||
-        event.altKey ||
-        event.ctrlKey ||
-        event.metaKey
-      )
-        return;
-      if (!view.draft && view.panel && event.code === 'Escape') {
-        event.preventDefault();
-        event.stopImmediatePropagation();
-        send({ type: 'close-panel' });
-      }
-    },
-    true,
-  );
 
   function updateSegment(segment: WorkbenchSegment): void {
     const changed = clientId !== segment.id;
@@ -665,6 +645,10 @@ export function createWorkbench(
         whole(segment.count) + ' companies · ' + signed(segment.delta) + ' this sprint',
       ),
     );
+    text(find('.wb-client-revenue'), L(
+      `Выручка сейчас · договоры ${rate(segment.contractIncome)}${PER_S} · общий тариф ${rate(segment.marketIncome)}${PER_S}`,
+      `Revenue now · contracts ${rate(segment.contractIncome)}${PER_S} · shared tariff ${rate(segment.marketIncome)}${PER_S}`,
+    ));
     text(
       find('.wb-happiness span'),
       L('Довольство ', 'Satisfaction ') + whole(segment.happiness) + '/100',
@@ -708,10 +692,10 @@ export function createWorkbench(
     if (changed || document.activeElement !== input) input.value = String(segment.previewPrice);
     text(find('.wb-price output'), multiplier(Number(input.value)));
     text(
-      find('.wb-current-price'),
+      find('.wb-price .wb-current-price'),
       L('Сейчас ', 'Current ') +
         multiplier(segment.price) +
-        (segment.priceLabel ? ' · ' + segment.priceLabel : ''),
+        (segment.priceLabel ? ' · ' + segment.priceLabel + L(' с компании', ' per company') : ''),
     );
     text(find('.wb-forecast'), segment.forecast);
     const confirm = find<HTMLButtonElement>('[data-wb-action="confirm-price"]');

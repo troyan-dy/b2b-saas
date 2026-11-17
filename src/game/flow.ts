@@ -12,21 +12,15 @@ import { playerCollectionSummary, playerCollectionView } from '../ui/player-coll
 
 /** What the player does outside a run: the menu, the idea, the ending, the résumé. All of it in the terminal. */
 
-export interface MenuState {
-  readonly sound: boolean;
-  readonly music: boolean;
-  /** the name of the background loop */
-  readonly track: string;
-}
 
-export type MenuChoice = 'start' | 'continue' | 'sound' | 'music' | 'track' | 'lang';
+export type MenuChoice = 'start' | 'continue' | 'settings' | 'lang';
 
 const RESUME = L('Резюме основателя', 'Founder’s résumé');
 const NEW_STARTUP = L('Новый стартап', 'New startup');
 const BACK = L('назад', 'back');
 const CLAUDE = L('<b>❯ Клод</b>', '<b>❯ Claude</b>');
 
-export async function menu(term: Terminal, meta: Meta, state: MenuState, version: string, saved: Run | null = null): Promise<MenuChoice> {
+export async function menu(term: Terminal, meta: Meta, version: string, saved: Run | null = null): Promise<MenuChoice> {
   for (;;) {
     term.clear();
     term.print('B2B SaaS', 'big');
@@ -44,12 +38,11 @@ export async function menu(term: Terminal, meta: Meta, state: MenuState, version
       },
       { title: L('Коллекция карт', 'Card collection'), note: playerCollectionSummary(meta) },
       { title: RESUME, note: meta.runs.length > 0 ? L(`стартапов: ${meta.runs.length}`, `startups: ${meta.runs.length}`) : L('пока пустое', 'empty so far') },
-      { title: L(`Звук: ${state.sound ? 'включён' : 'выключен'}`, `Sound: ${state.sound ? 'on' : 'off'}`) },
-      { title: L(`Музыка: ${state.music ? 'включена' : 'выключена'}`, `Music: ${state.music ? 'on' : 'off'}`) },
-      { title: L(`Трек: ${state.track}`, `Track: ${state.track}`), note: L('Enter — следующий', 'Enter — next') },
+      { title: L('Настройки звука', 'Audio settings'), note: L('Музыка и эффекты', 'Music and effects') },
       { title: L('Титры', 'Credits') },
       // the note is in the other language: whoever cannot read the menu finds the way out of it
       { title: L('Язык: русский', 'Language: English'), note: L('switch to English', 'переключить на русский') },
+      { title: L('Как играть', 'How to play') },
     ];
     const picked = await term.ask(options, L(`версия ${version}`, `version ${version}`));
     if (saved && picked === 0) return 'continue';
@@ -57,16 +50,33 @@ export async function menu(term: Terminal, meta: Meta, state: MenuState, version
     if (k === 0) return 'start';
     if (k === 1) await term.collection(playerCollectionView(meta, saved));
     if (k === 2) await resume(term, meta);
-    if (k === 3) return 'sound';
-    if (k === 4) return 'music';
-    if (k === 5) return 'track';
-    if (k === 6) {
+    if (k === 3) return 'settings';
+    if (k === 4) {
       term.clear();
       term.print(L('Титры', 'Credits'), 'mid');
       for (const line of CREDITS) term.print(line, 'small');
       await term.wait(BACK);
     }
-    if (k === 7) return 'lang';
+    if (k === 5) return 'lang';
+    if (k === 6) {
+      term.clear();
+      term.print(L('Как играть', 'How to play'), 'mid');
+      for (const line of L(
+        [
+          'Выбери три карты питча, затем поставь ядро, лендинг и оплату на свободные клетки.',
+          'Готовые блоки включаются на релизе. Нажми «Кодить», чтобы помочь агентам.',
+          'Кликни по зданиям клиентов, чтобы увидеть запросы и сроки. Именные договоры платят отдельно от общего тарифа.',
+          'Подписки дают выручку. Чистый поток под балансом учитывает расходы. Выйди в плюс к финалу или продай компанию.',
+        ],
+        [
+          'Pick three pitch cards, then place the core, landing page and payments on free cells.',
+          'Finished blocks go live at release. Press “Code” to help your agents.',
+          'Click the customer buildings to see needs and deadlines. Named contracts pay separately from the shared tariff.',
+          'Subscriptions bring in revenue. Net cash flow below the balance includes expenses. Turn a profit by the final release or sell the company.',
+        ],
+      )) term.print(line, 'small');
+      await term.wait(BACK);
+    }
   }
 }
 
@@ -145,15 +155,7 @@ export async function mixIdea(
     },
   });
   term.clear();
-  await term.type(
-    [
-      L(
-        '❯ Опишите стартап в трёх словах. Слово первое: какой у нас ИИ?',
-        '❯ Describe the startup in three words. Word one: what kind of AI is it?',
-      ),
-    ],
-    '',
-  );
+  term.print(L('Питч 1/3 · Выбери карту ИИ', 'Pitch 1/3 · Choose an AI card'), 'mid');
   const techCards = (): Card[] =>
     draft.hands.tech.map((c) => ({
       kicker: L('какой ИИ', 'what kind of AI'),
@@ -166,7 +168,7 @@ export async function mixIdea(
 
   term.clear();
   term.print(L(`${tech.adj} ИИ-…`, `${tech.adj} AI …`), 'mid');
-  await term.type([L('Слово второе: на что это похоже?', 'Word two: what is it like?')], '');
+  term.print(L('Питч 2/3 · Выбери карту продукта', 'Pitch 2/3 · Choose a product card'), 'dim');
   const formCards = (): Card[] =>
     draft.hands.form.map((c) => ({
       kicker: L('на что похоже', 'what it is like'),
@@ -179,7 +181,7 @@ export async function mixIdea(
 
   term.clear();
   term.print(L(`${tech.adj} ИИ-${form.name} для…`, `${tech.adj} AI ${form.name} for…`), 'mid');
-  await term.type([L('Слово третье: кому это продаём?', 'Word three: who do we sell it to?')], '');
+  term.print(L('Питч 3/3 · Выбери карту аудитории', 'Pitch 3/3 · Choose an audience card'), 'dim');
   const audCards = (): Card[] =>
     draft.hands.aud.map((c) => ({
       kicker: L('кому продаём', 'who we sell to'),
@@ -252,8 +254,8 @@ export async function mixIdea(
       'Sounds like a startup. We have no investors — we have your savings.',
     ),
     L(
-      `Их хватит минут на ${minutes}, если ничего не продадим.`,
-      `They will last about ${minutes} minutes if we sell nothing.`,
+      `Со стартовым агентом за работой и без выручки базового запаса хватит примерно на ${minutes} мин. Текущий прогноз будет под балансом.`,
+      `With the starting agent working and no revenue, base savings last about ${minutes} min. See the live estimate below the balance.`,
     ),
     L(
       `У тебя ${TUNING.last_sprint} спринтов. Выйди в плюс к последнему релизу или продай компанию. При сбое поставщика нужны два прибыльных релиза подряд перед финалом и прибыльный поток после восстановления.`,
@@ -290,41 +292,18 @@ export async function mixIdea(
   }
   await term.type(lines, '');
   if (meta.runs.length === 0) {
-    // the first startup: how the sheet works, in four lines — the rest is taught on the sheet itself
     term.print('');
-    term.print(L('как это устроено:', 'how it works:'), 'dim small');
     term.print(
       L(
-        '1. Справа — блоки. Выбери блок, потом клетку на чертеже.',
-        '1. Blocks are on the right. Pick a block, then a cell on the blueprint.',
+        'Начни с ядра, лендинга и приёма оплаты. Выбери блок справа и поставь на свободную клетку.',
+        'Start with the core, landing page and payments. Pick a block on the right and place it on a free cell.',
       ),
       'small',
     );
     term.print(
       L(
-        '2. Задачи идут по очереди. Улучшения остаются в своих зданиях. Enter — помочь руками.',
-        '2. Tasks share one queue. Upgrades stay in their buildings. Enter helps with the work.',
-      ),
-      'small',
-    );
-    term.print(
-      L(
-        `3. Каждые ${TUNING.sprint_s} секунды релиз и выбор одной из трёх карт. На выборе время стоит.`,
-        `3. Every ${TUNING.sprint_s} seconds: release and a choice of three cards. Time pauses for the choice.`,
-      ),
-      'small',
-    );
-    term.print(
-      L(
-        '4. Клиенты придут после ядра и лендинга. Платить начнут после «Приёма оплаты».',
-        '4. Clients come after the core and the landing page. They start paying after “Payments”.',
-      ),
-      'small',
-    );
-    term.print(
-      L(
-        '5. Ты один и проверяешь одно направление: там работа идёт быстрее и чище.',
-        '5. There is one of you, and you review one lane: work there goes faster and cleaner.',
+        `Готовые блоки включаются на релизе каждые ${TUNING.sprint_s} секунды. Оплата на релизе запускает подписки.`,
+        `Finished blocks go live at release every ${TUNING.sprint_s} seconds. Shipping Payments enables subscriptions.`,
       ),
       'small',
     );

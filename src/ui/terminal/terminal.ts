@@ -1,3 +1,4 @@
+import { afterGameTime } from '../../core/pause-clock';
 import './terminal.css';
 import { L } from '../../core/lang';
 import { createPlayerCollection, type CollectionView } from '../player-collection';
@@ -94,7 +95,7 @@ export function createTerminal(root: HTMLElement, sound: (name: 'ui' | 'yes') =>
       return new Promise((resolve) => {
         el.classList.remove('enter');
         el.classList.add('leave');
-        window.setTimeout(() => {
+        afterGameTime(() => {
           el.classList.remove('on', 'leave');
           resolve();
         }, 900);
@@ -114,9 +115,9 @@ export function createTerminal(root: HTMLElement, sound: (name: 'ui' | 'yes') =>
         const targets = lines.map((html) => ({ p: line('', cls), html }));
         let k = 0;
         let n = 0;
-        let timer = 0;
+        let cancelTick: (() => void) | undefined;
         const finish = (): void => {
-          window.clearInterval(timer);
+          cancelTick?.();
           for (const t of targets) t.p.innerHTML = t.html;
           onKey = null;
           onClick = null;
@@ -135,8 +136,9 @@ export function createTerminal(root: HTMLElement, sound: (name: 'ui' | 'yes') =>
             k++;
             n = 0;
           } else t.p.textContent = plain.slice(0, n);
+          cancelTick = afterGameTime(tick, TYPE_MS);
         };
-        timer = window.setInterval(tick, TYPE_MS);
+        cancelTick = afterGameTime(tick, TYPE_MS);
         onKey = () => finish();
         onClick = () => finish();
       });
@@ -165,7 +167,7 @@ export function createTerminal(root: HTMLElement, sound: (name: 'ui' | 'yes') =>
           sound('yes');
           // the chosen line flashes inverted for two frames, then the answer goes
           rows[k].classList.add('hit');
-          window.setTimeout(() => {
+          afterGameTime(() => {
             rows[k].classList.remove('hit');
             foot.innerHTML = '';
             resolve(k);
@@ -263,7 +265,7 @@ export function createTerminal(root: HTMLElement, sound: (name: 'ui' | 'yes') =>
           // Owned perks stay visible: choosing the extra boost never discards the collection.
           if (!options.confirm) box.classList.add('done');
           foot.innerHTML = '';
-          window.setTimeout(() => resolve(k), 420);
+          afterGameTime(() => resolve(k), 420);
         };
         const choose = (k: number): void => {
           if (!options.confirm) return pick(k);

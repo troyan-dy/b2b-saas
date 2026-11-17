@@ -21,6 +21,7 @@ const VOLUME = 0.3;
 let audio: HTMLAudioElement | null = null;
 let track = TRACKS[0];
 let wanted = true;
+let level = 100;
 let started = false;
 
 function apply(): void {
@@ -28,15 +29,16 @@ function apply(): void {
   if (!audio) {
     audio = new Audio(track.file);
     audio.loop = true;
-    audio.volume = VOLUME;
   }
+  audio.volume = VOLUME * level / 100;
   if (wanted) void audio.play().catch(() => undefined); // no audio device or the browser said no: the game goes on in silence
   else audio.pause();
 }
 
 /** The «Музыка» switch of the menu. */
-export function setMusicOn(on: boolean): void {
+export function setMusicOn(on: boolean, percent = 100): void {
   wanted = on;
+  level = percent;
   apply();
 }
 

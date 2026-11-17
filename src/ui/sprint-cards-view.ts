@@ -3,7 +3,7 @@ import { BLOCK_BY_ID } from '../content/blocks';
 import { LESSONS, TRAITS, traitGives } from '../systems/meta/meta';
 import { DRAFT_CARDS, previewCardChange, type CardChange, type DraftCard } from '../systems/run/draft';
 import { PRODUCTION, strategyCount, type StrategyId } from '../systems/run/product';
-import { TUNING, type Run } from '../systems/run/run';
+import { netPerS, TUNING, type Run } from '../systems/run/run';
 import { dec, money, PER_S, rate, whole } from './format';
 import type { SprintCardsView, SprintCardView } from './sprint-cards';
 
@@ -256,8 +256,8 @@ export function sprintCardsView(
           limit: TUNING.last_sprint,
           promises,
           firstSubscriptions: report?.firstSubscriptions ? L(
-            `Первые подписки: ${rate(report.mrr / TUNING.sprint_s)}${PER_S} выручки`,
-            `First subscriptions: ${rate(report.mrr / TUNING.sprint_s)}${PER_S} in revenue`,
+            `Первые подписки · выручка ${rate(report.mrr / TUNING.sprint_s)}${PER_S} · после расходов ${rate(netPerS(run))}${PER_S}`,
+            `First subscriptions · revenue ${rate(report.mrr / TUNING.sprint_s)}${PER_S} · after expenses ${rate(netPerS(run))}${PER_S}`,
           ) : undefined,
           cards: run.draft.flatMap((id) => {
             const card = DRAFT_CARDS.find((entry) => entry.id === id);
