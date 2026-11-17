@@ -133,7 +133,9 @@ export function createPaper(under: HTMLElement, over: HTMLElement): Paper {
   let shelfSig = '';
   let cellSig = '';
   let choosingCell = false;
-  let cellOrigin = '';
+  let keyboardInput = true;
+  document.addEventListener('keydown', () => { keyboardInput = true; }, true);
+  top.addEventListener('pointerdown', () => { keyboardInput = false; }, true);
   let callSig = '';
   let shelfSections: readonly ShelfSection[] = [];
   const cards = createSprintCards(top, (id) => paper.onWorkbench({ type: 'choose-card', id }));
@@ -253,7 +255,7 @@ export function createPaper(under: HTMLElement, over: HTMLElement): Paper {
       const active = workbench.active;
       const selectedCell = cellLayer.contains(document.activeElement) ? document.activeElement as HTMLElement : null;
       workbench.set(view);
-      if (choosingCell && !view?.draft && selectedCell && document.activeElement !== selectedCell)
+      if (keyboardInput && choosingCell && !view?.draft && selectedCell && document.activeElement !== selectedCell)
         selectedCell.focus({ preventScroll: true });
       shelfBody.inert = Boolean(view?.draft);
       cellLayer.inert = Boolean(view?.draft);
@@ -316,15 +318,15 @@ export function createPaper(under: HTMLElement, over: HTMLElement): Paper {
       const focused = document.activeElement as HTMLElement | null;
       const previous = focused?.dataset.c;
       const choosing = cells.some(c => c.id.includes(',') || c.id.startsWith('x:'));
-      if (choosing && !choosingCell) cellOrigin = focused?.dataset.wbKey ?? '';
       cellLayer.innerHTML = cells
         .map((c) => `<button type="button" class="bl-cell${c.pulse ? ' pulse' : ''}" aria-label="${L('Карта','Map')} · ${c.id}" data-c="${c.id}" style="left:${Math.round(c.x)}px;top:${Math.round(c.y)}px"></button>`)
         .join('');
-      if (!choosing && choosingCell && previous) {
+      if (keyboardInput && !choosing && choosingCell && previous) {
+        const site = previous.includes(',') ? cellLayer.querySelector<HTMLElement>('[data-c="site"]') : null;
         const fromDemolition = previous.startsWith('x:') ? shop.querySelector<HTMLElement>(`[data-wb-action="inspect-module"][data-wb-id="${CSS.escape(previous.slice(2))}"]`) : null;
-        const origin = shop.querySelector<HTMLElement>(`[data-wb-key="${CSS.escape(cellOrigin)}"]:not(:disabled)`);
-        (fromDemolition ?? (origin?.offsetWidth ? origin : null) ?? shop.querySelector<HTMLElement>('.wb-category-tab'))?.focus({ preventScroll: true });
-      } else if (previous || (choosing && !choosingCell)) {
+        // Placement removes its catalog button on the next refresh. The active site stays operable.
+        (site ?? fromDemolition ?? shop.querySelector<HTMLElement>('.wb-category-tab'))?.focus({ preventScroll: true });
+      } else if (keyboardInput && (previous || (choosing && !choosingCell))) {
         (cellLayer.querySelector<HTMLElement>(`[data-c="${CSS.escape(previous ?? '')}"]`) ?? cellLayer.querySelector('button'))?.focus({ preventScroll: true });
       }
       choosingCell = choosing;
