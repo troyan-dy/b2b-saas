@@ -17,7 +17,7 @@ const FRAMES = { '1-idea': 1, '2-kitchen': 7, '3-clients': 16, '4-call': 22, '5-
 const QUALITY = 0.9;
 const what = process.argv[2] ?? 'all';
 
-const browser = await chromium.launch();
+const browser = await chromium.launch({ args: ['--mute-audio'] });
 const page = await browser.newPage();
 
 /** PNG bytes → a WebP file: the browser's own encoder, nothing to install */

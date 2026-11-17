@@ -181,7 +181,7 @@ for (const f of fs.readdirSync(OUT)) {
   if (/^frame_\d+\.png$/.test(f) || f === 'sheet.png' || f === 'metrics.json') fs.rmSync(path.join(OUT, f));
 }
 
-const launchOpts = { headless: !opts.headed };
+const launchOpts = { headless: !opts.headed, args: ['--mute-audio'] };
 if (process.env.PW_CHROMIUM) launchOpts.executablePath = process.env.PW_CHROMIUM;
 let browser;
 try {
