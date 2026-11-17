@@ -1,9 +1,9 @@
 import { L } from '../core/lang';
 import { BLOCK_BY_ID } from '../content/blocks';
 import { LESSONS, TRAITS, traitGives } from '../systems/meta/meta';
-import { DRAFT_CARDS, operationDelta, type DraftCard } from '../systems/run/draft';
+import { DRAFT_CARDS, previewCardChange, type CardChange, type DraftCard } from '../systems/run/draft';
 import { PRODUCTION, strategyCount, type StrategyId } from '../systems/run/product';
-import { tokens, tokensAfterProcessingCard, TUNING, type Run } from '../systems/run/run';
+import { TUNING, type Run } from '../systems/run/run';
 import { dec, whole } from './format';
 import type { SprintCardsView, SprintCardView } from './sprint-cards';
 
@@ -23,13 +23,17 @@ export const SPRINT_CARD_ART: Record<string, string> = {
 const blockName = (id: string): string => BLOCK_BY_ID[id]?.name ?? id;
 const points = (value: number): string => dec(Math.round(value * 10) / 10);
 
-function operationImpact(run: Run, card: DraftCard): string {
-  const delta = operationDelta(run, card);
-  if (card.debt !== undefined)
-    return L(`Техдолг ${points(run.debt)} → ${points(run.debt + delta.debt)}`, `Tech debt ${points(run.debt)} → ${points(run.debt + delta.debt)}`);
-  if (card.energy !== undefined)
-    return L(`Силы ${points(run.energy)} → ${points(run.energy + delta.energy)}`, `Energy ${points(run.energy)} → ${points(run.energy + delta.energy)}`);
-  return card.impact.replace(/^(Сразу:|Now:)\s*/, '');
+export function cardChangeText(change: CardChange): string {
+  const summary = `${points(change.before)} → ${points(change.after)}`;
+  switch (change.kind) {
+    case 'debt': return L(`Техдолг ${summary}`, `Tech debt ${summary}`);
+    case 'energy': return L(`Силы ${summary}`, `Energy ${summary}`);
+    case 'tokens':
+      return L(
+        `Токены: $${points(change.before)} → $${points(change.after)}/спринт`,
+        `Tokens: $${points(change.before)} → $${points(change.after)}/sprint`,
+      );
+  }
 }
 
 function stackEffects(id: StrategyId, count: number) {
@@ -112,15 +116,9 @@ function cardView(run: Run, card: DraftCard, choosing = false): SprintCardView {
   const benefits = effects
     .filter((effect) => effect.good && effect !== primary)
     .map((effect) => effect.text);
-  const processing = choosing && (id === 'batch' || id === 'instant') ? id : null;
-  const penalties = effects.filter((effect) => !effect.good && !(processing && effect.key === 'tokens')).map((effect) => effect.text);
-  const tokenImpact = processing
-    ? L(
-      `Токены: $${points(tokens(run))} → $${points(tokensAfterProcessingCard(run, processing))}/спринт`,
-      `Tokens: $${points(tokens(run))} → $${points(tokensAfterProcessingCard(run, processing))}/sprint`,
-    )
-    : '';
-  if (processing === 'instant') penalties.unshift(tokenImpact);
+  const change = choosing ? previewCardChange(run, card) : undefined;
+  const penalties = effects.filter((effect) => !effect.good && !(change?.kind === 'tokens' && effect.key === 'tokens')).map((effect) => effect.text);
+  if (id === 'instant' && change) penalties.unshift(cardChangeText(change));
   if (host) penalties.push(L(`+$${whole(host)}/спринт хостинг`, `+$${whole(host)}/sprint hosting`));
   return {
     id: card.id,
@@ -129,13 +127,11 @@ function cardView(run: Run, card: DraftCard, choosing = false): SprintCardView {
     category,
     description: card.description,
     impact:
-      processing === 'batch'
-        ? tokenImpact
-        : choosing && !persistent
-          ? operationImpact(run, card)
-          : choosing && before && after
-            ? `${before.number} → ${after.number} ${after.label}`
-            : (primary?.text ?? card.impact.replace(/^(Сразу:|Now:)\s*/, '')),
+      change && id !== 'instant'
+        ? cardChangeText(change)
+        : choosing && before && after
+          ? `${before.number} → ${after.number} ${after.label}`
+          : (primary?.text ?? card.impact.replace(/^(Сразу:|Now:)\s*/, '')),
     benefits,
     penalties,
     level: persistent ? level : undefined,
@@ -236,9 +232,10 @@ export function sprintCardsView(
             return card?.level
               ? [
                   L(`Уровень ${card.level}`, `Level ${card.level}`),
-                  card.impact,
+                  card.id === 'batch' ? applied.impact : card.impact,
+                  ...(card.id === 'instant' ? [applied.impact] : []),
                   ...(card.benefits ?? []),
-                  ...(card.penalties ?? []),
+                  ...(card.penalties ?? []).filter((penalty) => card.id !== 'instant' || !penalty.endsWith(L('стоимость токенов', 'token cost'))),
                 ].join(' · ')
               : applied.impact;
           })(),
