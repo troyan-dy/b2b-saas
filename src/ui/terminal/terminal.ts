@@ -21,6 +21,7 @@ export interface Card {
 }
 
 export interface CardOptions {
+  onPick?(index: number): void;
   confirm?: string;
   reroll?: {
     remaining: number;
@@ -254,6 +255,7 @@ export function createTerminal(root: HTMLElement, sound: (name: 'ui' | 'yes') =>
         const pick = (k: number): void => {
           if (finished) return;
           finished = true;
+          options.onPick?.(k);
           onKey = null;
           onClick = null;
           sound('yes');
