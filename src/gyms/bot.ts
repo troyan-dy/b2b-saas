@@ -13,6 +13,7 @@ import {
 import { blockEffects, PRODUCTION, projectCost } from '../systems/run/product';
 import marketEvolution from '../data/balance/market-evolution.json';
 import {
+  activeWork,
   answerCall,
   answerDilemma,
   answerLastChance,
@@ -32,6 +33,7 @@ import {
   friendsAt,
   handy,
   hire,
+  isDemo,
   mrr,
   netPerS,
   place,
@@ -156,7 +158,11 @@ export function playBot(run: Run, style: BotStyle = SENSIBLE): void {
   }
 
   const building = handy(run, 'build');
-  if (run.energy >= TUNING.crunch.max) {
+  const demoWork =
+    isDemo(run) && run.clients.length > 0 && !run.tasks.some((task) => task.status === 'ready')
+      ? activeWork(run)
+      : undefined;
+  if (!demoWork && run.energy >= TUNING.crunch.max) {
     const lane: Lane =
       style.fix && run.debt >= 8
         ? 'fix'
@@ -188,10 +194,15 @@ export function playBot(run: Run, style: BotStyle = SENSIBLE): void {
   const lanes: Lane[] = [];
   if (style.fix && run.debt >= 18) lanes.push('fix');
   if (building) lanes.push('build');
-  if (growth) lanes.push('promo');
+  if (growth && !demoWork) lanes.push('promo');
   if (lanes.length === 0) lanes.push(style.fix && run.debt > 0 ? 'fix' : 'build');
   run.agents.forEach((agent, i) => setLane(run, agent.id, lanes[i % lanes.length]));
   if (run.sprintT === 0) setReview(run, lanes[0]);
+  if (demoWork && style.fix && run.debt >= 18 && run.energy >= TUNING.crunch.max) {
+    crunch(run, 'fix');
+  } else if (demoWork && demoWork.work - demoWork.done > remainingBuildCapacity(run)) {
+    crunch(run, 'build');
+  }
 }
 
 function canFund(run: Run, cost: number, work: number, hosting = 0): boolean {

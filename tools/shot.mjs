@@ -9,7 +9,7 @@ if (!src || !out) {
   console.error('usage: node tools/shot.mjs <file.html> <out.png> [width height]');
   process.exit(2);
 }
-const browser = await chromium.launch();
+const browser = await chromium.launch({ args: ['--mute-audio'] });
 const page = await browser.newPage({ viewport: { width: Number(w), height: Number(h) } });
 const errors = [];
 page.on('pageerror', (e) => errors.push(e.message));
