@@ -7,7 +7,7 @@ import {
   STRATEGY_IDS,
   upgradeWork,
 } from '../src/systems/run/product';
-import { dealDraft, DRAFT_CARDS, releaseCard } from '../src/systems/run/draft';
+import { dealDraft, DRAFT_CARDS, operationDelta, releaseCard } from '../src/systems/run/draft';
 import { enqueueTask } from '../src/systems/run/production';
 import { playBot } from '../src/gyms/bot';
 import {
@@ -25,6 +25,7 @@ import {
   crunch,
   deferTask,
   demolish,
+  dilemmaOf,
   draftCards,
   expandInfrastructure,
   fire,
@@ -45,6 +46,7 @@ import {
   setReview,
   step,
   tokens,
+  tokensAfterProcessingCard,
   TUNING,
   upgrade,
   workNeed,
@@ -93,6 +95,55 @@ function select(run: Run, id: string): void {
 }
 
 describe('production queue and sprint choices', () => {
+  it.each([0, 2, 10])('forecasts the actual one-off effects with %i points to recover', (points) => {
+    const run = fresh();
+    run.debt = points;
+    run.energy = Math.max(0, TUNING.crunch.max - points);
+    for (const id of ['maintenance', 'rest']) {
+      const card = DRAFT_CARDS.find((entry) => entry.id === id)!;
+      const delta = operationDelta(run, card);
+      const expected = [run.debt + delta.debt, run.energy + delta.energy];
+      select(run, id);
+      expect([run.debt, run.energy]).toEqual(expected);
+    }
+  });
+
+  it.each([0, 20])('forecasts token costs before picking another batch card with %i copies', (copies) => {
+    const run = fresh(['core', 'landing', 'pay']);
+    run.clients = [{
+      id: 1, texture: 'clinic', name: 'Client', type: 'corp', pay: 5000,
+      want: 'core', wantLevel: 1, patience: 3, happy: true, slot: 0, deal: 1, promised: false,
+    }];
+    run.cardStacks.batch = copies;
+    refreshRun(run);
+    const before = tokens(run);
+    const projected = tokensAfterProcessingCard(run, 'batch');
+    expect(copies ? projected === before : projected < before).toBe(true);
+    expect(run.cardStacks.batch).toBe(copies);
+    select(run, 'batch');
+    expect(tokens(run)).toBeCloseTo(projected);
+  });
+
+  it.each([[28, 73], [29, 58], [30, 35]])('shows the cumulative press risk at sprint %i', (sprint, chance) => {
+    const run = fresh();
+    run.sprint = sprint;
+    run.dilemma = { id: 'press', client: 0, name: '' };
+    expect(dilemmaOf(run)?.options[1].note).toContain(`${chance}%`);
+  });
+
+  it.each([0, 1, 2])('reports the actual number of contracts lost when exposed with %i clients', (count) => {
+    const run = fresh(['core', 'landing', 'pay']);
+    run.clients = Array.from({ length: count }, (_, i) => ({
+      id: i + 10, texture: 'clinic', name: `Client ${i}`, type: 'corp', pay: 5000,
+      want: 'core', wantLevel: 1, patience: 3, happy: true, slot: i, deal: 1, promised: false,
+    }));
+    run.dilemma = { id: 'press', client: 0, name: '' };
+    answerDilemma(run, 1);
+    run.risks[0].p = 1;
+    release(run);
+    const exposed = run.events.find((event) => event.type === 'exposed');
+    expect(exposed?.text).toMatch(new RegExp(`(?:Ушло клиентов|Clients who left): ${count}$`));
+  });
   it('grants cash immediately once without creating or charging a production task', () => {
     for (const id of ['consulting', 'credits']) {
       const run = fresh();

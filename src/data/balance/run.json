@@ -39,7 +39,7 @@
   ],
   "stage3_mrr": 1200,
   "valuation": { "every": 4, "base": 20, "per_link": 1.5, "per_level": 1, "per_debt": 0.4, "min": 8, "max": 40, "first_bid": 0.7, "haggle_clean": 0.8, "haggle_debt": 0.6, "haggle_min": 0.2 },
-  "dilemma": { "from_sprint": 3, "chance": 0.8, "no_repeat": 4 },
+  "dilemma": { "from_sprint": 3, "chance": 0.8, "no_repeat": 4, "risk_releases": 3 },
   "demo": { "every": 6, "from_stage": 2, "leads": 3 },
   "hero": { "deal": 1.5, "leads": 1 },
   "logos": { "promo": 0.15, "max": 4 }

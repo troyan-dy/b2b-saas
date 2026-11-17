@@ -741,6 +741,17 @@ export function tokens(run: Run): number {
   return sum;
 }
 
+export function tokensAfterProcessingCard(run: Run, id: 'batch' | 'instant'): number {
+  const projected: Run = {
+    ...run,
+    stats: { ...run.stats },
+    strategy: { ...run.strategy, processing: id },
+    cardStacks: { ...run.cardStacks, [id]: (run.cardStacks[id] ?? 0) + 1 },
+  };
+  refresh(projected);
+  return tokens(projected);
+}
+
 /** An agent is paid for the tokens it burns: one with nothing to do on its lane burns none. */
 export function agentCost(run: Run): number {
   let sum = 0;
@@ -1190,7 +1201,24 @@ export function mortgageSeconds(run: Run): number {
 
 /** the dilemma on the table, with its words and options */
 export function dilemmaOf(run: Run): Dilemma | null {
-  return run.dilemma ? (DILEMMAS.find((d) => d.id === run.dilemma?.id) ?? null) : null;
+  const dilemma = DILEMMAS.find((d) => d.id === run.dilemma?.id) ?? null;
+  if (dilemma?.id !== 'press') return dilemma;
+  const releases = Math.max(0, Math.min(TUNING.dilemma.risk_releases, TUNING.last_sprint - run.sprint + 1));
+  return {
+    ...dilemma,
+    options: dilemma.options.map((option) => {
+      const risk = option.fx.find((effect) => effect.k === 'risk');
+      if (!risk) return option;
+      const percent = Math.round((1 - (1 - risk.p) ** releases) * 100);
+      return {
+        ...option,
+        note: L(
+          `${option.note} · ${percent}% за ${releases} рел. · до ${risk.n} договоров под угрозой`,
+          `${option.note} · ${percent}% over ${releases} release(s) · up to ${risk.n} contracts at risk`,
+        ),
+      };
+    }),
+  };
 }
 
 function fits(run: Run, d: Dilemma): boolean {
@@ -1286,7 +1314,7 @@ export function answerDilemma(run: Run, option: number): void {
           if (run.rng.next() < f.p) walk(c, f.say);
         break;
       case 'risk':
-        run.risks.push({ left: 3, p: f.p, n: f.n, say: f.say, text: f.text });
+        run.risks.push({ left: TUNING.dilemma.risk_releases, p: f.p, n: f.n, say: f.say, text: f.text });
         break;
     }
   }
@@ -1537,8 +1565,13 @@ function release(run: Run): void {
     r.left--;
     if (run.rng.next() >= r.p) continue;
     r.left = 0;
-    run.events.push({ type: 'exposed', text: r.text });
-    for (const c of run.clients.slice(0, r.n)) {
+    const leaving = run.clients.slice(0, r.n);
+    const headline = r.text.replace(/ (Двое клиентов ушли|Two clients left)\.?$/, '');
+    run.events.push({
+      type: 'exposed',
+      text: L(`${headline} · Ушло клиентов: ${leaving.length}`, `${headline} · Clients who left: ${leaving.length}`),
+    });
+    for (const c of leaving) {
       report.left++;
       report.reasons.push('');
       run.stats.left++;

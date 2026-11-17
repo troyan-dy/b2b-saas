@@ -30,6 +30,13 @@ export interface DraftCard {
 
 export const DRAFT_CARDS: DraftCard[] = worded(cardsData as DraftCard[], cardsEn);
 
+export function operationDelta(run: Run, card: DraftCard): { debt: number; energy: number } {
+  return {
+    debt: Math.max(0, run.debt + (card.debt ?? 0)) - run.debt,
+    energy: Math.min(tuning.crunch.max, Math.max(0, run.energy + (card.energy ?? 0))) - run.energy,
+  };
+}
+
 function available(run: Run, card: DraftCard): boolean {
   if (!card.requires.every((kind) => run.live.has(kind))) return false;
   const pending = run.tasks.some((task) => task.kind === 'card' && task.card === card.id);
@@ -100,7 +107,7 @@ export function releaseCard(run: Run, id: string): void {
   }
   run.leads += card.leads ?? 0;
   run.money += card.money ?? 0;
-  if (card.debt !== undefined) run.debt = Math.max(0, run.debt + card.debt);
-  if (card.energy !== undefined)
-    run.energy = Math.min(tuning.crunch.max, Math.max(0, run.energy + card.energy));
+  const delta = operationDelta(run, card);
+  run.debt += delta.debt;
+  run.energy += delta.energy;
 }
