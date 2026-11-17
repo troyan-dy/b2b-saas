@@ -1,4 +1,5 @@
 import './paper.css';
+import { enableMapPan } from './map-pan';
 import { L } from '../core/lang';
 import { createWorkbench, type WorkbenchAction, type WorkbenchView } from './workbench';
 import { createClientCity, type CityView } from './client-city';
@@ -47,6 +48,7 @@ export interface ShelfSection {
   rows?: readonly ShelfKeys[];
 }
 export interface Paper {
+  enableMapPan(move: (dx: number, dy: number) => void, centre: () => void): void;
   /** `sub` is HTML: «<b class="hot">−$31</b> в секунду · денег на 2:13» */
   setMoney(text: string, sub: string, broke?: boolean): void;
   popMoney(): void;
@@ -154,6 +156,7 @@ export function createPaper(under: HTMLElement, over: HTMLElement): Paper {
   const last = { money: '', sub: '', news: '', hint: '', sprint: '', part: -1, zoom: -1, goal: '', ledger: '' };
 
   const paper: Paper = {
+    enableMapPan: (move, centre) => enableMapPan(top, move, centre),
     onShelf: () => undefined,
     onLane: () => undefined,
     onCell: () => undefined,

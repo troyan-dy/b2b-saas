@@ -38,8 +38,16 @@ describe('open market in the company loop', () => {
   it('buys enough building space and finite workspaces with increasing prices', () => {
     const run=fresh();run.money=100000;run.stage=3;
     const first=officeQuote(run,'land')!;
+    const originalCells = cellsMax(run);
+    run.money = first - 1;
+    expect(expandOffice(run, 'land')).toBe(false);
+    expect([run.money, cellsMax(run), run.land]).toEqual([first - 1, originalCells, 0]);
+    run.money = first;
     expect(expandOffice(run,'land')).toBe(true);
+    expect(run.money).toBe(0);
+    expect(cellsMax(run)).toBe(originalCells + OFFICE.land.cells);
     expect(officeQuote(run,'land')).toBeGreaterThan(first);
+    run.money = 100000;
     while(expandOffice(run,'land')) { /* buy the finite plot */ }
     expect(cellsMax(run)).toBe(run.pool.length+3);
     for (const kind of ['core', 'landing', 'pay', ...run.pool]) {

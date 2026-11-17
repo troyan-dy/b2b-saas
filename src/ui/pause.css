@@ -1,0 +1,24 @@
+.pause-dialog {
+  margin: auto;
+  box-sizing: border-box;
+  width: min(440px, 92vw);
+  max-height: 90vh;
+  padding: 26px 30px;
+  border: 2px solid #353629;
+  border-top: 7px solid #495b45;
+  color: #303128;
+  background: #f7f3e8;
+  box-shadow: 7px 8px 0 #25292066;
+  font: 15px "JetBrains Mono", monospace;
+}
+.pause-dialog::backdrop { background: rgb(15 20 19 / 68%); }
+.pause-dialog h1 { font: 600 38px "Source Serif 4", serif; margin: 0 0 18px; }
+.pause-mix label { display: grid; grid-template-columns: 1fr auto; gap: 7px; margin: 16px 0; }
+.pause-mix input { grid-column: 1 / -1; width: 100%; margin: 0; accent-color: #47664c; }
+.pause-dialog button { font: inherit; color: inherit; background: transparent; border: 1px solid #777968; padding: 8px 12px; cursor: pointer; }
+.pause-dialog .pause-track { font-size: 13px; }
+.pause-dialog footer { margin-top: 22px; padding-top: 16px; border-top: 1px solid #b5b4a4; display: grid; gap: 8px; }
+.pause-dialog .pause-resume { background: #404f3e; color: white; }
+.pause-dialog kbd { opacity: .75; font-size: 12px; }
+.pause-help:empty { display: none; }
+.game-paused #stage *, .game-paused #stage *::before, .game-paused #stage *::after { animation-play-state: paused !important; }

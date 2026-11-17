@@ -40,6 +40,7 @@ export interface WorkbenchModule {
   readonly actionLabel?: string;
   readonly disabled: boolean;
   readonly selected: boolean;
+  readonly needsLand?: boolean;
   readonly specialization?: string;
   readonly links?: readonly string[];
   readonly canDemolish?: boolean;
@@ -101,7 +102,7 @@ export interface WorkbenchDraft {
 }
 
 export interface WorkbenchView {
-  readonly office: { cells: number; totalCells: number; slots: number; maxSlots: number; landCost: number | null; deskCost: number | null; money: number };
+  readonly office: { cells: number; used: number; gain: number; totalCells: number; slots: number; maxSlots: number; landCost: number | null; deskCost: number | null; money: number };
   readonly tasks: readonly WorkbenchTask[];
   readonly budget: { readonly planned: number; readonly capacity: number };
   readonly modules: readonly WorkbenchModule[];
@@ -219,7 +220,7 @@ function moduleCard(module: WorkbenchModule): string {
       module.action,
       module.id,
       `<strong>${title}</strong><span class="wb-build-work" aria-label="${whole(module.work)} ${L('работы', 'work')}"><i aria-hidden="true"></i>${whole(module.work)}</span>` +
-        `<span class="wb-build-effect${module.selected ? ' wb-picked-hint' : ''}">${module.selected ? L('кликни клетку на чертеже', 'click a cell on the blueprint') : effect}</span>` +
+        `<span class="wb-build-effect${module.selected ? ' wb-picked-hint' : ''}">${module.selected ? L('кликни клетку на чертеже', 'click a cell on the blueprint') : module.disabled && module.actionLabel ? esc(module.actionLabel) : effect}</span>` +
         (module.reason ? `<span class="wb-build-reason wb-reason-${module.reason.tone}" title="${esc(module.reason.detail)}">${esc(module.reason.label)}</span>` : ''),
       module.disabled,
       'wb-build-main',
@@ -237,6 +238,15 @@ function moduleCard(module: WorkbenchModule): string {
     ) +
     '</article>'
   );
+}
+
+function plotControl(office: WorkbenchView['office']): string {
+  const usage = L(`Занято клеток: ${office.used}/${office.cells}`, `Building cells: ${office.used}/${office.cells} used`);
+  if (office.landCost === null) return '<span>' + usage + ' · ' + L('Предел участка', 'Plot limit reached') + '</span>';
+  const shortfall = Math.max(0, office.landCost - office.money);
+  return '<span>' + usage + (shortfall ? ' · ' + L('Не хватает ', 'Short by ') + money(Math.ceil(shortfall)) : '') + '</span>' +
+    button('expand-office', 'land', L('Расширить участок', 'Expand plot') + ' · ' + money(office.landCost) +
+      L(` · +${office.gain} кл.`, ` · +${office.gain} cells`), shortfall > 0, 'wb-plot-button');
 }
 
 function moduleDetail(module: WorkbenchModule): string {
@@ -586,7 +596,7 @@ export function createWorkbench(
   };
   function renderCatalog(): void {
     if (!view || view.draft) return;
-    const builds = view.modules.filter((module) => module.action === 'place' && !module.disabled);
+    const builds = view.modules.filter((module) => module.action === 'place' && (!module.disabled || module.needsLand));
     const upgrades = view.modules.filter((module) => module.action === 'upgrade' && !module.disabled);
     const requested = upgrades.filter((module) => module.reason);
     const available = [...(requested.length ? requested : builds.length ? [] : upgrades), ...builds]
@@ -594,8 +604,7 @@ export function createWorkbench(
       .sort((a, b) => Number(Boolean(b.reason)) - Number(Boolean(a.reason)));
     for (const tab of root.querySelectorAll<HTMLButtonElement>('.wb-category-tab')) tab.setAttribute('aria-pressed', String(tab.dataset.wbId === category));
     const office = view.office;
-    html(find('.wb-office'),
-      button('expand-office', 'land', L(`Участок ${office.cells}/${office.totalCells}`, `Plot ${office.cells}/${office.totalCells}`) + (office.landCost === null ? ' ✓' : ` +${Math.min(3, office.totalCells - office.cells)} · ${money(office.landCost)}`), office.landCost === null || office.money < office.landCost, 'wb-text-button', L('Купить клетки под здания. Каждое расширение дороже.', 'Buy building cells. Each expansion costs more.')));
+    html(find('.wb-office'), plotControl(office));
     html(find('.wb-builds'),
       (view.infrastructure && (category === 'all' || category === 'infra') ? infrastructureCard(view.infrastructure) : '') +
       (available.length ? available.map(moduleCard).join('') : '<p class="wb-empty">' + L('Кликни здание на карте, чтобы улучшить его.', 'Click a building on the map to upgrade it.') + '</p>'),
@@ -616,25 +625,6 @@ export function createWorkbench(
   clientPanel.addEventListener('keydown', (event) => {
     if ((event.target as HTMLElement).closest('button, input')) event.stopPropagation();
   });
-  window.addEventListener(
-    'keydown',
-    (event) => {
-      if (
-        !view ||
-        over.style.visibility === 'hidden' ||
-        event.altKey ||
-        event.ctrlKey ||
-        event.metaKey
-      )
-        return;
-      if (!view.draft && view.panel && event.code === 'Escape') {
-        event.preventDefault();
-        event.stopImmediatePropagation();
-        send({ type: 'close-panel' });
-      }
-    },
-    true,
-  );
 
   function updateSegment(segment: WorkbenchSegment): void {
     const changed = clientId !== segment.id;
@@ -766,7 +756,7 @@ export function createWorkbench(
         html(
           find('.wb-module-content'),
           module
-            ? moduleDetail(module)
+            ? moduleDetail(module) + (module.action === 'place' && view.office.used >= view.office.cells ? '<div class="wb-office">' + plotControl(view.office) + '</div>' : '')
             : '<p class="wb-empty">' +
                 L('Выбери здание на карте.', 'Choose a building on the map.') +
                 '</p>',

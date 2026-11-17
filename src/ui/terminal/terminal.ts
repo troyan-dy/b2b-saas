@@ -1,3 +1,4 @@
+import { afterGameTime } from '../../core/pause-clock';
 import './terminal.css';
 import { L } from '../../core/lang';
 import { createPlayerCollection, type CollectionView } from '../player-collection';
@@ -94,7 +95,7 @@ export function createTerminal(root: HTMLElement, sound: (name: 'ui' | 'yes') =>
       return new Promise((resolve) => {
         el.classList.remove('enter');
         el.classList.add('leave');
-        window.setTimeout(() => {
+        afterGameTime(() => {
           el.classList.remove('on', 'leave');
           resolve();
         }, 900);
@@ -114,9 +115,9 @@ export function createTerminal(root: HTMLElement, sound: (name: 'ui' | 'yes') =>
         const targets = lines.map((html) => ({ p: line('', cls), html }));
         let k = 0;
         let n = 0;
-        let timer = 0;
+        let cancelTick: (() => void) | undefined;
         const finish = (): void => {
-          window.clearInterval(timer);
+          cancelTick?.();
           for (const t of targets) t.p.innerHTML = t.html;
           onKey = null;
           onClick = null;
@@ -135,26 +136,25 @@ export function createTerminal(root: HTMLElement, sound: (name: 'ui' | 'yes') =>
             k++;
             n = 0;
           } else t.p.textContent = plain.slice(0, n);
+          cancelTick = afterGameTime(tick, TYPE_MS);
         };
-        timer = window.setInterval(tick, TYPE_MS);
+        cancelTick = afterGameTime(tick, TYPE_MS);
         onKey = () => finish();
         onClick = () => finish();
       });
     },
     ask(options, hint = '') {
       return new Promise((resolve) => {
-        const shortcut = (index: number): string => index === 9 ? '0' : String(index + 1);
         const box = document.createElement('div');
         box.className = 'tm-ask';
         box.innerHTML = options
           .map(
             (o, k) =>
-              `<div class="tm-opt" data-k="${k}"><u>❯</u><span>${shortcut(k)}.</span><span>${o.title}</span>${o.note ? `<small>${o.note}</small>` : ''}</div>`,
+              `<div class="tm-opt" data-k="${k}"><u>❯</u><span>${k + 1}.</span><span>${o.title}</span>${o.note ? `<small>${o.note}</small>` : ''}</div>`,
           )
           .join('');
         body.append(box);
-        const digits = `<kbd>1</kbd>–<kbd>${Math.min(options.length, 9)}</kbd>${options.length > 9 ? ' / <kbd>0</kbd>' : ''}`;
-        foot.innerHTML = `${digits} ${L('выбрать', 'choose')} · <kbd>Enter</kbd> ${L('подтвердить', 'confirm')}${hint ? ` · ${hint}` : ''}`;
+        foot.innerHTML = `<kbd>1</kbd>–<kbd>${options.length}</kbd> ${L('выбрать', 'choose')} · <kbd>Enter</kbd> ${L('подтвердить', 'confirm')}${hint ? ` · ${hint}` : ''}`;
         const rows = [...box.querySelectorAll('.tm-opt')] as HTMLElement[];
         let at = 0;
         const mark = (): void => rows.forEach((r, k) => r.classList.toggle('on', k === at));
@@ -167,16 +167,15 @@ export function createTerminal(root: HTMLElement, sound: (name: 'ui' | 'yes') =>
           sound('yes');
           // the chosen line flashes inverted for two frames, then the answer goes
           rows[k].classList.add('hit');
-          window.setTimeout(() => {
+          afterGameTime(() => {
             rows[k].classList.remove('hit');
             foot.innerHTML = '';
             resolve(k);
           }, 70);
         };
         onKey = (e) => {
-          const digit = /^(?:Digit|Numpad)([0-9])$/.exec(e.code);
-          const option = digit ? (Number(digit[1]) || 10) - 1 : -1;
-          if (option >= 0 && option < options.length) pick(option);
+          const digit = /^(?:Digit|Numpad)([1-9])$/.exec(e.code);
+          if (digit && Number(digit[1]) <= options.length) pick(Number(digit[1]) - 1);
           else if (e.code === 'ArrowDown' || e.code === 'KeyS') {
             at = (at + 1) % options.length;
             mark();
@@ -266,7 +265,7 @@ export function createTerminal(root: HTMLElement, sound: (name: 'ui' | 'yes') =>
           // Owned perks stay visible: choosing the extra boost never discards the collection.
           if (!options.confirm) box.classList.add('done');
           foot.innerHTML = '';
-          window.setTimeout(() => resolve(k), 420);
+          afterGameTime(() => resolve(k), 420);
         };
         const choose = (k: number): void => {
           if (!options.confirm) return pick(k);

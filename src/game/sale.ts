@@ -1,3 +1,4 @@
+import { afterGameTime } from '../core/pause-clock';
 import { L } from '../core/lang';
 import { money } from '../ui/format';
 import { pitch, type Run } from '../systems/run/run';
@@ -23,16 +24,11 @@ export function packSale(root: HTMLElement, run: Run): Promise<void> {
   skip.focus();
   return new Promise(resolve => {
     const done = (): void => {
-      window.clearTimeout(timer);
-      window.removeEventListener('keydown', key);
+      cancel();
       scene.remove();
       resolve();
     };
-    const key = (event: KeyboardEvent): void => {
-      if (event.code === 'Escape') { event.preventDefault(); done(); }
-    };
-    const timer = window.setTimeout(done, 4400);
-    window.addEventListener('keydown', key);
+    const cancel = afterGameTime(done, 4400);
     skip.onclick = done;
   });
 }
