@@ -1687,13 +1687,15 @@ function release(run: Run): void {
   const signal = evolveMarket(run.market, ['core', 'landing', 'pay', ...run.pool], run.sprint, run.seed);
   if (signal) {
     const group = { small: L('малых компаний', 'small companies'), medium: L('средних компаний', 'medium companies'), large: L('крупных компаний', 'large companies') }[signal.segment];
-    const topic = { quality: L('требования к продукту', 'product expectations'), price: L('готовность платить', 'willingness to pay'), demand: L('конкуренция за клиентов', 'competition for customers') }[signal.theme];
+    const topic = { quality: L('требования к продукту', 'product requirements'), price: L('поправка к приемлемой цене', 'price tolerance adjustment'), demand: L('коэффициент спроса', 'demand multiplier') }[signal.theme];
     const change = run.market.groups.find(item => item.id === signal.segment)?.lastShift;
     const format = (value: number) => value.toLocaleString(L('ru-RU', 'en-US'), { maximumFractionDigits: 2 });
-    const detail = change ? `${change.block ? '%s v' : topic + ' '}${format(change.before)} → ${change.block ? 'v' : ''}${format(change.after)}` : topic;
+    const detail = change?.theme === 'share'
+      ? L(`доля профиля с запросом «%s»: ${format(change.before)}% → ${format(change.after)}%`, `share of the profile requesting %s: ${format(change.before)}% → ${format(change.after)}%`)
+      : change ? `${change.block ? '%s v' : topic + ' '}${format(change.before)} → ${change.block ? 'v' : ''}${format(change.after)}` : topic;
     run.events.push({ type: 'news', id: `market-${signal.kind}`, arg: change?.block ?? '', good: true,
       text: signal.kind === 'warning'
-        ? L(`У ${group} скоро изменятся ${topic}. Следи за обратной связью.`, `For ${group}, ${topic} will change soon. Watch for feedback.`)
+        ? L(`Рынок ${group}: на релизе ${signal.sprint} изменится показатель «${topic}».`, `Market for ${group}: ${topic} will change at release ${signal.sprint}.`)
         : L(`Рынок ${group}: ${detail}.`, `Market for ${group}: ${detail}.`) });
   }
   const marketRelease = advanceMarket(run.market, companyContext(run), marketLeads);

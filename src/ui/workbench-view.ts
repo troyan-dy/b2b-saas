@@ -335,9 +335,11 @@ function segmentPanel(
     conditions.push((adjacent ? '✓ ' : '○ ') + L(`Соседство: ${blockName(a)} + ${blockName(b)} (${whole(p.share)}% сегмента)`, `Adjacent: ${blockName(a)} + ${blockName(b)} (${whole(p.share)}% of segment)`));
   }
   const shift = group.lastShift;
-  if (shift) {
-    const topic = shift.block ? blockName(shift.block) : shift.theme === 'price' ? L('поправка к приемлемой цене', 'price tolerance adjustment') : L('спрос', 'demand');
-    conditions.push(L(`Релиз ${shift.sprint}`, `Release ${shift.sprint}`) + ` · ${topic}: ${dec(Number(shift.before.toFixed(2)))} → ${dec(Number(shift.after.toFixed(2)))}`);
+  if (shift && Number.isFinite(shift.before) && Number.isFinite(shift.after)) {
+    const topic = shift.theme === 'share' && shift.block ? L(`доля профиля «${blockName(shift.block)}»`, `share requesting ${blockName(shift.block)}`)
+      : shift.block ? blockName(shift.block) : shift.theme === 'price' ? L('поправка к приемлемой цене', 'price tolerance adjustment') : L('коэффициент спроса', 'demand multiplier');
+    const value = (n: number) => (shift.theme === 'quality' ? 'v' : '') + dec(Number(n.toFixed(2))) + (shift.theme === 'share' ? '%' : '');
+    conditions.push(L(`Релиз ${shift.sprint}`, `Release ${shift.sprint}`) + ` · ${topic}: ${value(shift.before)} → ${value(shift.after)}`);
   }
   const labels: Record<string, string> = {
     needs: L('потребности', 'needs'),
