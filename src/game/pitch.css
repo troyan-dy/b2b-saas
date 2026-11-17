@@ -5,9 +5,9 @@
   z-index: 100;
   pointer-events: auto;
   padding: 10px 18px;
-  border: 1px solid currentColor;
-  background: #f5edda;
-  color: #302e28;
+  border: 1px solid var(--term-rule);
+  background: var(--term-panel);
+  color: var(--term-text);
   font: 20px "JetBrains Mono", monospace;
   cursor: pointer;
 }

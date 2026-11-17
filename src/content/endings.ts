@@ -106,14 +106,14 @@ function mainPost(run: FinalRun): string[] {
       return L(
         [
           say(0, `Честный апдейт. Тред.`, `Немного прозрачности. Тред.`),
-          `1/ ${name} прожил ${clock(run.t)} и всё ещё в минусе.`,
+          `1/ ${name} прожил ${clock(run.t)}. ${s.profitAt > 0 ? 'Прибыль была, но финишировали в минусе.' : 'До прибыли так и не добрались.'}`,
           say(1, `2/ Формально мы живы. Я называю это «стадией поиска модели».`, `2/ Мы не убыточны, мы «инвестируем в рост». Из моих сбережений.`),
           `3/ Подписки: <em>${peak}</em> в секунду на пике. Токены: <strong>${money(s.tokens)}</strong> за всё время. Считайте сами.`,
           say(3, `4/ Сбережения кончатся раньше, чем этот тред наберёт просмотры.`, `4/ Если вы инвестор — мои сообщения открыты. Если клиент — тем более.`),
         ],
         [
           say(0, `An honest update. Thread.`, `A bit of transparency. Thread.`),
-          `1/ ${name} has lived for ${clock(run.t)} and is still in the red.`,
+          `1/ ${name} lived for ${clock(run.t)}. ${s.profitAt > 0 ? 'We turned a profit earlier and finished in the red.' : 'We never reached profitability.'}`,
           say(1, `2/ Technically we are alive. I call it “the business-model search stage”.`, `2/ We are not losing money, we are “investing in growth”. Out of my savings.`),
           `3/ Subscriptions: <em>${peak}</em> per second at the peak. Tokens: <strong>${money(s.tokens)}</strong> all-time. Do the math.`,
           say(3, `4/ The savings will run out before this thread gets any views.`, `4/ If you are an investor — my DMs are open. If you are a client — even more so.`),
@@ -164,8 +164,9 @@ export function endingScore(run: FinalRun): [string, string] {
 export function endingStats(run: FinalRun): string {
   const s = run.stats;
   const peak = `${rate(s.peakMrr / TUNING.sprint_s)}${PER_S}`;
+  const value = run.over === 'sold' ? L(` · оценка ${money(s.value)}`, ` · valuation ${money(s.value)}`) : '';
   return L(
-    `прожил ${clock(run.t)} · клиентов ${s.clients}, ушло ${s.left} · пик подписок ${peak} · блоков ${s.shipped} · доработок ${s.reworks} · падений ${s.downs}`,
-    `lived ${clock(run.t)} · clients ${s.clients}, left ${s.left} · peak subscriptions ${peak} · blocks ${s.shipped} · upgrades ${s.reworks} · outages ${s.downs}`,
+    `прожил ${clock(run.t)} · клиентов ${s.clients}, ушло ${s.left} · пик подписок ${peak} · блоков ${s.shipped} · доработок ${s.reworks} · падений ${s.downs}${value}`,
+    `lived ${clock(run.t)} · clients ${s.clients}, left ${s.left} · peak subscriptions ${peak} · blocks ${s.shipped} · upgrades ${s.reworks} · outages ${s.downs}${value}`,
   );
 }
