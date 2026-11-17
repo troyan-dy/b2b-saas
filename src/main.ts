@@ -214,6 +214,7 @@ async function play(): Promise<void> {
   let finished = false;
   const scene = new GameScene(run, rng, paper, {
     restored,
+    bestValuation: meta.runs.reduce((best, entry) => Math.max(best, entry.value ?? 0), 0),
     // the bot is a tool of the gyms and captures: the release has no code path to it
     beforeStep: __TOOLS__ && args.bot ? (r) => playBot(r) : undefined,
     onEnd: (r: Run) => {

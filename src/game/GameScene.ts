@@ -64,6 +64,7 @@ import {
   dilemmaOf,
   expandInfrastructure,
   fire,
+  firstIndustryOrder,
   flows,
   freeCells,
   friendsAt,
@@ -131,6 +132,7 @@ export const CLIENT_LOOK: Record<ClientType, { height: number; squares: number }
 export interface GameHooks {
   /** Resuming a save does not replay the first-run tutorial. */
   restored?: boolean;
+  bestValuation?: number;
   /** called every simulated step, before it: a bot plays here */
   beforeStep?: (run: Run) => void;
   onEnd: (run: Run) => void;
@@ -1073,7 +1075,9 @@ export class GameScene extends Phaser.Scene {
       run.sprintT / TUNING.sprint_s,
     );
     // the goal is always on the sheet: three frames taken at random must say what to do
-    this.paper.setGoal(this.nextStep(net));
+    const valuationNote = run.sprint >= 15 ? L(`Оценка для продажи ${money(valuation(run))}`, `Sale valuation ${money(valuation(run))}`) : '';
+    const record = valuationNote && this.hooks.bestValuation ? L(` · рекорд ${money(this.hooks.bestValuation)}`, ` · record ${money(this.hooks.bestValuation)}`) : '';
+    this.paper.setGoal(this.nextStep(net) + (valuationNote ? `<br><small>${valuationNote}${record}</small>` : ''));
     this.paper.setLedger(this.ledger());
     if (!this.ended) this.teach();
 
@@ -1097,9 +1101,10 @@ export class GameScene extends Phaser.Scene {
       this.paper.call({ who: `${CALL} · ${L('БАНК', 'THE BANK')}`, text: BANK_TEXT.replace('%s', money(run.lastChance)).replace('%t', String(mortgageSeconds(run))), options: BANK_ANSWERS });
     } else if (run.call) {
       const name = BLOCK_BY_ID[run.call.want]?.name;
+      const order = run.call.id === 1 ? firstIndustryOrder(run) : undefined;
       this.paper.call({
         who: `${CALL} · ${run.call.name.toUpperCase()}`,
-        text: CALL_ASK[run.call.want] ?? L(`А «${name}» у вас есть? Нам без этого никак.`, `Do you have “${name}”? We can’t do without it.`),
+        text: order?.kind === run.call.want ? order.text : (CALL_ASK[run.call.want] ?? L(`А «${name}» у вас есть? Нам без этого никак.`, `Do you have “${name}”? We can’t do without it.`)),
         options: callAnswers(honestMult(run), TUNING.call.sure_mult, promiseSprints(run)),
       });
     } else if (run.offer !== null) {
