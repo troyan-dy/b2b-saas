@@ -184,9 +184,11 @@ function moduleView(
   const maxed = liveLevel >= PRODUCTION.max_level;
   let label: string | undefined;
   if (planned) label = taskLabel(planned.status);
+  else if (maxed) label = L('Максимальный уровень', 'Maximum level');
   else if (!liveLevel && !canPlace)
     label =
-      needsLand ? L('Нет клетки', 'No free cell')
+      RULES[kind].role !== 'base' && !run.pool.includes(kind) ? L('Не выпал в этом забеге', 'Not drawn this run')
+        : needsLand ? L('Нет свободной клетки', 'No free cell')
         : RULES[kind].stage > run.stage ? L(`Этап ${RULES[kind].stage}`, `Stage ${RULES[kind].stage}`)
         : L('Сначала ядро', 'Core first');
   const specializations =
@@ -395,9 +397,7 @@ export function workbenchView(run: Run, selection: WorkbenchSelection): Workbenc
       : TUNING.living_per_s > 0
         ? cash.living / TUNING.living_per_s
         : 1;
-  const allowed = new Set(['core', 'landing', 'pay', ...run.pool]);
   const modules = Object.keys(RULES)
-    .filter((kind) => allowed.has(kind))
     .map((kind) => moduleView(run, kind, selection.picked, hostFactor));
   const queued = run.tasks.filter((task) => task.status === 'queued');
   const tasks = run.tasks.map((task) => taskView(run, task, queued.indexOf(task), queued));
