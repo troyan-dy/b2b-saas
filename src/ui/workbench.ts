@@ -596,12 +596,10 @@ export function createWorkbench(
   };
   function renderCatalog(): void {
     if (!view || view.draft) return;
-    const builds = view.modules.filter((module) => module.action === 'place' && (!module.disabled || module.needsLand));
-    const upgrades = view.modules.filter((module) => module.action === 'upgrade' && !module.disabled);
-    const requested = upgrades.filter((module) => module.reason);
-    const available = [...(requested.length ? requested : builds.length ? [] : upgrades), ...builds]
+    const available = view.modules
       .filter((module) => category === 'all' || module.category === category)
-      .sort((a, b) => Number(Boolean(b.reason)) - Number(Boolean(a.reason)));
+      .sort((a, b) => Number(a.disabled) - Number(b.disabled) ||
+        Number(Boolean(b.reason)) - Number(Boolean(a.reason)));
     for (const tab of root.querySelectorAll<HTMLButtonElement>('.wb-category-tab')) tab.setAttribute('aria-pressed', String(tab.dataset.wbId === category));
     const office = view.office;
     html(find('.wb-office'), plotControl(office));
