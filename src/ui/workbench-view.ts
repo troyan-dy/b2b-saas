@@ -17,6 +17,7 @@ import { blockEffects, PRODUCTION, STRATEGY_IDS, strategyCount, projectCost } fr
 import { activeWork, apiWorkQuote, remainingBuildCapacity } from '../systems/run/production';
 import {
   cellsMax,
+  clientsMax,
   agentSlots,
   officeQuote,
   OFFICE,
@@ -313,6 +314,26 @@ function segmentPanel(
   const segment = segmentView(run.market, ctx, id);
   const previewPrice = segment.pendingPrice ?? selection.previewPrices[id] ?? segment.price;
   const forecast = priceForecast(run.market, ctx, id, previewPrice);
+  const group = run.market.groups.find((entry) => entry.id === id)!;
+  const totals = companyTotals(run);
+  const slots = clientsMax(run);
+  const conditions = [
+    L(`Именные договоры: ${run.clients.length}/${slots} мест`, `Named contracts: ${run.clients.length}/${slots} slots`),
+    L(`Массовый рынок: нагрузка ${whole(totals.load)}/${whole(totals.capacity)}`, `Mass market: load ${whole(totals.load)}/${whole(totals.capacity)}`),
+  ];
+  if (run.clients.length >= slots) conditions.push(L('Для нового договора нужно место', 'A new contract needs a free slot'));
+  if (totals.load > totals.capacity) conditions.push(L('Расширь инфраструктуру', 'Expand infrastructure'));
+  for (const p of group.profiles) {
+    if (!p.connection) continue;
+    const [a, b] = p.connection;
+    const adjacent = ctx.links.some((pair) => pair.includes(a) && pair.includes(b));
+    conditions.push((adjacent ? '✓ ' : '○ ') + L(`Соседство: ${shortName(a)} + ${shortName(b)} (${whole(p.share)}% сегмента)`, `Adjacent: ${shortName(a)} + ${shortName(b)} (${whole(p.share)}% of segment)`));
+  }
+  const shift = group.lastShift;
+  if (shift) {
+    const topic = shift.block ? blockName(shift.block) : shift.theme === 'price' ? L('поправка к приемлемой цене', 'price tolerance adjustment') : L('спрос', 'demand');
+    conditions.push(L(`Релиз ${shift.sprint}`, `Release ${shift.sprint}`) + ` · ${topic}: ${dec(Number(shift.before.toFixed(2)))} → ${dec(Number(shift.after.toFixed(2)))}`);
+  }
   const labels: Record<string, string> = {
     needs: L('потребности', 'needs'),
     price: L('цена', 'price'),
@@ -347,9 +368,9 @@ function segmentPanel(
     priceLabel: `${rate(segment.unitPrice / TUNING.sprint_s)}${PER_S}`,
     forecast: L(`По общему тарифу при ×${dec(previewPrice)}: ≈${rate(forecast.income / TUNING.sprint_s)}/с, отток ≈${forecast.lost}. Именные договоры ниже сюда не входят. Оценка на следующий релиз при текущем продукте и аудитории.`, `At the shared tariff ×${dec(previewPrice)}: ≈${rate(forecast.income / TUNING.sprint_s)}/s, ≈${forecast.lost} leaving. Named contracts below are not included. Next-release estimate for the current product and audience.`),
     needs: segmentNeeds(run, ctx, id, modules),
-    reasons: Object.entries(segment.reasons)
+    reasons: conditions.concat(Object.entries(segment.reasons)
       .filter(([, value]) => value >= 0.5)
-      .map(([key, value]) => `${key === 'needs' ? '+' : '−'}${Math.round(value)} ${labels[key]}`),
+      .map(([key, value]) => `${key === 'needs' ? '+' : '−'}${Math.round(value)} ${labels[key]}`)),
     contracts,
   };
 }

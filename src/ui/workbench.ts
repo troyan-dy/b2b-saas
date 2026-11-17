@@ -483,7 +483,7 @@ export function createWorkbench(
     '<div class="wb-happiness"><span></span><meter min="0" max="100"></meter></div>' +
     '<section class="wb-client-needs"><h3>' +
     L('Что им нужно', 'What they need') +
-    '</h3><ul class="wb-needs"></ul></section>' +
+    '</h3><p class="wb-reasons"></p><ul class="wb-needs"></ul></section>' +
     '<section class="wb-price"><label for="wb-price">' +
     L('Тариф', 'Tariff') +
     '<output for="wb-price"></output></label>' +
@@ -505,7 +505,7 @@ export function createWorkbench(
       'Their fixed tariffs are counted separately. The slider above does not affect them.',
     ) +
     '</p><ul></ul></section>' +
-    '<p class="wb-market-numbers"></p><p class="wb-reasons"></p></div>';
+    '<p class="wb-market-numbers"></p></div>';
   over.append(clientPanel);
 
   const find = <T extends HTMLElement = HTMLElement>(selector: string): T =>

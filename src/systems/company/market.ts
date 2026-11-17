@@ -36,6 +36,7 @@ export interface MarketGroup {
   came: number;
   left: number;
   demand?: number;
+  lastShift?: { sprint: number; theme: MarketSignal['theme']; before: number; after: number; block?: string };
 }
 export interface MarketState {
   groups: MarketGroup[];
@@ -227,26 +228,37 @@ export function evolveMarket(
   if (theme === 'quality') {
     const profile = rng.pick(group.profiles);
     const eligible = profile.needs.filter((need) => toolkit.includes(need.block) && need.level < marketEvolution.shift_level_cap);
-    if (eligible.length) rng.pick(eligible).level++;
+    if (eligible.length) {
+      const need = rng.pick(eligible);
+      group.lastShift = { sprint, theme, before: need.level, after: ++need.level, block: need.block };
+    } else {
+      group.lastShift = { sprint, theme: 'demand', before: profile.share, after: profile.share };
+    }
     // Demand shifts towards this existing cohort; its old requirements stay useful.
     profile.share *= 1 + marketEvolution.share_variation;
     const total = group.profiles.reduce((sum, item) => sum + item.share, 0);
     for (const item of group.profiles) item.share = (item.share / total) * 100;
+    if (!eligible.length) group.lastShift!.after = profile.share;
   } else if (theme === 'price') {
     const direction = rng.next() < 0.5 ? -1 : 1;
+    const comfort = () => group.profiles.reduce((sum, p) => sum + (p.priceComfort ?? 0) * p.share / 100, 0);
+    const before = comfort();
     for (const profile of group.profiles)
       profile.priceComfort = clamp(
         (profile.priceComfort ?? 0) + direction * marketEvolution.price_change,
         marketEvolution.price_min,
         marketEvolution.price_max,
       );
+    group.lastShift = { sprint, theme, before, after: comfort() };
   } else {
     const direction = rng.next() < 0.5 ? -1 : 1;
+    const before = group.demand ?? 1;
     group.demand = clamp(
       (group.demand ?? 1) + direction * marketEvolution.demand_change,
       marketEvolution.demand_min,
       marketEvolution.demand_max,
     );
+    group.lastShift = { sprint, theme, before, after: group.demand };
   }
   state.revision!++;
   return signal;
