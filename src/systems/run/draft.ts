@@ -2,7 +2,7 @@ import cardsData from '../../data/balance/draft.json';
 import cardsEn from '../../data/balance/draft.en.json';
 import tuning from '../../data/balance/run.json';
 import { worded } from '../../core/lang';
-import { refreshRun, type Run } from './run';
+import { refreshRun, tokens, tokensAfterProcessingCard, type Run } from './run';
 import {
   PRODUCTION,
   restoreCardStacks,
@@ -30,11 +30,27 @@ export interface DraftCard {
 
 export const DRAFT_CARDS: DraftCard[] = worded(cardsData as DraftCard[], cardsEn);
 
+export interface CardChange {
+  kind: 'debt' | 'energy' | 'tokens';
+  before: number;
+  after: number;
+}
+
 export function operationDelta(run: Run, card: DraftCard): { debt: number; energy: number } {
   return {
     debt: Math.max(0, run.debt + (card.debt ?? 0)) - run.debt,
     energy: Math.min(tuning.crunch.max, Math.max(0, run.energy + (card.energy ?? 0))) - run.energy,
   };
+}
+
+export function previewCardChange(run: Run, card: DraftCard): CardChange | undefined {
+  if (card.id === 'batch' || card.id === 'instant')
+    return { kind: 'tokens', before: tokens(run), after: tokensAfterProcessingCard(run, card.id) };
+  const delta = operationDelta(run, card);
+  if (card.debt !== undefined)
+    return { kind: 'debt', before: run.debt, after: run.debt + delta.debt };
+  if (card.energy !== undefined)
+    return { kind: 'energy', before: run.energy, after: run.energy + delta.energy };
 }
 
 function available(run: Run, card: DraftCard): boolean {
@@ -75,10 +91,12 @@ export function chooseCard(run: Run, id: string): boolean {
   if (run.over || !run.draft?.includes(id)) return false;
   const card = DRAFT_CARDS.find((entry) => entry.id === id);
   if (!card || !available(run, card)) return false;
+  const change = previewCardChange(run, card);
   releaseCard(run, id);
   run.draft = null;
   refreshRun(run);
-  run.events.push({ type: 'card-applied', id });
+  if (change) change.after = change.kind === 'tokens' ? tokens(run) : run[change.kind];
+  run.events.push({ type: 'card-applied', id, ...(change ? { change } : {}) });
   return true;
 }
 

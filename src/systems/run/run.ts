@@ -15,7 +15,7 @@ import officeData from '../../data/balance/office.json';
 import traitsData from '../../data/balance/traits.json';
 import { companyContext, companyTotals, customerCount } from '../company/company';
 import { advanceMarket, createMarket, evolveMarket, normalizeMarket, MARKET, type MarketState } from '../company/market';
-import { dealDraft, releaseCard } from './draft';
+import { dealDraft, releaseCard, type CardChange } from './draft';
 import {
   addProductionWork,
   enqueueTask,
@@ -252,7 +252,7 @@ export interface Report {
 }
 
 export type RunEvent =
-  | { type: 'card-applied'; id: string }
+  | { type: 'card-applied'; id: string; change?: CardChange }
   | { type: 'task-cancelled'; id: string; block?: string }
   | { type: 'work'; agent: number; lane: Lane; i?: number; j?: number; idle?: boolean }
   | { type: 'placed'; kind: string; i: number; j: number }
