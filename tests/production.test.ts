@@ -28,11 +28,13 @@ import {
   draftCards,
   expandInfrastructure,
   fire,
+  finishAtSprintLimit,
   hire,
   IDEAS,
   isSite,
   leadsPerWork,
   moveTask,
+  netPerS,
   place,
   queueView,
   refreshRun,
@@ -596,6 +598,44 @@ describe('production queue and sprint choices', () => {
     expect(run.money).toBeGreaterThan(0);
     expect(run.over).toBe('late');
     expect(run.draft).toBeNull();
+  });
+
+  it('counts only consecutive profitable releases toward resilience', () => {
+    const run = fresh(['core', 'landing', 'pay']);
+    run.newsWait = 100;
+    run.clients = [{
+      id: 1, texture: 'clinic', name: 'Client', type: 'corp', pay: 5000,
+      want: 'core', wantLevel: 1, patience: 3, happy: true, slot: 0, deal: 1, promised: false,
+    }];
+    release(run);
+    expect(run.lastReport?.profitableStreak).toBe(1);
+    select(run, 'credits');
+    release(run);
+    expect(run.lastReport?.profitableStreak).toBe(2);
+    select(run, 'maintenance');
+    run.debt = TUNING.debt.down_at;
+    release(run);
+    expect(run.lastReport?.profitableStreak).toBe(0);
+  });
+
+  it.each([
+    ['supplier', 2, 5000, 'profit'],
+    ['supplier', 1, 5000, 'late'],
+    ['supplier', 2, 1, 'late'],
+    ['debt', 2, 5000, 'late'],
+  ] as const)('judges final %s outage after %i profitable releases ($%i contract)', (reason, streak, pay, outcome) => {
+    const run = fresh(['core', 'landing', 'pay']);
+    run.sprint = TUNING.last_sprint;
+    run.clients = [{
+      id: 1, texture: 'clinic', name: 'Client', type: 'corp', pay,
+      want: 'core', wantLevel: 1, patience: 3, happy: true, slot: 0, deal: 1, promised: false,
+    }];
+    run.down = true;
+    run.downWhy = reason;
+    expect(netPerS(run)).toBeLessThan(0);
+    finishAtSprintLimit(run, streak);
+    expect(run.over).toBe(outcome);
+    expect(run.down).toBe(true);
   });
 
   it('cancels every unshipped building state, releases its cell and never refunds spent cash', () => {
