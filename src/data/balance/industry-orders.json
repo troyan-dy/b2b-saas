@@ -1,0 +1,12 @@
+{
+  "dent": {
+    "kind": "mobile",
+    "ru": "В кабинете и у стойки мы работаем с телефонов. Сделаете мобильную версию, чтобы мы записывали пациентов прямо после приёма?",
+    "en": "We work from our phones chairside and at reception. Can you ship a mobile version so we can book follow-ups right after each visit?"
+  },
+  "compliance": {
+    "kind": "roles",
+    "ru": "Сотрудник готовит проверку, руководитель её утверждает. Можно им дать разные права, чтобы автор не мог одобрить собственную проверку?",
+    "en": "One person prepares a review and a supervisor signs off. Can you give them separate permissions so nobody can approve their own review?"
+  }
+}

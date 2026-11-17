@@ -30,6 +30,7 @@ import {
   expandInfrastructure,
   fire,
   finishAtSprintLimit,
+  firstIndustryOrder,
   hire,
   IDEAS,
   isSite,
@@ -95,6 +96,44 @@ function select(run: Run, id: string): void {
 }
 
 describe('production queue and sprint choices', () => {
+  it.each([
+    ['dent', 'mobile', true],
+    ['dent', 'mobile', false],
+    ['compliance', 'roles', true],
+    ['compliance', 'roles', false],
+  ] as const)('offers an industry-specific first contract for %s (%s)', (audience, kind, builds) => {
+    const run = createRun(7, {
+      tech: IDEAS.tech[0], form: IDEAS.form[0],
+      aud: IDEAS.aud.find((entry) => entry.id === audience)!,
+    });
+    run.newsWait = 100;
+    for (const block of ['core', 'landing']) {
+      const cell = freeCells(run)[0];
+      expect(place(run, block, cell.i, cell.j)).toBe(true);
+      finishWork(run);
+      release(run);
+      select(run, 'maintenance');
+    }
+    expect(run.call?.want).toBe(kind);
+    expect(firstIndustryOrder(run)?.kind).toBe(kind);
+    const id = run.call!.id;
+    answerCall(run, true);
+    if (builds) {
+      const cell = freeCells(run)[0];
+      expect(place(run, kind, cell.i, cell.j)).toBe(true);
+      finishWork(run);
+    }
+    release(run);
+    if (builds) {
+      expect(run.events).toContainEqual({ type: 'kept', id });
+      expect(run.clients.find((client) => client.id === id)?.happy).toBe(true);
+    } else {
+      select(run, 'maintenance');
+      release(run);
+      expect(run.events.some((event) => event.type === 'refund' && event.id === id)).toBe(true);
+      expect(run.clients.some((client) => client.id === id)).toBe(false);
+    }
+  });
   it.each([0, 2, 10])('forecasts the actual one-off effects with %i points to recover', (points) => {
     const run = fresh();
     run.debt = points;
@@ -347,6 +386,8 @@ describe('production queue and sprint choices', () => {
         form: IDEAS.form.find(card => card.id === 'tinder')!,
         aud: IDEAS.aud.find(card => card.id === 'dent')!,
       });
+      // Preserve the recorded legacy company behind this late queue regression.
+      delete run.firstIndustryOrder;
       for (let tick = 0; tick < TUNING.last_sprint * TUNING.sprint_s * 4 && !run.over; tick++) {
         playBot(run);
         run.offer = null;
