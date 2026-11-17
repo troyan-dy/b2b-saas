@@ -629,7 +629,7 @@
   line-height: 1.35;
 }
 .wb-client-popup .wb-contracts ul {
-  max-height: 135px;
+  max-height: 180px;
   overflow-y: auto;
   scrollbar-width: thin;
 }
