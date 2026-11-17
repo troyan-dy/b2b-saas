@@ -132,7 +132,7 @@ function cardView(run: Run, card: DraftCard, choosing = false): SprintCardView {
         : choosing && before && after
           ? `${before.number} → ${after.number} ${after.label}`
           : (primary?.text ?? card.impact.replace(/^(Сразу:|Now:)\s*/, '')),
-    benefits,
+    benefits: change && id !== 'instant' && change.before === change.after ? undefined : benefits,
     penalties,
     level: persistent ? level : undefined,
     nextLevel: persistent && choosing ? level + 1 : undefined,

@@ -692,6 +692,23 @@ describe('production queue and sprint choices', () => {
     expect(run.draft).toBeNull();
   });
 
+  it('wins by shipping a payment block on the final release from an unprofitable position', () => {
+    const run = fresh(['core', 'landing']);
+    run.sprint = TUNING.last_sprint;
+    run.clients = [{
+      id: 1, texture: 'clinic', name: 'Client', type: 'corp', pay: 5000,
+      want: 'core', wantLevel: 1, patience: 3, happy: true, slot: 0, deal: 1, promised: false,
+    }];
+    expect(netPerS(run)).toBeLessThan(0);
+    const cell = freeCells(run)[0];
+    expect(place(run, 'pay', cell.i, cell.j)).toBe(true);
+    finishWork(run);
+    release(run);
+    expect(run.lastReport?.shipped).toContain('pay');
+    expect(netPerS(run)).toBeGreaterThan(0);
+    expect(run.over).toBe('profit');
+  });
+
   it('counts only consecutive profitable releases toward resilience', () => {
     const run = fresh(['core', 'landing', 'pay']);
     run.newsWait = 100;
