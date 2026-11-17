@@ -321,13 +321,18 @@ function segmentPanel(
     L(`Именные договоры: ${run.clients.length}/${slots} мест`, `Named contracts: ${run.clients.length}/${slots} slots`),
     L(`Массовый рынок: нагрузка ${whole(totals.load)}/${whole(totals.capacity)}`, `Mass market: load ${whole(totals.load)}/${whole(totals.capacity)}`),
   ];
-  if (run.clients.length >= slots) conditions.push(L('Для нового договора нужно место', 'A new contract needs a free slot'));
+  if (run.clients.length >= slots) {
+    const extra = run.pool.find(kind => !ctx.levels[kind] && (blockEffects(kind, 1).seats ?? 0) > 0);
+    conditions.push(extra && slots < TUNING.clients.slots
+      ? L(`Доп. места: выпусти «${blockName(extra)}»`, `More slots: ship ${blockName(extra)}`)
+      : L('Для нового договора нужно свободное место', 'A new contract needs a free slot'));
+  }
   if (totals.load > totals.capacity) conditions.push(L('Расширь инфраструктуру', 'Expand infrastructure'));
   for (const p of group.profiles) {
     if (!p.connection) continue;
     const [a, b] = p.connection;
     const adjacent = ctx.links.some((pair) => pair.includes(a) && pair.includes(b));
-    conditions.push((adjacent ? '✓ ' : '○ ') + L(`Соседство: ${shortName(a)} + ${shortName(b)} (${whole(p.share)}% сегмента)`, `Adjacent: ${shortName(a)} + ${shortName(b)} (${whole(p.share)}% of segment)`));
+    conditions.push((adjacent ? '✓ ' : '○ ') + L(`Соседство: ${blockName(a)} + ${blockName(b)} (${whole(p.share)}% сегмента)`, `Adjacent: ${blockName(a)} + ${blockName(b)} (${whole(p.share)}% of segment)`));
   }
   const shift = group.lastShift;
   if (shift) {

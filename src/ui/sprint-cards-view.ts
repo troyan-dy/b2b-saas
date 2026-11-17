@@ -220,6 +220,9 @@ export function sprintCardsView(
       statusLabel: L('Действует', 'Active'),
     }));
   const report = run.lastReport;
+  const nextDecision = run.call ? L(`После выбора — звонок: ${run.call.name}`, `After your choice — call from ${run.call.name}`)
+    : run.offer !== null ? L('После выбора — предложение покупателя', 'After your choice — a buyer’s offer')
+    : run.dilemma ? L(`После выбора — решение: ${run.dilemma.name}`, `After your choice — decision: ${run.dilemma.name}`) : '';
   return {
     cards,
     founder,
@@ -249,12 +252,12 @@ export function sprintCardsView(
             const card = DRAFT_CARDS.find((entry) => entry.id === id);
             return card ? [cardView(run, card, true)] : [];
           }),
-          summary: report
+          summary: [report
             ? L(
                 `Релиз ${report.sprint} · пришло ${whole(report.came)} · ушло ${whole(report.left)}`,
                 `Release ${report.sprint} · joined ${whole(report.came)} · left ${whole(report.left)}`,
               )
-            : '',
+            : '', nextDecision].filter(Boolean).join(' · '),
           news,
         }
       : null,

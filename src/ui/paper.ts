@@ -251,7 +251,10 @@ export function createPaper(under: HTMLElement, over: HTMLElement): Paper {
     },
     setWorkbench(view) {
       const active = workbench.active;
+      const selectedCell = cellLayer.contains(document.activeElement) ? document.activeElement as HTMLElement : null;
       workbench.set(view);
+      if (choosingCell && !view?.draft && selectedCell && document.activeElement !== selectedCell)
+        selectedCell.focus({ preventScroll: true });
       shelfBody.inert = Boolean(view?.draft);
       cellLayer.inert = Boolean(view?.draft);
       callCard.inert = Boolean(view?.draft);
@@ -318,7 +321,9 @@ export function createPaper(under: HTMLElement, over: HTMLElement): Paper {
         .map((c) => `<button type="button" class="bl-cell${c.pulse ? ' pulse' : ''}" aria-label="${L('Карта','Map')} · ${c.id}" data-c="${c.id}" style="left:${Math.round(c.x)}px;top:${Math.round(c.y)}px"></button>`)
         .join('');
       if (!choosing && choosingCell && previous) {
-        (shop.querySelector<HTMLElement>(`[data-wb-key="${CSS.escape(cellOrigin)}"]:not(:disabled)`) ?? shop.querySelector<HTMLElement>('.wb-category-tab'))?.focus({ preventScroll: true });
+        const fromDemolition = previous.startsWith('x:') ? shop.querySelector<HTMLElement>(`[data-wb-action="inspect-module"][data-wb-id="${CSS.escape(previous.slice(2))}"]`) : null;
+        const origin = shop.querySelector<HTMLElement>(`[data-wb-key="${CSS.escape(cellOrigin)}"]:not(:disabled)`);
+        (fromDemolition ?? (origin?.offsetWidth ? origin : null) ?? shop.querySelector<HTMLElement>('.wb-category-tab'))?.focus({ preventScroll: true });
       } else if (previous || (choosing && !choosingCell)) {
         (cellLayer.querySelector<HTMLElement>(`[data-c="${CSS.escape(previous ?? '')}"]`) ?? cellLayer.querySelector('button'))?.focus({ preventScroll: true });
       }

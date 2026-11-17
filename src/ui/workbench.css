@@ -646,6 +646,7 @@
   line-height: 1.35;
 }
 .wb-office { display: flex; flex-wrap: wrap; gap: 3px 12px; padding: 4px 0 9px; font-size: 11px; }
+.wb-client-popup .wb-reasons { font-size: 16px; line-height: 1.4; color: var(--ink); }
 .wb-infrastructure-actions { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px; padding: 4px 10px 9px; font-size: 12px; }
 .wb-infrastructure-actions small { width: 100%; color: var(--dim); }
 .bl-tag.map-shared-work { width: 272px; padding: 2px; }
