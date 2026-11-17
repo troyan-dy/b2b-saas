@@ -9,7 +9,7 @@ export interface Track {
   file: string;
 }
 
-/** The background music: one loop out of a list, started by the first key press or click. All of it is CC0 from OpenGameArt. */
+/** The background music: one loop out of a list. All of it is CC0 from OpenGameArt. */
 export const TRACKS: readonly Track[] = [
   { id: 'chip', title: L('Чиптюн', 'Chiptune'), mood: L('8 бит · ровный ритм', '8-bit · steady beat'), author: 'iamoneabe', file: 'assets/audio/chiploop.ogg' },
   { id: 'path', title: L('Забытая тропа', 'Forgotten Path'), mood: L('8 бит · задумчиво', '8-bit · thoughtful'), author: 'johndekale', file: 'assets/audio/forgotten_path.ogg' },
@@ -26,13 +26,16 @@ let started = false;
 
 function apply(): void {
   if (!started) return;
+  if (!wanted || level === 0) {
+    audio?.pause();
+    return;
+  }
   if (!audio) {
     audio = new Audio(track.file);
     audio.loop = true;
   }
   audio.volume = VOLUME * level / 100;
-  if (wanted) void audio.play().catch(() => undefined); // no audio device or the browser said no: the game goes on in silence
-  else audio.pause();
+  if (audio.paused) void audio.play().catch(() => undefined); // A later user gesture can retry blocked autoplay.
 }
 
 /** The «Музыка» switch of the menu. */
@@ -47,8 +50,7 @@ export function setTrack(id: string): void {
   const next = TRACKS.find((t) => t.id === id) ?? TRACKS[0];
   if (next === track) return;
   track = next;
-  audio?.pause();
-  audio = null;
+  if (audio) audio.src = track.file;
   apply();
 }
 
@@ -63,9 +65,8 @@ export function trackTitle(id: string): string {
   return (TRACKS.find((t) => t.id === id) ?? TRACKS[0]).title.toLowerCase();
 }
 
-/** Browsers start audio only after a gesture: call from the first key press or click. */
+/** Try on page entry and again inside user gestures if autoplay was blocked. */
 export function startMusic(): void {
-  if (started) return;
   started = true;
   apply();
 }

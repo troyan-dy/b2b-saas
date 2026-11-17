@@ -117,6 +117,10 @@ function switchLanguage(settings: Settings): void {
 
 /** The whole game: the terminal with the menu and the idea, the run on the sheet, the ending in the terminal. */
 async function play(): Promise<void> {
+  startMusic();
+  for (const event of ['pointerdown', 'pointerup', 'keydown', 'click']) {
+    window.addEventListener(event, startMusic, { capture: true, passive: true });
+  }
   const meta = loadMeta();
   const persistent = !(__TOOLS__ && (args.gym !== '' || args.bot || args.capture));
   const saved = persistent ? loadRun() : null;
@@ -126,7 +130,6 @@ async function play(): Promise<void> {
   paper.show(false);
   const term = createTerminal(over, (name) => {
     unlockSound();
-    startMusic();
     playSound(name);
   });
 
