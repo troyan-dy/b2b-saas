@@ -9,6 +9,7 @@ import eventsEn from '../../data/balance/events.en.json';
 import eventsData from '../../data/balance/events.json';
 import ideasEn from '../../data/balance/ideas.en.json';
 import ideasData from '../../data/balance/ideas.json';
+import industryOrders from '../../data/balance/industry-orders.json';
 import tuningData from '../../data/balance/run.json';
 import officeData from '../../data/balance/office.json';
 import traitsData from '../../data/balance/traits.json';
@@ -313,6 +314,7 @@ export interface Run {
   seed: number;
   rng: Rng;
   idea: Idea;
+  firstIndustryOrder?: boolean;
   perks: readonly string[];
   /** levels of the founder's traits this startup is played with */
   traits: Readonly<Record<string, number>>;
@@ -472,6 +474,7 @@ export function createRun(
   traits: Readonly<Record<string, number>> = {},
 ): Run {
   const rng = createRng(seed);
+  const order = industryOrders[idea.aud.id as keyof typeof industryOrders];
   const askable = Object.keys(RULES).filter((k) => RULES[k].role === 'ask');
   const corp = Object.keys(RULES).filter((k) => RULES[k].role === 'corp');
   const asks = shuffle(rng, askable).slice(0, 3);
@@ -487,10 +490,12 @@ export function createRun(
   for (const k of others)
     if (EFFECTS[k]?.seats && [...must].filter((x) => EFFECTS[x]?.seats).length < 2) must.add(k);
   const pool = [...must, ...others.filter((k) => !must.has(k))].slice(0, TUNING.pool_size);
+  if (order && !pool.includes(order.kind)) pool[pool.length - 1] = order.kind;
   const run: Run = {
     seed,
     rng,
     idea,
+    ...(order ? { firstIndustryOrder: true } : {}),
     perks,
     traits,
     t: 0,
@@ -1184,6 +1189,12 @@ export function answerCall(run: Run, sure: boolean): void {
   seat(run, c);
 }
 
+export function firstIndustryOrder(run: Run): { kind: string; text: string } | undefined {
+  if (!run.firstIndustryOrder) return undefined;
+  const order = industryOrders[run.idea.aud.id as keyof typeof industryOrders];
+  if (order) return { kind: order.kind, text: L(order.ru, order.en) };
+}
+
 /** sprints a promised block may take; a founder who has kept his word before is given one more */
 export function promiseSprints(run: Run): number {
   return run.perks.includes('word') ? TUNING.call.sure_patience_perk : TUNING.call.sure_patience;
@@ -1652,12 +1663,13 @@ function release(run: Run): void {
     while (run.leads >= 1 && run.clients.length < max) {
       run.leads -= 1;
       const c = makeClient(run);
+      const order = c.id === 1 ? firstIndustryOrder(run) : undefined;
+      if (order) c.want = order.kind;
       // a client that needs what is not there may call first and ask; it comes when the founder answers
       if (
         run.call === null &&
-        run.stage >= 2 &&
         !isLive(run, c.want) &&
-        run.rng.next() < TUNING.call.chance
+        (order || (run.stage >= 2 && run.rng.next() < TUNING.call.chance))
       ) {
         run.call = c;
         run.events.push({ type: 'call', name: c.name, kind: c.want });
