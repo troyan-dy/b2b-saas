@@ -12,6 +12,10 @@ export function dec(n: number): string {
   return LANG === 'en' ? String(n) : String(n).replace('.', ',');
 }
 
+export function multiplier(value: number): string {
+  return '×' + dec(Number(value.toFixed(2)));
+}
+
 /** 950 → «$950», 12400 → «$12 400», -300 → «−$300»: ink with a minus, the palette has no red */
 export function money(n: number): string {
   const v = Math.round(n);

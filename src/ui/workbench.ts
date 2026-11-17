@@ -2,7 +2,7 @@ import './workbench.css';
 import { L } from '../core/lang';
 import { BUILD_CATEGORIES, CATEGORY_TITLE, type BuildCategory } from '../content/build-categories';
 import type { BuildReason } from './build-reasons';
-import { dec, money, PER_S, rate, whole } from './format';
+import { dec, money, multiplier, PER_S, rate, whole } from './format';
 
 export type SegmentId = 'small' | 'medium' | 'large';
 export type WorkbenchBuildAction = 'place' | 'upgrade' | 'none';
@@ -16,6 +16,8 @@ export interface WorkbenchTask {
   readonly cost: number;
   readonly status: 'queued' | 'active' | 'ready' | 'backlog';
   readonly canMoveUp: boolean;
+  readonly canHelp?: boolean;
+  readonly position?: number;
   readonly canMoveDown: boolean;
   readonly canDefer: boolean;
   readonly canResume?: boolean;
@@ -156,7 +158,6 @@ const esc = (value: string): string =>
     /[&<>"']/g,
     (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!,
   );
-const multiplier = (value: number): string => '×' + dec(Number(value.toFixed(2)));
 const signed = (value: number): string =>
   (value > 0 ? '+' : value < 0 ? '−' : '') + whole(Math.abs(value));
 const primary = (value: string): string =>
@@ -247,7 +248,7 @@ function plotControl(office: WorkbenchView['office']): string {
       L(` · +${office.gain} кл.`, ` · +${office.gain} cells`), shortfall > 0, 'wb-plot-button');
 }
 
-function moduleDetail(module: WorkbenchModule): string {
+function moduleDetail(module: WorkbenchModule, task?: WorkbenchTask): string {
   const action =
     module.action !== 'none'
       ? '<div class="wb-module-buy"><p>' +
@@ -288,7 +289,13 @@ function moduleDetail(module: WorkbenchModule): string {
         esc(module.next) +
         '</p></section>'
       : '') +
-    action +
+    (task ? '<section class="wb-task-controls"><h3>' + esc(module.actionLabel ?? '') +
+      (task.position ? ' · №' + task.position : '') + ' · ' + task.done + '/' + task.work + '</h3>' +
+      (task.status === 'queued' ? button('move-up', task.id, L('↑ Раньше', '↑ Earlier'), !task.canMoveUp) +
+        button('move-down', task.id, L('↓ Позже', '↓ Later'), !task.canMoveDown) : '') +
+      (task.status === 'active' || task.status === 'queued' ? button('help-task', task.id, L('Помочь · 1 сила', 'Help · 1 energy'), !task.canHelp) : '') +
+      (task.canResume ? button('resume', task.id, L('Продолжить', 'Resume')) : '') +
+      button('cancel-task', task.id, L('Отменить работу', 'Cancel work')) + '</section>' : action) +
     (module.taskId && module.api ? '<div class="wb-api-option">' +
       button('rush-task', module.taskId, L('Строители ×2', 'Builders ×2') + ' · ' + money(module.api.cost), !module.api.affordable, 'wb-api-button', L('Дополнительные вычисления ускоряют назначенных строителей. Нужен агент на стройке; здание включится на релизе.', 'Extra compute speeds up assigned builders. Requires a builder; activates at release.')) +
       '<small>' + L('Дополнительные вычисления · нужен строитель · выпуск на релизе', 'Extra compute · requires a builder · ships at release') + '</small></div>' : '') +
@@ -770,7 +777,7 @@ export function createWorkbench(
         html(
           find('.wb-module-content'),
           module
-            ? moduleDetail(module) + (module.action === 'place' && view.office.used >= view.office.cells ? '<div class="wb-office">' + plotControl(view.office) + '</div>' : '')
+            ? moduleDetail(module, view.tasks.find(task => task.id === module.taskId)) + (module.action === 'place' && view.office.used >= view.office.cells ? '<div class="wb-office">' + plotControl(view.office) + '</div>' : '')
             : '<p class="wb-empty">' +
                 L('Выбери здание на карте.', 'Choose a building on the map.') +
                 '</p>',

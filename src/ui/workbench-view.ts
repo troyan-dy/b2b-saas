@@ -39,7 +39,7 @@ import {
   type Run,
   type WorkTask,
 } from '../systems/run/run';
-import { dec, money, PER_S, rate, whole } from './format';
+import { dec, money, multiplier, PER_S, rate, whole } from './format';
 import type {
   SegmentId,
   WorkbenchModule,
@@ -374,7 +374,7 @@ function segmentPanel(
     pricePending: segment.pendingPrice !== null,
     priceDisabled: Boolean(run.draft || run.over),
     priceLabel: `${rate(segment.unitPrice / TUNING.sprint_s)}${PER_S}`,
-    forecast: L(`По общему тарифу при ×${dec(previewPrice)}: ≈${rate(forecast.income / TUNING.sprint_s)}/с, отток ≈${forecast.lost}. Именные договоры ниже сюда не входят. Оценка на следующий релиз при текущем продукте и аудитории.`, `At the shared tariff ×${dec(previewPrice)}: ≈${rate(forecast.income / TUNING.sprint_s)}/s, ≈${forecast.lost} leaving. Named contracts below are not included. Next-release estimate for the current product and audience.`),
+    forecast: L(`По общему тарифу при ${multiplier(previewPrice)}: ≈${rate(forecast.income / TUNING.sprint_s)}/с, отток ≈${forecast.lost}. Именные договоры ниже сюда не входят. Оценка на следующий релиз при текущем продукте и аудитории.`, `At the shared tariff ${multiplier(previewPrice)}: ≈${rate(forecast.income / TUNING.sprint_s)}/s, ≈${forecast.lost} leaving. Named contracts below are not included. Next-release estimate for the current product and audience.`),
     needs: segmentNeeds(run, ctx, id, modules),
     reasons: conditions.concat(Object.entries(segment.reasons)
       .filter(([, value]) => value >= 0.5)
@@ -400,7 +400,12 @@ export function workbenchView(run: Run, selection: WorkbenchSelection): Workbenc
     .filter((kind) => allowed.has(kind))
     .map((kind) => moduleView(run, kind, selection.picked, hostFactor));
   const queued = run.tasks.filter((task) => task.status === 'queued');
-  const tasks = run.tasks.map((task) => taskView(run, task, queued.indexOf(task), queued));
+  const current = activeWork(run) ?? queued[0];
+  const tasks = run.tasks.map((task) => ({
+    ...taskView(run, task, queued.indexOf(task), queued),
+    canHelp: task === current && !selection.paused && !run.draft && run.energy >= 1 && handy(run, 'build'),
+    position: task.status === 'queued' ? queued.indexOf(task) + (current?.status === 'active' ? 2 : 1) : undefined,
+  }));
   const report = run.lastReport;
   const shipped = report
     ? [...report.shipped.map(shortName), ...(report.projects ?? []).map(projectName)].join(', ')

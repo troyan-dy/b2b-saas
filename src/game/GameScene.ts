@@ -1190,8 +1190,13 @@ export class GameScene extends Phaser.Scene {
     const eta = this.expectedReady.has(task.id) ? L('к релизу', 'this release') : L('позже', 'later');
     const label = task.status === 'ready' ? L('✓ к релизу', '✓ for release') : task.status === 'backlog' ? L('отложено', 'on hold') : `${task.status === 'active' ? '▶' : `№${order}`} ${Math.min(task.done, task.work)}/${task.work} · ${eta}`;
     const isCurrent = (activeWork(this.run) ?? this.run.tasks.find(entry => entry.status === 'queued'))?.id === task.id;
+    if (task.block) {
+      const compact = task.status === 'queued' ? `№${order}` : task.status === 'active' ? `▶ ${task.done}/${task.work}` : task.status === 'ready' ? '✓' : 'Ⅱ';
+      const title = `${projectName(task.block)} · ${label} · ${L('Управление работой', 'Manage work')}`;
+      return `<button class="task-progress" data-map="inspect:${task.block}" title="${title}" aria-label="${title}">${compact}</button>`;
+    }
     const canHelp = isCurrent && handy(this.run, 'build') && this.run.energy >= 1 && !this.paused && !this.run.draft;
-    const action = task.block && task.status !== 'active' ? `inspect:${task.block}` : `help:${task.id}`;
+    const action = `help:${task.id}`;
     const refund = task.cost > 0 && (task.status === 'active' || task.status === 'ready') ? L(` Уже потраченные ${money(task.cost)} не возвращаются.`, ` The ${money(task.cost)} already spent is not refunded.`) : '';
     const api = apiWorkQuote(this.run, task.id);
     const waiting = task.status === 'queued' && isCurrent && this.run.money < task.cost ? L(` · нужно ещё ${money(task.cost - this.run.money)}`, ` · needs ${money(task.cost - this.run.money)} more`) : '';
@@ -1240,8 +1245,12 @@ export class GameScene extends Phaser.Scene {
     const [ox, oy] = board.onScreen(0, 0);
     const infra = run.tasks.find(task => task.kind === 'infrastructure');
     const current = activeWork(run) ?? run.tasks.find(task => task.status === 'queued');
-    const tasks = [...(infra ? [infra] : []), ...run.tasks.filter(task => !task.block && task.kind !== 'infrastructure')].sort((a, b) => Number(b.id === current?.id) - Number(a.id === current?.id));
-    const rows = tasks.map(task => `<div data-work-id="${task.id}" class="map-work-item${task.status === 'ready' ? ' is-ready' : ''}"><span class="map-work-name" title="${projectName(task.card ?? task.kind)}">${task.kind === 'infrastructure' ? L('Расширение', 'Expansion') + ` v${run.infrastructure + 1}` : projectName(task.card ?? task.kind)}</span><div class="map-work-actions">${this.taskCaption(task)}</div></div>`).join('');
+    const tasks = [...run.tasks].sort((a, b) => Number(b.id === current?.id) - Number(a.id === current?.id));
+    const rows = tasks.map(task => {
+      const name = task.kind === 'infrastructure' ? L('Расширение', 'Expansion') + ` v${run.infrastructure + 1}` : projectName(task.block ?? task.card ?? task.kind);
+      if (task.block) return `<div data-work-id="${task.id}" class="map-work-item"><button data-map="inspect:${task.block}">${name} · ${task.done}/${task.work} ›</button></div>`;
+      return `<div data-work-id="${task.id}" class="map-work-item${task.status === 'ready' ? ' is-ready' : ''}"><span class="map-work-name" title="${name}">${name}</span><div class="map-work-actions">${this.taskCaption(task)}</div></div>`;
+    }).join('');
     this.paper.pruneTags('task:', new Set());
     const group = this.paper.tag('infrastructure', x, y,
       `<div class="map-infrastructure" style="--work-height:${height}px"><button data-map="infrastructure" ${infra ? 'disabled' : ''} title="${L('Общая инфраструктура · не занимает клетку продукта', 'Shared infrastructure · uses no product cell')}"><span class="infra-rack" aria-hidden="true">▰<br>▰<br>▰</span><b>${L('Инфраструктура', 'Infrastructure')} v${run.infrastructure}` +

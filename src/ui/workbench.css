@@ -664,3 +664,4 @@
 .map-work-actions button { padding: 3px; }
 .map-work-actions .task-api { font-size: 12px; }
 .map-work-item.is-ready .task-progress { color: var(--money); }
+.wb-task-controls button { margin: 0 6px 6px 0; padding: 5px 8px; }
