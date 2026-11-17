@@ -1044,7 +1044,7 @@ export class GameScene extends Phaser.Scene {
     if (net >= 0) sub = `<b class="good">+${rate(net)}${PER_S}</b> ${L('чистыми', 'net')}`;
     else {
       const left = run.money / -net;
-      sub = `<b class="hot">${rate(net)}${PER_S}</b> ${L('чистыми · запас при таком темпе', 'net · cash at this rate')} <b>${Math.floor(left / 60)}:${String(Math.floor(left % 60)).padStart(2, '0')}</b>`;
+      sub = `<b class="hot">${rate(net)}${PER_S}</b> ${L('чистыми · запас ≈', 'net · cash for ≈')} <b>${Math.floor(left / 60)}:${String(Math.floor(left % 60)).padStart(2, '0')}</b>`;
     }
     this.paper.setMoney(money(run.money), sub, run.money <= 0);
     const leftS = Math.ceil(TUNING.sprint_s - run.sprintT);
