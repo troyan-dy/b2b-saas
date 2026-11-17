@@ -38,6 +38,7 @@ import { sprintCardsView } from '../ui/sprint-cards-view';
 import { buildReason } from '../ui/build-reasons';
 import { DRAFT_CARDS } from '../systems/run/draft';
 import { PRODUCTION } from '../systems/run/product';
+import { nextReleaseWork } from '../systems/run/production';
 import type { CityView } from '../ui/client-city';
 import { companyContext, companyTotals, customerCount } from '../systems/company/company';
 import { SEGMENTS, schedulePrice, segmentView } from '../systems/company/market';
@@ -182,6 +183,7 @@ export class GameScene extends Phaser.Scene {
   private readonly quotes = new Map<number, { text: string; until: number }>();
   private readonly workbenchSelection: WorkbenchSelection = { picked: null, selectedSegment: 'small', previewPrices: {} };
   private workbenchAt = -Infinity;
+  private expectedReady = new Set<string>();
   private draftShown = false;
   private cityCollapsed = false;
   private citySignature = '';
@@ -329,6 +331,7 @@ export class GameScene extends Phaser.Scene {
       case 'upgrade': changed = upgrade(run, action.block); break;
       case 'demolish':
         this.picked = null;
+        this.workbenchSelection.panel = null;
         this.razing = action.block;
         break;
       case 'move': changed = moveTask(run, action.task, action.direction); break;
@@ -498,6 +501,11 @@ export class GameScene extends Phaser.Scene {
     }
     if (owner === 'office') {
       this.onWorkbench({ type: 'expand-office', kind: 'desks' });
+      return;
+    }
+    if (owner === 'team') {
+      for (const agent of this.run.agents) setLane(this.run, agent.id, key as Lane);
+      playSound('ui');
       return;
     }
     const id = Number(owner.slice(1));
@@ -909,6 +917,7 @@ export class GameScene extends Phaser.Scene {
 
   private show(): void {
     const run = this.run;
+    if (run.t - this.workbenchAt >= 0.2) this.expectedReady = nextReleaseWork(run);
     const board = this.board;
     this.syncStage(1100);
     const z = board.zoom;
@@ -1132,7 +1141,8 @@ export class GameScene extends Phaser.Scene {
   private taskCaption(task: WorkTask): string {
     const ordered = this.run.tasks.filter((entry) => entry.status === 'active' || entry.status === 'queued');
     const order = ordered.indexOf(task) + 1;
-    const label = task.status === 'ready' ? L('✓ к релизу', '✓ for release') : task.status === 'backlog' ? L('отложено', 'on hold') : `${task.status === 'active' ? '▶' : `№${order}`} ${Math.min(task.done, task.work)}/${task.work}`;
+    const eta = this.expectedReady.has(task.id) ? L('к релизу', 'this release') : L('позже', 'later');
+    const label = task.status === 'ready' ? L('✓ к релизу', '✓ for release') : task.status === 'backlog' ? L('отложено', 'on hold') : `${task.status === 'active' ? '▶' : `№${order}`} ${Math.min(task.done, task.work)}/${task.work} · ${eta}`;
     const isCurrent = (activeWork(this.run) ?? this.run.tasks.find(entry => entry.status === 'queued'))?.id === task.id;
     const canHelp = isCurrent && handy(this.run, 'build') && this.run.energy >= 1 && !this.paused && !this.run.draft;
     const action = task.block && task.status !== 'active' ? `inspect:${task.block}` : `help:${task.id}`;
@@ -1367,6 +1377,10 @@ export class GameScene extends Phaser.Scene {
         owner: 'hire',
         keys: TIERS.map((t) => ({ id: t, title: `+ ${TIER_NAME[t]} $${TUNING.tiers[t].cost_per_s}${PER_S}`, note: `${dec(TUNING.tiers[t].work_per_s / TUNING.tiers.fast.work_per_s)}× · ${t === 'think' ? L('без багов', 'no bugs') : t === 'normal' ? L('мало багов', 'few bugs') : L('много багов', 'many bugs')}`, bar: TUNING.tiers[t].work_per_s / TUNING.tiers.think.work_per_s, tip: TIER_NOTE[t] + L(` · найм ${OFFICE.hire[t]}`, ` · setup ${OFFICE.hire[t]}`), off: !canHire(run, t) })),
       },
+      ...(run.agents.length >= 6 ? [{
+        owner: 'team', label: L(`Все ${run.agents.length}`, `All ${run.agents.length}`),
+        keys: LANES.map(lane => ({ id: lane, title: LANE_NAME[lane], tip: run.agents.map(a => `№${a.id}`).join(', ') })),
+      }] : []),
       ...run.agents.map((a) => ({
         owner: `a${a.id}`,
         label: `<button class="agent-inspect" data-o="info" data-l="${a.id}" title="${TIER_NAME[a.tier]} · ${L('Производительность и стоимость', 'Performance and cost')}"><b>${NO}${a.id}</b><small>${TIER_NAME[a.tier]}</small><i aria-hidden="true">ⓘ</i></button>`,

@@ -132,6 +132,8 @@ export function createPaper(under: HTMLElement, over: HTMLElement): Paper {
   const tags = new Map<string, { el: HTMLElement; html: string; cls: string; x: number; y: number }>();
   let shelfSig = '';
   let cellSig = '';
+  let choosingCell = false;
+  let cellOrigin = '';
   let callSig = '';
   let shelfSections: readonly ShelfSection[] = [];
   const cards = createSprintCards(top, (id) => paper.onWorkbench({ type: 'choose-card', id }));
@@ -229,7 +231,7 @@ export function createPaper(under: HTMLElement, over: HTMLElement): Paper {
           if (r.label) html += `<p>${r.label}</p>`;
           for (const k of r.keys) {
             const cls = `${k.id === r.on ? 'on' : ''}${k.off ? ' off' : ''}${k.id === 'drop' ? ' drop' : ''}`;
-            html += `<span class="${cls}${k.note ? ' hire-stat' : ''}" data-o="${r.owner}" data-l="${k.id}"${k.tip ? ` title="${k.tip.replace(/"/g, '&quot;')}"` : ''}>${k.title}${k.note ? `<small>${k.note}</small><i class="agent-speed-bar"><i style="width:${Math.round((k.bar ?? 0) * 100)}%"></i></i>` : ''}</span>`;
+            html += `<button type="button" class="lane-key ${cls}${k.note ? ' hire-stat' : ''}" ${k.off || (r.lock && k.id !== r.on) ? 'disabled' : ''} data-o="${r.owner}" data-l="${k.id}"${k.tip ? ` title="${k.tip.replace(/"/g, '&quot;')}"` : ''}>${k.title}${k.note ? `<small>${k.note}</small><i class="agent-speed-bar"><i style="width:${Math.round((k.bar ?? 0) * 100)}%"></i></i>` : ''}</button>`;
           }
           html += '</div>';
         }
@@ -308,9 +310,19 @@ export function createPaper(under: HTMLElement, over: HTMLElement): Paper {
       const sig = JSON.stringify(cells);
       if (sig === cellSig) return;
       cellSig = sig;
+      const focused = document.activeElement as HTMLElement | null;
+      const previous = focused?.dataset.c;
+      const choosing = cells.some(c => c.id.includes(',') || c.id.startsWith('x:'));
+      if (choosing && !choosingCell) cellOrigin = focused?.dataset.wbKey ?? '';
       cellLayer.innerHTML = cells
-        .map((c) => `<div class="bl-cell${c.pulse ? ' pulse' : ''}" data-c="${c.id}" style="left:${Math.round(c.x)}px;top:${Math.round(c.y)}px"></div>`)
+        .map((c) => `<button type="button" class="bl-cell${c.pulse ? ' pulse' : ''}" aria-label="${L('Карта','Map')} · ${c.id}" data-c="${c.id}" style="left:${Math.round(c.x)}px;top:${Math.round(c.y)}px"></button>`)
         .join('');
+      if (!choosing && choosingCell && previous) {
+        (shop.querySelector<HTMLElement>(`[data-wb-key="${CSS.escape(cellOrigin)}"]:not(:disabled)`) ?? shop.querySelector<HTMLElement>('.wb-category-tab'))?.focus({ preventScroll: true });
+      } else if (previous || (choosing && !choosingCell)) {
+        (cellLayer.querySelector<HTMLElement>(`[data-c="${CSS.escape(previous ?? '')}"]`) ?? cellLayer.querySelector('button'))?.focus({ preventScroll: true });
+      }
+      choosingCell = choosing;
     },
     setZoom(z) {
       const v = Math.round(z * 1000) / 1000;
@@ -359,6 +371,14 @@ export function createPaper(under: HTMLElement, over: HTMLElement): Paper {
     },
   };
 
+  top.addEventListener('keydown', (event) => {
+    if (!['Space', 'Enter', 'NumpadEnter'].includes(event.code)) return;
+    const button = (event.target as HTMLElement).closest<HTMLButtonElement>('button');
+    if (!button || button.disabled) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (!event.repeat) button.click();
+  }, true);
   shop.addEventListener('click', (e) => {
     const t = e.target as HTMLElement;
     const lane = t.closest('[data-l]') as HTMLElement | null;

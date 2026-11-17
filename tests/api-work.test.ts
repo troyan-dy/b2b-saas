@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { apiWorkQuote, rushTask, startWork, cancelTask, syncProduction } from '../src/systems/run/production';
+import { apiWorkQuote, rushTask, startWork, cancelTask, syncProduction, enqueueTask, nextReleaseWork } from '../src/systems/run/production';
 import { agentWorkRate } from '../src/systems/run/workforce';
 import { createRun, IDEAS, place, step, setLane, TUNING } from '../src/systems/run/run';
 import { loadRun, saveRun } from '../src/systems/run/save';
@@ -11,6 +11,21 @@ function fresh() {
   return run;
 }
 describe('paid builder acceleration', () => {
+  it('forecasts a boosted task without lending its boost to the next task', () => {
+    const run = fresh();
+    const first = run.tasks[0];
+    first.work = 3;
+    const second = enqueueTask(run, { kind: 'infrastructure', work: 4, cost: 0 });
+    run.sprintT = TUNING.sprint_s - 15;
+    expect(rushTask(run, first.id)).toBe(true);
+    expect(nextReleaseWork(run)).toEqual(new Set([first.id]));
+    setLane(run, run.agents[0].id, 'fix');
+    expect(nextReleaseWork(run).size).toBe(0);
+    setLane(run, run.agents[0].id, 'build');
+    while (run.sprint === 1) step(run, 1 / 60);
+    expect(run.live.has('core')).toBe(true);
+    expect(run.tasks.some(t => t.id === second.id)).toBe(true);
+  });
   it('buys speed without supplying work, activating the block, or paying construction twice', () => {
     const run = fresh(), task = run.tasks[0];
     const quote = apiWorkQuote(run, task.id)!;

@@ -378,6 +378,8 @@
   color: #64635c;
 }
 .sc-applied {
+  --sc-blue: #6a9bcc;
+  --sc-tint: #d8e3eb;
   position: relative;
   flex: 0 0 auto;
   margin-bottom: 8px;

@@ -1,8 +1,8 @@
 import api from '../../data/balance/api.json';
 import tuning from '../../data/balance/run.json';
 import { PRODUCTION, upgradeWork } from './product';
-import { RULES, workNeed, type Block, type Run } from './run';
-import { agentWorkRate } from './workforce';
+import { busy, netPerS, RULES, workNeed, type Block, type Run } from './run';
+import { agentDebtPerWork, agentFixPerWork, agentWorkRate } from './workforce';
 
 export type TaskStatus = 'queued' | 'active' | 'ready' | 'backlog';
 export interface WorkTask {
@@ -264,4 +264,35 @@ export function buildCapacity(run: Run): number {
 
 export function remainingBuildCapacity(run: Run): number {
   return buildWork(run, Math.max(0, tuning.sprint_s - run.sprintT), true);
+}
+
+/** Project only staffed work, preserving each builder's progress and the API scope of each task. */
+export function nextReleaseWork(run: Run): Set<string> {
+  const ready = new Set(run.tasks.filter(task => task.status === 'ready').map(task => task.id));
+  if (!run.agents.some(a => a.lane === 'build')) return ready;
+  const projected = { ...run, agents: run.agents.map(a => ({ ...a })), tasks: run.tasks.map(t => ({ ...t })),
+    blocks: run.blocks.map(b => ({ ...b })), events: [] };
+  const tick = 1 / 60;
+  let cashRate = netPerS(projected);
+  for (let remaining = tuning.sprint_s - run.sprintT; remaining > 1e-8; remaining -= tick) {
+    if (!projected.tasks.some(t => t.status === 'active' || t.status === 'queued')) break;
+    const active = activeWork(projected);
+    if (!active && startWork(projected)) cashRate = netPerS(projected);
+    projected.money += cashRate * tick;
+    for (const agent of projected.agents) {
+      if (agent.lane === 'promo' || !busy(projected, agent)) continue;
+      agent.carry += agentWorkRate(projected, agent) * tick;
+      if (agent.carry < 1) continue;
+      agent.carry -= 1;
+      if (agent.lane === 'fix') projected.debt = Math.max(0, projected.debt - agentFixPerWork(agent.tier));
+      else {
+        const task = addProductionWork(projected);
+        if (task?.status === 'ready') ready.add(task.id);
+        projected.debt += agentDebtPerWork(projected, agent);
+      }
+      cashRate = netPerS(projected);
+    }
+    if (projected.money <= 0 && cashRate < 0) break;
+  }
+  return ready;
 }
