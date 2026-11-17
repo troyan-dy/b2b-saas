@@ -271,7 +271,7 @@
 .map-task .task-cancel { border-left: 1px solid var(--rule); min-width: 23px; }
 .map-task .task-api { color: #527088; border-left: 1px solid var(--rule); font: 13px var(--mono); }
 .map-task button:disabled { opacity: .5; cursor: default; }
-.bl-lanes span.hire-stat { font-size: 13px; }
+.bl-lanes .lane-key.hire-stat { font-size: 13px; }
 .hire-stat small { display: block; margin: 4px 0; font-size: 11px; }
 .agent-speed-bar { display: block; height: 3px; margin: 0 10px; background: #ddd9ce; }
 .agent-speed-bar i { display: block; height: 100%; background: #6a9bcc; }
@@ -314,6 +314,9 @@
 
 /* a free cell of the product: an invisible rhombus that takes the click */
 .bl-cell {
+  border: 0;
+  padding: 0;
+  background: transparent;
   position: absolute;
   width: calc(192px * var(--z, 1));
   height: calc(96px * var(--z, 1));
@@ -325,6 +328,8 @@
 .bl-cell:hover {
   background: rgba(217, 119, 87, 0.16);
 }
+.bl-cell:focus-visible { background: rgba(82, 112, 136, .55); }
+.lane-key:focus-visible { outline: 3px solid var(--blue); outline-offset: 1px; }
 
 /* Claude's card: a small dark terminal on the sheet */
 .bl-term {
@@ -438,7 +443,7 @@
   margin-bottom: 5px;
 }
 
-.wb-enabled .bl-shelf-body .bl-lanes span {
+.wb-enabled .bl-shelf-body .bl-lanes .lane-key {
   padding: 4px 0;
   font-size: 14px;
 }
@@ -613,7 +618,7 @@
   gap: 6px;
   margin-bottom: 7px;
 }
-.bl-lanes span {
+.bl-lanes .lane-key {
   padding: 5px 0 6px;
   border: 1.5px solid var(--rule);
   border-radius: 8px;
@@ -624,11 +629,11 @@
   cursor: pointer;
   white-space: nowrap;
 }
-.bl-lanes span:hover {
+.bl-lanes .lane-key:hover {
   border-color: var(--ink);
   color: var(--ink);
 }
-.bl-lanes span.on {
+.bl-lanes .lane-key.on {
   border-color: var(--ink);
   background: var(--ink);
   color: var(--paper);
@@ -678,11 +683,11 @@
   color: var(--coral);
 }
 /* the founder has chosen for this sprint: the other keys wait for the release */
-.bl-lanes.lock span:not(.on) {
+.bl-lanes.lock .lane-key:not(.on) {
   opacity: 0.45;
   cursor: default;
 }
-.bl-lanes.lock span:not(.on):hover {
+.bl-lanes.lock .lane-key:not(.on):hover {
   border-color: var(--rule);
   color: var(--dim);
 }
@@ -711,7 +716,8 @@
 .bl-shop:has(.bl-call.on) .sc-applied { display: none; }
 @media (max-width: 1440px), (max-height: 810px) {
   .wb-enabled .bl-shelf-body .hire-stat, .bl-shelf-body .hire-stat small { font-size: 17px; }
-  .wb-enabled .wb-build-reason, .wb-enabled .wb-category-tab, .wb-enabled .wb-build-price { font-size: 17px; }
+  .bl-shop.wb-enabled .wb-build-reason, .bl-shop.wb-enabled .wb-category-tab, .bl-shop.wb-enabled .wb-build-price,
+  .bl-shop.wb-enabled .bl-shelf-body .hire-stat { font-size: 17px; }
 }
 .bl-call em {
   font-style: normal;
@@ -806,18 +812,18 @@
   font-weight: 700;
 }
 /* an agent's row is tight: its keys are set a little smaller */
-.bl-lanes[style*='92px'] span {
+.bl-lanes[style*='92px'] .lane-key {
   font-size: 13px;
   padding: 6px 0 7px;
 }
-.bl-lanes span.off {
+.bl-lanes .lane-key.off {
   opacity: 0.4;
   cursor: default;
 }
-.bl-lanes span.drop {
+.bl-lanes .lane-key.drop {
   color: var(--dim);
 }
-.bl-lanes span.drop:hover {
+.bl-lanes .lane-key.drop:hover {
   border-color: var(--coral);
   color: var(--coral);
 }
