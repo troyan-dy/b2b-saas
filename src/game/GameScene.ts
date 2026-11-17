@@ -1269,8 +1269,8 @@ export class GameScene extends Phaser.Scene {
     const run = this.run;
     const has = (kind: string): boolean => run.blocks.some((block) => block.kind === kind);
     if (run.draft) return L('Выбери <b>одну из трёх карт</b>: время и деньги стоят до решения.', 'Choose <b>one of three cards</b>: time and money wait for your decision.');
-    if (this.razing) return L('<b>Кликни блок на карте</b>, который разобрать. Его клиенты снова начнут ждать; Esc — отмена.', '<b>Click a block on the map</b> to demolish it. Its clients will wait again; Esc cancels.');
-    if (this.picked) return L('<b>Кликни свободную клетку</b>. Подсвеченное соседство увеличит доход после выпуска.', '<b>Click a free cell</b>. Highlighted neighbors increase income after release.');
+    if (this.razing) return L('<b>Разобрать здание</b>: клик или Enter. Его клиенты снова начнут ждать. Esc — отмена.', '<b>Demolish building</b>: click or press Enter. Its customers will wait again. Esc cancels.');
+    if (this.picked) return L('<b>Выбери свободную клетку</b>: клик или Tab и Enter. Подсвеченное соседство увеличит доход после выпуска.', '<b>Choose a free cell</b>: click, or use Tab and Enter. Highlighted neighbors increase income after release.');
     const task = activeWork(run) ?? run.tasks.find((entry) => entry.status === 'queued');
     if (task?.status === 'queued' && run.money < task.cost) return L(
       'Для старта ' + (task.kind === 'infrastructure' ? 'инфраструктуры' : 'работы') + ' не хватает <b>' + money(task.cost - run.money) + '</b>. Измени очередь, отложи или отмени работу.',
