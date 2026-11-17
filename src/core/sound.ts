@@ -1,4 +1,4 @@
-import { ZZFX, zzfx } from 'zzfx';
+import { ZZFX, zzfx as synth } from 'zzfx';
 import { logSound } from './metrics';
 
 export type SoundName = 'yes' | 'auto' | 'buffer' | 'waste' | 'buy' | 'quip' | 'scale' | 'finale' | 'ui' | 'all';
@@ -7,10 +7,20 @@ let unlocked = false;
 let enabled = true;
 
 /** The «Звук» switch of the menu. */
-export function setSoundOn(on: boolean): void {
+const playing = new Set<GainNode>();
+export function setSoundOn(on: boolean, percent = 100): void {
   enabled = on;
+  ZZFX.volume = on ? 0.25 * percent / 100 : 0;
+  for (const gain of playing) gain.gain.value = ZZFX.volume;
 }
 ZZFX.volume = 0.25;
+
+function zzfx(...parameters: number[]): void {
+  const source = synth(...parameters);
+  if (!source) return;
+  playing.add(source.gainNode);
+  source.addEventListener('ended', () => playing.delete(source.gainNode), { once: true });
+}
 
 /** Browsers start audio only after a gesture: call from the first key press or click. */
 export function unlockSound(): void {

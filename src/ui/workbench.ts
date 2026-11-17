@@ -615,25 +615,6 @@ export function createWorkbench(
   clientPanel.addEventListener('keydown', (event) => {
     if ((event.target as HTMLElement).closest('button, input')) event.stopPropagation();
   });
-  window.addEventListener(
-    'keydown',
-    (event) => {
-      if (
-        !view ||
-        over.style.visibility === 'hidden' ||
-        event.altKey ||
-        event.ctrlKey ||
-        event.metaKey
-      )
-        return;
-      if (!view.draft && view.panel && event.code === 'Escape') {
-        event.preventDefault();
-        event.stopImmediatePropagation();
-        send({ type: 'close-panel' });
-      }
-    },
-    true,
-  );
 
   function updateSegment(segment: WorkbenchSegment): void {
     const changed = clientId !== segment.id;
