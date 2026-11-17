@@ -536,7 +536,7 @@ export class GameScene extends Phaser.Scene {
 
   private onKeyDown(e: KeyboardEvent): void {
     unlockSound();
-    if (this.ended || e.defaultPrevented) return;
+    if (this.ended || e.defaultPrevented || e.repeat || e.altKey || e.ctrlKey || e.metaKey) return;
     if (this.run.draft) {
       const digit = /^(?:Digit|Numpad)([1-3])$/.exec(e.code);
       if (digit && !e.repeat && !e.altKey && !e.ctrlKey && !e.metaKey) {

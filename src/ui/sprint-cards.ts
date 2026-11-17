@@ -93,6 +93,7 @@ export function createSprintCards(parent: HTMLElement, onChoose: (id: string) =>
   const draft = root.querySelector<HTMLElement>('.sc-draft')!;
   const album = root.querySelector<HTMLElement>('.sc-album')!;
   const applied = root.querySelector<HTMLElement>('.sc-applied')!;
+  parent.querySelector('.bl-shop')?.prepend(applied);
   let view: SprintCardsView | null = null;
   let draftKey = '';
   let albumKey = '';
@@ -259,11 +260,12 @@ export function createSprintCards(parent: HTMLElement, onChoose: (id: string) =>
           `<p class="sc-deal-rule">${L('Зелёное — выгода. Терракотовое — цена. Все собранные карты и постройки остаются с тобой.', 'Green is the benefit. Terracotta is the cost. All collected cards and buildings stay with you.')}</p>` +
           `<footer class="sc-report">${esc(deal.summary)}${deal.news ? `<span>${esc(deal.news.text)}</span>` : ''}</footer></div>`;
         draft.querySelector<HTMLButtonElement>('[data-sc-choice]')?.focus({ preventScroll: true });
-      } else if (beforeDraft?.isConnected) beforeDraft.focus({ preventScroll: true });
+      } else (beforeDraft?.isConnected && beforeDraft !== document.body ? beforeDraft : opener).focus({ preventScroll: true });
     },
     destroy(): void {
       window.clearTimeout(appliedTimer);
       window.removeEventListener('keydown', onKey, true);
+      applied.remove();
       root.remove();
     },
   };

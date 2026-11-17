@@ -689,11 +689,11 @@
 
 /* a call: a dark terminal card in the middle of the sheet, the answers are its lines */
 .bl-call {
-  position: absolute;
-  /* to the left of the product, under Claude's card: a call must not cover what is being built */
-  left: 24px;
-  top: 204px;
-  width: 372px;
+  position: relative;
+  flex: 0 0 auto;
+  max-height: 300px;
+  overflow-y: auto;
+  margin: 0 2px 12px;
   box-sizing: border-box;
   padding: 16px 20px 14px;
   border-radius: 12px;
@@ -707,6 +707,11 @@
 }
 .bl-call.on {
   display: block;
+}
+.bl-shop:has(.bl-call.on) .sc-applied { display: none; }
+@media (max-width: 1440px), (max-height: 810px) {
+  .wb-enabled .bl-shelf-body .hire-stat, .bl-shelf-body .hire-stat small { font-size: 17px; }
+  .wb-enabled .wb-build-reason, .wb-enabled .wb-category-tab, .wb-enabled .wb-build-price { font-size: 17px; }
 }
 .bl-call em {
   font-style: normal;
@@ -723,20 +728,27 @@
 .bl-call p {
   margin: 0 0 14px;
 }
-.bl-call div {
+.bl-call button {
+  display: block;
+  width: 100%;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
   padding: 5px 12px 6px;
   margin: 0 -12px;
   border-radius: 6px;
   cursor: pointer;
 }
-.bl-call div:hover {
+.bl-call button:hover, .bl-call button:focus-visible {
   background: var(--coral);
   color: var(--term-bg);
 }
-.bl-call div span {
+.bl-call button span {
   color: var(--dim);
 }
-.bl-call div:hover span {
+.bl-call button:hover span {
   color: var(--term-bg);
 }
 

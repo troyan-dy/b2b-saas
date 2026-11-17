@@ -378,11 +378,9 @@
   color: #64635c;
 }
 .sc-applied {
-  position: absolute;
-  z-index: 40;
-  left: 370px;
-  top: 280px;
-  width: 600px;
+  position: relative;
+  flex: 0 0 auto;
+  margin-bottom: 8px;
   padding: 15px 22px;
   border: 1.5px solid #426581;
   border-left: 7px solid var(--sc-blue);

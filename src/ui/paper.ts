@@ -136,6 +136,10 @@ export function createPaper(under: HTMLElement, over: HTMLElement): Paper {
   let shelfSections: readonly ShelfSection[] = [];
   const cards = createSprintCards(top, (id) => paper.onWorkbench({ type: 'choose-card', id }));
   const workbench = createWorkbench(shop, top, (action) => paper.onWorkbench(action));
+  shop.prepend(callCard);
+  const applied = shop.querySelector('.sc-applied');
+  if (applied) callCard.after(applied);
+  let beforeCall: HTMLElement | null = null;
   const city = createClientCity(top, (segment) => paper.onCity(segment), () => paper.onCity('toggle'));
   const last = { money: '', sub: '', news: '', hint: '', sprint: '', part: -1, zoom: -1, goal: '', ledger: '' };
 
@@ -336,12 +340,18 @@ export function createPaper(under: HTMLElement, over: HTMLElement): Paper {
       if (sig === callSig) return;
       callSig = sig;
       if (!c) {
+        const hadFocus = callCard.contains(document.activeElement);
         callCard.classList.remove('on');
+        if (hadFocus) (beforeCall?.isConnected ? beforeCall : shop.querySelector<HTMLElement>('.wb-category-tab'))?.focus({ preventScroll: true });
         return;
       }
+      const wasOpen = callCard.classList.contains('on');
+      const selected = (document.activeElement as HTMLElement | null)?.dataset.a;
+      if (!wasOpen) beforeCall = document.activeElement as HTMLElement | null;
       callCard.innerHTML =
-        `<small>${c.who}</small><p>${c.text}</p>` + c.options.map((o, k) => `<div data-a="${k}">❯ ${k + 1}. ${o}</div>`).join('');
+        `<small>${c.who}</small><p>${c.text}</p>` + c.options.map((o, k) => `<button type="button" data-a="${k}">❯ ${k + 1}. ${o}</button>`).join('');
       callCard.classList.add('on');
+      if (!wasOpen || selected !== undefined) callCard.querySelector<HTMLElement>(`[data-a="${selected ?? 0}"]`)?.focus({ preventScroll: true });
     },
     show(on) {
       hud.style.visibility = on ? 'visible' : 'hidden';
