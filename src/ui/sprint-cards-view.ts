@@ -4,7 +4,7 @@ import { LESSONS, TRAITS, traitGives } from '../systems/meta/meta';
 import { DRAFT_CARDS, previewCardChange, type CardChange, type DraftCard } from '../systems/run/draft';
 import { PRODUCTION, strategyCount, type StrategyId } from '../systems/run/product';
 import { TUNING, type Run } from '../systems/run/run';
-import { dec, PER_S, rate, whole } from './format';
+import { dec, money, PER_S, rate, whole } from './format';
 import type { SprintCardsView, SprintCardView } from './sprint-cards';
 
 export const SPRINT_CARD_ART: Record<string, string> = {
@@ -220,9 +220,15 @@ export function sprintCardsView(
       statusLabel: L('Действует', 'Active'),
     }));
   const report = run.lastReport;
+  const promises = report?.promises?.map(({ name, block, level, refund }) => {
+    const request = `${blockName(block)} v${level}`;
+    return refund === undefined
+      ? L(`${name}: «Получили ${request}, спасибо!» Обещание выполнено.`, `${name}: “We got ${request}, thanks!” Promise kept.`)
+      : L(`${name} не дождался «${request}» и ушёл. Возврат ${money(refund)}.`, `${name} left when ${request} missed the deadline. Refunded ${money(refund)}.`);
+  });
   const nextDecision = run.call ? L(`После выбора — звонок: ${run.call.name}`, `After your choice — call from ${run.call.name}`)
     : run.offer !== null ? L('После выбора — предложение покупателя', 'After your choice — a buyer’s offer')
-    : run.dilemma ? L(`После выбора — решение: ${run.dilemma.name}`, `After your choice — decision: ${run.dilemma.name}`) : '';
+    : run.dilemma ? (run.dilemma.name ? L(`После выбора — решение: ${run.dilemma.name}`, `After your choice — decision: ${run.dilemma.name}`) : L('После выбора — новое предложение', 'Another proposal follows your choice')) : '';
   return {
     cards,
     founder,
@@ -248,6 +254,7 @@ export function sprintCardsView(
       ? {
           sprint: run.sprint,
           limit: TUNING.last_sprint,
+          promises,
           firstSubscriptions: report?.firstSubscriptions ? L(
             `Первые подписки: ${rate(report.mrr / TUNING.sprint_s)}${PER_S} выручки`,
             `First subscriptions: ${rate(report.mrr / TUNING.sprint_s)}${PER_S} in revenue`,

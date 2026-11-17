@@ -235,6 +235,7 @@ export interface Client {
 }
 
 export interface Report {
+  promises?: { name: string; block: string; level: number; refund?: number }[];
   firstSubscriptions?: boolean;
   profitableStreak?: number;
   sprint: number;
@@ -1544,6 +1545,7 @@ function release(run: Run): void {
       continue;
     }
     if (satisfied(run, c)) {
+      if (c.promised) (report.promises ??= []).push({ name: c.name, block: c.want, level: c.wantLevel });
       fulfillClient(run, c);
       stay.push(c);
       continue;
@@ -1560,6 +1562,7 @@ function release(run: Run): void {
     if (c.promised) {
       // it paid for a block that never came: the money goes back
       const sum = Math.round(clientWorth(run, c) * TUNING.call.refund_sprints);
+      (report.promises ??= []).push({ name: c.name, block: c.want, level: c.wantLevel, refund: sum });
       run.money -= sum;
       run.stats.broken++;
       run.events.push({ type: 'refund', id: c.id, sum });

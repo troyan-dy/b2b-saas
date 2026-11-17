@@ -1394,7 +1394,13 @@ export class GameScene extends Phaser.Scene {
       },
       {
         owner: 'hire',
-        keys: TIERS.map((t) => ({ id: t, title: `+ ${TIER_NAME[t]} $${TUNING.tiers[t].cost_per_s}${PER_S}`, note: `${dec(TUNING.tiers[t].work_per_s / TUNING.tiers.fast.work_per_s)}× · ${t === 'think' ? L('без багов', 'no bugs') : t === 'normal' ? L('мало багов', 'few bugs') : L('много багов', 'many bugs')}`, bar: TUNING.tiers[t].work_per_s / TUNING.tiers.think.work_per_s, tip: TIER_NOTE[t] + L(` · найм ${OFFICE.hire[t]}`, ` · setup ${OFFICE.hire[t]}`), off: !canHire(run, t) })),
+        keys: TIERS.map(t => ({
+          id: t,
+          title: `+ ${TIER_NAME[t]}<small>${L('Найм', 'Hire')} ${money(OFFICE.hire[t])} · ${money(TUNING.tiers[t].cost_per_s)}${PER_S}</small>`,
+          note: `${dec(Number((TUNING.tiers[t].work_per_s / TUNING.tiers.fast.work_per_s).toFixed(1)))}× · ${t === 'think' ? L('без багов', 'no bugs') : t === 'normal' ? L('мало багов', 'few bugs') : L('много багов', 'many bugs')}`,
+          bar: TUNING.tiers[t].work_per_s / TUNING.tiers.think.work_per_s,
+          tip: TIER_NOTE[t], off: !canHire(run, t),
+        })),
       },
       ...(run.agents.length >= 6 ? [{
         owner: 'team', label: L(`Все ${run.agents.length}`, `All ${run.agents.length}`),

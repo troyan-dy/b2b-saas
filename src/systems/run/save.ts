@@ -111,6 +111,9 @@ function report(value: unknown): boolean {
   return (
     integer(value.sprint) &&
     (value.profitableStreak === undefined || integer(value.profitableStreak)) &&
+    (value.promises === undefined || (Array.isArray(value.promises) && value.promises.every(p =>
+      record(p) && typeof p.name === 'string' && typeof p.block === 'string' && integer(p.level) &&
+      (p.refund === undefined || nonnegative(p.refund))))) &&
     strings(value.shipped) &&
     strings(value.reasons) &&
     typeof value.down === 'boolean' &&

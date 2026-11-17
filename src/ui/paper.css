@@ -715,9 +715,11 @@
 }
 .bl-shop:has(.bl-call.on) .sc-applied { display: none; }
 @media (max-width: 1440px), (max-height: 810px) {
-  .wb-enabled .bl-shelf-body .hire-stat, .bl-shelf-body .hire-stat small { font-size: 17px; }
-  .bl-shop.wb-enabled .wb-build-reason, .bl-shop.wb-enabled .wb-category-tab, .bl-shop.wb-enabled .wb-build-price,
-  .bl-shop.wb-enabled .bl-shelf-body .hire-stat { font-size: 17px; }
+  .bl-shop.wb-enabled .wb-build-reason, .bl-shop.wb-enabled .wb-category-tab, .bl-shop.wb-enabled .wb-build-price { font-size: 17px; }
+  .bl-shop.wb-enabled .bl-shelf-body .hire-stat,
+  .bl-shop.wb-enabled .hire-stat small { font-size: 18.5px; line-height: 1.2; white-space: normal; }
+  .bl-shop.wb-enabled .hire-stat { color: var(--ink); border-color: #746c5f; }
+  .bl-shop.wb-enabled .hire-stat.off { opacity: 1; background: var(--paper); color: #69665e; border: 1px dashed #a49c8f; }
 }
 .bl-call em {
   font-style: normal;
