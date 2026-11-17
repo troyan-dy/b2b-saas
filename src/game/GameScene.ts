@@ -1078,7 +1078,11 @@ export class GameScene extends Phaser.Scene {
     // the goal is always on the sheet: three frames taken at random must say what to do
     const valuationNote = run.sprint >= 15 ? L(`Оценка для продажи ${money(valuation(run))}`, `Sale valuation ${money(valuation(run))}`) : '';
     const record = valuationNote && this.hooks.bestValuation ? L(` · рекорд ${money(this.hooks.bestValuation)}`, ` · record ${money(this.hooks.bestValuation)}`) : '';
-    this.paper.setGoal(this.nextStep(net) + (valuationNote ? `<br><small>${valuationNote}${record}</small>` : ''));
+    const order = run.nextId === 1 ? firstIndustryOrder(run) : undefined;
+    const orderHint = order?.kind === 'mobile' ? L('Первый заказ стоматологии: запись пациентов с телефона', 'First dental order: book patients from a phone')
+      : order?.kind === 'roles' ? L('Первый заказ комплаенса: разные права для автора и согласующего', 'First compliance order: separate permissions for author and approver') : '';
+    const detail = valuationNote ? valuationNote + record : orderHint;
+    this.paper.setGoal(this.nextStep(net) + (detail ? `<br><small>${detail}</small>` : ''));
     this.paper.setLedger(this.ledger());
     if (!this.ended) this.teach();
 
@@ -1104,7 +1108,7 @@ export class GameScene extends Phaser.Scene {
       const name = BLOCK_BY_ID[run.call.want]?.name;
       const order = run.call.id === 1 ? firstIndustryOrder(run) : undefined;
       this.paper.call({
-        who: `${CALL} · ${run.call.name.toUpperCase()}`,
+        who: `${CALL} · ${run.call.name.toUpperCase()} · ${L('ДО РЕЛИЗА', 'UNTIL RELEASE')}`,
         text: order?.kind === run.call.want ? order.text : (CALL_ASK[run.call.want] ?? L(`А «${name}» у вас есть? Нам без этого никак.`, `Do you have “${name}”? We can’t do without it.`)),
         options: callAnswers(honestMult(run), TUNING.call.sure_mult, promiseSprints(run)),
       });
@@ -1113,7 +1117,7 @@ export class GameScene extends Phaser.Scene {
       const offer = money(run.offer);
       const chance = Math.round(haggleChance(run) * 100);
       this.paper.call({
-        who: `${CALL} · ${L('ПОКУПАТЕЛЬ', 'A BUYER')}`,
+        who: `${CALL} · ${L('ПОКУПАТЕЛЬ · ДО РЕЛИЗА', 'A BUYER · UNTIL RELEASE')}`,
         text: L(
           `Ваш продукт стоит <em>${full}</em>, но мы видели код. Даём <em>${offer}</em>. Продукт, правда, закроем.`,
           `Your product is worth <em>${full}</em>, but we have seen the code. We offer <em>${offer}</em>. We will shut the product down, though.`,
@@ -1135,7 +1139,7 @@ export class GameScene extends Phaser.Scene {
         rival: L(`КОНКУРЕНТ · ЦЕЛЬ: ${name}`, `A COMPETITOR · TARGET: ${name}`),
         press: `${CALL} · ${L('ПРЕССА', 'THE PRESS')}`,
       };
-      this.paper.call({ who: who[d.who] ?? CALL, text: d.text, options: d.options.map((o) => `${o.label} <span>— ${o.note}</span>`) });
+      this.paper.call({ who: (who[d.who] ?? CALL) + L(' · ДО РЕЛИЗА', ' · UNTIL RELEASE'), text: d.text, options: d.options.map((o) => `${o.label} <span>— ${o.note}</span>`) });
     } else this.paper.call(null);
 
     if (this.termUntil > 0 && this.clock > this.termUntil) {
