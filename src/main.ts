@@ -17,6 +17,7 @@ import { createRng } from './core/rng';
 import { loadSettings, saveSettings, type Settings } from './core/settings';
 import { playSound, setSoundOn, unlockSound } from './core/sound';
 import { ending, menu, mixIdea } from './game/flow';
+import { packSale } from './game/sale';
 import { GameScene } from './game/GameScene';
 import { playBot, SENSIBLE } from './gyms/bot';
 import { mountGymKeys } from './gyms/keys';
@@ -221,9 +222,8 @@ async function play(): Promise<void> {
       stopSaving();
       finishRun(r);
       // the last frame of the startup stays on the sheet for a moment, then the terminal takes over
-      window.setTimeout(() => {
-        void showResult();
-      }, 1400);
+      if (r.over === 'sold') void packSale(over, r).then(showResult);
+      else window.setTimeout(() => void showResult(), 1400);
     },
     onQuit: () => {
       persist();

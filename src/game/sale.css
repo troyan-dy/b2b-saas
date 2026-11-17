@@ -1,0 +1,31 @@
+.sale-scene {
+  position: absolute; inset: 0; z-index: 80; pointer-events: auto;
+  display: grid; grid-template-rows: auto 1fr auto; padding: 78px 170px;
+  background: #f0eee6; color: #262624; font: 24px "JetBrains Mono", monospace;
+}
+.sale-scene header, .sale-scene footer { border-block-end: 1px solid #87867f; }
+.sale-scene header small { font-size: 19px; color: #68665f; }
+.sale-scene h1 { font: 600 82px/1.1 "Source Serif 4", serif; margin: 10px 0; }
+.sale-scene p { margin: 0 0 25px; }
+.sale-scene footer { display: flex; align-items: center; justify-content: space-between; padding: 20px 0; border-block-start: 1px solid #87867f; }
+.sale-scene footer strong { color: #3f7d58; padding-left: 18px; }
+.sale-scene button { font: inherit; padding: 12px 20px; color: #262624; background: #faf9f5; border: 1px solid currentColor; cursor: pointer; }
+.sale-art { position: relative; width: 700px; justify-self: center; align-self: center; height: 500px; perspective: 1100px; }
+.sale-box, .sale-lip { position: absolute; width: 290px; left: 205px; bottom: 0; }
+.sale-lip { clip-path: polygon(0 47%, 15% 34%, 54% 52%, 88% 33%, 100% 48%, 88% 60%, 88% 79%, 51% 100%, 10% 78%, 10% 56%); }
+.sale-paper { position: absolute; left: 50px; top: 5px; width: 600px; height: 220px; display: flex; transform-style: preserve-3d; animation: pack-sheet 4s both; }
+.sale-panel { box-sizing: border-box; width: 200px; height: 220px; border: 2px solid #787972; background: #faf9f5; display: grid; place-items: center; }
+.sale-panel img { width: 134px; }
+.sale-panel:first-child { transform-origin: right; animation: fold-left 4s both; }
+.sale-panel:last-child { transform-origin: left; animation: fold-right 4s both; }
+@keyframes fold-left { 0%, 20% { transform: rotateY(0); } 52%, 100% { transform: rotateY(174deg); } }
+@keyframes fold-right { 0%, 35% { transform: rotateY(0); } 65%, 100% { transform: rotateY(-170deg); } }
+@keyframes pack-sheet {
+  0%, 16% { transform: translateY(0) rotate(-5deg); }
+  62% { transform: translateY(0) rotate(-2deg); }
+  85%, 100% { transform: translateY(245px) scale(.55) rotate(3deg); opacity: 1; }
+  98%, 100% { opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sale-paper, .sale-panel:first-child, .sale-panel:last-child { animation: none; }
+}
