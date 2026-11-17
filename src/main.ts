@@ -8,6 +8,7 @@ import '@fontsource/source-serif-4/cyrillic-600.css';
 import '@fontsource/source-serif-4/latin-400.css';
 import '@fontsource/source-serif-4/latin-600.css';
 import './ui/style.css';
+import './game/pitch.css';
 import { readArgs } from './core/args';
 import { L, LANG } from './core/lang';
 import { installMetrics } from './core/metrics';
@@ -22,7 +23,7 @@ import { mountGymKeys } from './gyms/keys';
 import { LookdevScene } from './gyms/lookdev/LookdevScene';
 import { mountMusicDemo } from './gyms/music/MusicDemo';
 import { SheetScene } from './gyms/sheet/SheetScene';
-import { emptyMeta, loadMeta, traitLevels } from './systems/meta/meta';
+import { emptyMeta, loadMeta, recordResult, restoreResult, saveMeta, traitLevels } from './systems/meta/meta';
 import { ACTIVE_TECHS, createRun, IDEAS, type Idea, type Run } from './systems/run/run';
 import { clearRunSave, loadRun, saveRun } from './systems/run/save';
 import { createHud } from './ui/hud';
@@ -149,6 +150,23 @@ async function play(): Promise<void> {
   });
 
   term.open(L('терминал основателя', 'the founder’s terminal'));
+  const showResult = async (): Promise<void> => {
+    const result = restoreResult(meta)!;
+    await ending(term, result, meta, persistent);
+    delete meta.pending;
+    if (persistent) saveMeta(meta);
+    reload(true);
+  };
+  const finishRun = (run: Run): void => {
+    recordResult(run, meta);
+    if (persistent && saveMeta(meta)) clearRunSave();
+  };
+  if (saved?.over && !meta.pending) finishRun(saved);
+  if (persistent && restoreResult(meta)) {
+    clearRunSave();
+    await showResult();
+    return;
+  }
   if (!takeAgain() || args.menu || saved) {
     for (;;) {
       const choice = await menu(term, meta, audio, __VERSION__, saved);
@@ -158,10 +176,7 @@ async function play(): Promise<void> {
         restored = true;
         break;
       }
-      if (choice === 'start') {
-        if (persistent) clearRunSave();
-        break;
-      }
+      if (choice === 'start') break;
       if (choice === 'lang') {
         switchLanguage(settings);
         // the page is leaving: nothing more is asked on this one
@@ -171,13 +186,21 @@ async function play(): Promise<void> {
     }
   }
   if (!selected) {
-    const { idea, boost } = await mixIdea(term, args.seed, meta);
+    const cancel = document.createElement('button');
+    cancel.className = 'pitch-cancel';
+    cancel.textContent = L('Вернуться в меню', 'Back to menu');
+    cancel.onclick = () => reload(false);
+    over.append(cancel);
+    const draft = await mixIdea(term, args.seed, meta, !!saved);
+    cancel.remove();
+    if (!draft) { reload(false); return; }
+    const { idea, boost } = draft;
     selected = createRun(args.seed, idea, meta.lessons, traitLevels(meta, boost));
   }
   const run = selected;
   const persist = (): void => {
     if (!persistent) return;
-    if (run.over) clearRunSave();
+    if (run.over) finishRun(run);
     else saveRun(run);
   };
   persist();
@@ -196,10 +219,10 @@ async function play(): Promise<void> {
       if (finished) return;
       finished = true;
       stopSaving();
-      if (persistent) clearRunSave();
+      finishRun(r);
       // the last frame of the startup stays on the sheet for a moment, then the terminal takes over
       window.setTimeout(() => {
-        void ending(term, r, meta, persistent).then(() => reload(true));
+        void showResult();
       }, 1400);
     },
     onQuit: () => {
@@ -234,7 +257,9 @@ else if (__TOOLS__ && args.gym === 'build') {
     beforeStep: args.bot ? (r) => playBot(r, style) : undefined,
     // the gym shows the ending too, but writes nothing into the founder's record
     onEnd: (r: Run) => {
-      window.setTimeout(() => void ending(term, r, emptyMeta(), false).then(() => window.location.reload()), 1400);
+      const meta = emptyMeta();
+      recordResult(r, meta);
+      window.setTimeout(() => void ending(term, restoreResult(meta)!, meta, false).then(() => window.location.reload()), 1400);
     },
     onQuit: () => window.location.reload(),
   });

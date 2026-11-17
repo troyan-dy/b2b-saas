@@ -5,7 +5,7 @@ import { AGAIN_SAYS } from '../content/texts';
 import { L } from '../core/lang';
 import { dec, money, rate } from '../ui/format';
 import type { Card, CardOptions, Terminal } from '../ui/terminal/terminal';
-import { finish, LESSONS, pastPitch, raise, saveMeta, traitChoices, traitGives, TRAITS, unlockedNow, type Meta, type Trait } from '../systems/meta/meta';
+import { LESSONS, pastPitch, claimResultTrait, saveMeta, traitChoices, traitGives, TRAITS, unlockedNow, type FinalRun, type Meta, type Trait } from '../systems/meta/meta';
 import { pitch, TUNING, type Idea, type Run } from '../systems/run/run';
 import { createPitchDraft, type PitchDeck } from '../systems/run/pitch';
 import { playerCollectionSummary, playerCollectionView } from '../ui/player-collection-view';
@@ -40,7 +40,7 @@ export async function menu(term: Terminal, meta: Meta, state: MenuState, version
       ...(saved ? [{ title: L('Продолжить компанию', 'Continue company'), note: `${pitch(saved.idea)} · ${L('спринт', 'sprint')} ${saved.sprint}` }] : []),
       {
         title: meta.runs.length > 0 ? NEW_STARTUP : L('Основать стартап', 'Found a startup'),
-        note: meta.lessons.length > 0 ? L(`30 спринтов · уроков основателя: ${meta.lessons.length}`, `30 sprints · founder lessons: ${meta.lessons.length}`) : L('30 спринтов · компания сохраняется', '30 sprints · your company is saved'),
+        note: saved ? L('Прежняя компания сохранится до подтверждения в конце питча', 'Your saved company stays until you confirm at the end of the pitch') : meta.lessons.length > 0 ? L(`30 спринтов · уроков основателя: ${meta.lessons.length}`, `30 sprints · founder lessons: ${meta.lessons.length}`) : L('30 спринтов · компания сохраняется', '30 sprints · your company is saved'),
       },
       { title: L('Коллекция карт', 'Card collection'), note: playerCollectionSummary(meta) },
       { title: RESUME, note: meta.runs.length > 0 ? L(`стартапов: ${meta.runs.length}`, `startups: ${meta.runs.length}`) : L('пока пустое', 'empty so far') },
@@ -88,7 +88,9 @@ export async function resume(term: Terminal, meta: Meta): Promise<void> {
             : r.ending === 'late'
               ? L('время вышло', 'ran out of time')
               : L('<strong>банкротство</strong>', '<strong>bankruptcy</strong>');
-      term.print(`${pastPitch(r)} — ${how}, ${clock(r.lived)}${r.value ? ` · ${L('оценка', 'valuation')} ${money(r.value)}` : ''}`, 'small');
+      const history = r.ending === 'late' && r.profitAt !== undefined
+        ? (r.profitAt > 0 ? L(' · раньше была прибыль', ' · previously profitable') : L(' · прибыльных релизов не было', ' · no profitable releases')) : '';
+      term.print(`${pastPitch(r)} — ${how}, ${clock(r.lived)}${r.value !== undefined ? ` · ${L('оценка', 'valuation')} ${money(r.value)}` : ''}${history}`, 'small');
     }
   }
   // the traits: what grows with every startup
@@ -130,7 +132,8 @@ export async function mixIdea(
   term: Terminal,
   seed: number,
   meta: Meta,
-): Promise<{ idea: Idea; boost: string }> {
+  replacing = false,
+): Promise<{ idea: Idea; boost: string } | null> {
   const draft = createPitchDraft(seed, meta.runs.length);
   const draftOptions = (deck: PitchDeck, render: () => Card[]): CardOptions => ({
     reroll: {
@@ -253,8 +256,8 @@ export async function mixIdea(
       `They will last about ${minutes} minutes if we sell nothing.`,
     ),
     L(
-      `У тебя ${TUNING.last_sprint} спринтов. Выведи компанию в прибыль к последнему релизу — или выгодно продай.`,
-      `You have ${TUNING.last_sprint} sprints. Make the company profitable by the final release — or sell at a good price.`,
+      `У тебя ${TUNING.last_sprint} спринтов. Выйди в плюс к последнему релизу или продай компанию. При сбое поставщика нужны два прибыльных релиза подряд перед финалом и прибыльный поток после восстановления.`,
+      `You have ${TUNING.last_sprint} sprints. Turn a profit by the final release or sell the company. A supplier outage requires two consecutive profitable releases before the final one and profitable operations once service resumes.`,
     ),
   ];
   const last = meta.runs[meta.runs.length - 1];
@@ -333,16 +336,22 @@ export async function mixIdea(
       'dim small',
     );
   }
-  await term.wait(L('начать', 'start'));
+  if (replacing) {
+    const choice = await term.ask([
+      { title: L('Оставить прежнюю компанию', 'Keep the previous company') },
+      { title: L('Заменить сохранение и начать', 'Replace saved company and start') },
+    ]);
+    if (choice === 0) return null;
+  } else await term.wait(L('начать', 'start'));
   return { idea, boost };
 }
 
 /** The end of a startup: the founder's post, the numbers, what was learned. Returns when the player wants the next one. */
-export async function ending(term: Terminal, run: Run, meta: Meta, persist = true): Promise<void> {
-  const got = finish(run, meta);
-  if (persist) saveMeta(meta);
+export async function ending(term: Terminal, run: FinalRun, meta: Meta, persist = true): Promise<void> {
+  const pending = meta.pending!;
+  const got = LESSONS.filter(lesson => pending.lessons.includes(lesson.id));
   term.open(`${L('конец', 'the end')} · ${ENDING_TITLE[run.over ?? 'broke'].toLowerCase()}`);
-  let learned = false;
+
   for (;;) {
     term.clear();
     // the result first: one big number and one line of figures — nothing to read before it
@@ -359,12 +368,16 @@ export async function ending(term: Terminal, run: Run, meta: Meta, persist = tru
     // and the post itself, for those who read posts
     term.print(L('пост основателя', 'the founder’s post'), 'dim small');
     for (const line of endingPost(run)) term.print(line, 'dim small');
-    if (!learned) {
+    if (pending.stage !== 'claimed') {
       // every startup, whatever its end, makes the founder better at one thing: a card out of three
-      learned = true;
+
       const choices = traitChoices(meta, run.seed);
       if (choices.length > 0) {
-        await term.wait(L('дальше: чему ты научился', 'next: what you have learned'));
+        if (pending.stage === 'report') {
+          await term.wait(L('дальше: чему ты научился', 'next: what you have learned'));
+          pending.stage = 'trait';
+          if (persist) saveMeta(meta);
+        }
         term.clear();
         term.print(L('Чему ты научился в этом стартапе?', 'What did this startup teach you?'), 'mid');
         term.print(L('черта остаётся с тобой во всех следующих стартапах', 'the trait stays with you in every startup to come'), 'dim small');
@@ -372,9 +385,12 @@ export async function ending(term: Terminal, run: Run, meta: Meta, persist = tru
           const next = (meta.traits[t.id] ?? 0) + 1;
           return L(`черта основателя · уровень ${next} из ${t.max}`, `founder’s trait · level ${next} of ${t.max}`);
         };
-        const pick = choices[await term.cards(choices.map((t) => traitCard(t, meta.traits[t.id] ?? 0, kicker(t), (meta.traits[t.id] ?? 0) + 1)))];
-        raise(meta, pick.id);
-        if (persist) saveMeta(meta);
+        const pick = choices[await term.cards(choices.map((t) => traitCard(t, meta.traits[t.id] ?? 0, kicker(t), (meta.traits[t.id] ?? 0) + 1)), '', {
+          onPick(index) {
+            claimResultTrait(meta, choices[index].id);
+            if (persist) saveMeta(meta);
+          },
+        })];
         term.clear();
         term.print(`${pick.title}: ${L('уровень', 'level')} ${meta.traits[pick.id]}`, 'mid');
         term.print(traitGives(pick, meta.traits[pick.id] ?? 0), 'small');
@@ -386,6 +402,10 @@ export async function ending(term: Terminal, run: Run, meta: Meta, persist = tru
           for (const name of fresh) term.print(L(`карта идеи <b>«${name}»</b>`, `idea card <b>“${name}”</b>`), 'small');
         }
       }
+    }
+    if (pending.trait) {
+      const trait = TRAITS.find(item => item.id === pending.trait)!;
+      term.print(L(`Получена черта «${trait.title}», уровень ${meta.traits[trait.id]}`, `Trait earned: ${trait.title}, level ${meta.traits[trait.id]}`), 'small');
     }
     const k = await term.ask([{ title: NEW_STARTUP, note: L('тот же основатель, новая идея', 'same founder, a new idea') }, { title: RESUME }]);
     if (k === 0) return;

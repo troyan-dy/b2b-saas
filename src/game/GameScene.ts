@@ -1207,7 +1207,7 @@ export class GameScene extends Phaser.Scene {
           `${L('Звук', 'Sound')}: ${onOff(audio.sound, ['включён', 'выключен'])}`,
         ]
       : [];
-    return [L('Вернуться к стартапу', 'Back to the startup'), ...switches, L('Бросить стартап и выйти в меню', 'Abandon the startup and go to the menu')];
+    return [L('Вернуться к стартапу', 'Back to the startup'), ...switches, L('Сохранить и выйти в меню', 'Save and return to menu')];
   }
 
   /** The ledger next to the money: every line of income and spending per second, and the debt with its limit. */

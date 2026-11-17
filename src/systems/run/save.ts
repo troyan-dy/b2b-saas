@@ -110,6 +110,7 @@ function report(value: unknown): boolean {
   if (!record(value)) return false;
   return (
     integer(value.sprint) &&
+    (value.profitableStreak === undefined || integer(value.profitableStreak)) &&
     strings(value.shipped) &&
     strings(value.reasons) &&
     typeof value.down === 'boolean' &&
