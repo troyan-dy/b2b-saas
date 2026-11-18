@@ -2,6 +2,7 @@ import type Phaser from 'phaser';
 import { BLOCK_BY_ID } from '../content/blocks';
 import { buildCategory, CATEGORY_COLOR } from '../content/build-categories';
 import { PALETTE } from '../data/palette';
+import { pointOnRoute, routeLength } from './geometry';
 import { cellCenter, drawBox, drawDebt, drawGlyph, drawLogos, drawProgress, drawSite, drawSlot, leftFace, type Pt } from './iso';
 
 /** A block of the product as the sheet shows it. */
@@ -208,12 +209,14 @@ export class Board {
   }
 
   route(key: string, pts: readonly Pt[], arrow = true, activity?: string): void {
+    if (pts.length < 2) {
+      this.dropRoute(key);
+      return;
+    }
     const previous = this.routes.get(key);
     if (previous?.arrow === arrow && previous.activity === activity && previous.pts.length === pts.length && previous.pts.every((point, k) => point[0] === pts[k][0] && point[1] === pts[k][1])) return;
     if (previous) this.finishFlows(previous);
-    let len = 0;
-    for (let k = 1; k < pts.length; k++) len += Math.hypot(pts[k][0] - pts[k - 1][0], pts[k][1] - pts[k - 1][1]);
-    this.routes.set(key, { pts, len, arrow, activity });
+    this.routes.set(key, { pts, len: routeLength(pts), arrow, activity });
     this.redrawLines();
   }
 
@@ -264,18 +267,7 @@ export class Board {
         d.done = null;
         continue;
       }
-      let left = d.dist;
-      for (let k = 1; k < d.route.pts.length; k++) {
-        const [ax, ay] = d.route.pts[k - 1];
-        const [bx, by] = d.route.pts[k];
-        const seg = Math.hypot(bx - ax, by - ay);
-        if (left <= seg) {
-          const f = seg === 0 ? 0 : left / seg;
-          d.rect.setPosition(ax + (bx - ax) * f, ay + (by - ay) * f);
-          break;
-        }
-        left -= seg;
-      }
+      d.rect.setPosition(...pointOnRoute(d.route.pts, d.dist));
     }
   }
 

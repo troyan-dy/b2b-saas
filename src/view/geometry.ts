@@ -71,3 +71,30 @@ export function rect(u: number, v: number, w: number, h: number): Pt[] {
 export function elbow(a: Pt, b: Pt): Pt[] {
   return [a, [b[0], a[1]], b];
 }
+
+function segmentLength(a: Pt, b: Pt): number {
+  return Math.hypot(b[0] - a[0], b[1] - a[1]);
+}
+
+export function routeLength(points: readonly Pt[]): number {
+  let length = 0;
+  for (let i = 1; i < points.length; i++) length += segmentLength(points[i - 1], points[i]);
+  return length;
+}
+
+/** Interpolate by distance from the start, clamping to the two ends. */
+export function pointOnRoute(points: readonly Pt[], distance: number): Pt {
+  if (points.length === 0) throw new RangeError('A route needs a starting point');
+  if (distance <= 0) return points[0];
+  let remaining = distance;
+  for (let i = 1; i < points.length; i++) {
+    const a = points[i - 1], b = points[i];
+    const length = segmentLength(a, b);
+    if (remaining <= length) {
+      const fraction = remaining / length;
+      return [a[0] + (b[0] - a[0]) * fraction, a[1] + (b[1] - a[1]) * fraction];
+    }
+    remaining -= length;
+  }
+  return points[points.length - 1];
+}

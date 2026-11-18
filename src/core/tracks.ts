@@ -23,7 +23,12 @@ export function nextTrack(id: string): string {
   return TRACKS[(k + 1) % TRACKS.length].id;
 }
 
+/** Old settings may name a track that is no longer in the catalogue. */
+export function trackById(id: string): Track {
+  return TRACKS.find((track) => track.id === id) ?? TRACKS[0];
+}
+
 /** the name of a loop as the menu writes it */
 export function trackTitle(id: string): string {
-  return (TRACKS.find((t) => t.id === id) ?? TRACKS[0]).title.toLowerCase();
+  return trackById(id).title.toLowerCase();
 }
