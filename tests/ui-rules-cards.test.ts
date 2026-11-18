@@ -61,7 +61,7 @@ describe('sprint card decisions', () => {
       leads: 'available',
     });
     expect(view.draft).toBeNull();
-    expect(view.cards.find((c) => c.id === 'premium')!.statusLabel).toContain('Нужен');
+    expect(view.cards.find((c) => c.id === 'premium')!.statusLabel).toBe('Требуется: Обёртка Клода');
     expect(view.cards.find((c) => c.id === 'credits')!.duration).toContain('один раз');
   });
   it('compares one additional copy, describes capped operations and removes unknown draft ids', () => {

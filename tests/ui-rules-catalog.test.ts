@@ -50,7 +50,7 @@ it('supplies readable names, no-modifier copy and fallback art for new catalog e
   expect(sprint.cards.find((c) => c.id === 'mod-card')?.unlock).toContain('mod-block');
   expect(sprintCardsView(run).cards.find((c) => c.id === 'mod-card')).toMatchObject({
     art: 'laptop',
-    statusLabel: 'Нужен mod-block',
+    statusLabel: 'Требуется: mod-block',
   });
   expect(productEffects('mod-block', 1)).toBe('reputation ×1,5');
 });
