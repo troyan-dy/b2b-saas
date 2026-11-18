@@ -69,7 +69,7 @@ export function apiWorkQuote(run: Run, id: string): ApiWorkQuote | null {
       return null;
   }
   const remainingWork = task.work - task.done;
-  const unpaidCost = task.status === 'queued' || task.status === 'backlog' ? task.cost : 0;
+  const unpaidCost = task.status === 'queued' ? task.cost : 0;
   const fee = Math.ceil((api.minimum_fee + remainingWork * api.cost_per_work) * (1 + api.level_growth * ((task.level ?? run.infrastructure + 1) - 1)));
   const cost = fee;
   const builder = run.agents.some((agent) => agent.lane === 'build');

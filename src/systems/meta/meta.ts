@@ -153,7 +153,7 @@ function happened(run: Run, when: string): boolean {
 
 /** What this startup taught: up to two new lessons, by what happened in it. */
 export function learn(run: Run, meta: Meta): Lesson[] {
-  return LESSONS.filter((l) => l.id !== 'ear' && !meta.lessons.includes(l.id) && happened(run, l.when)).slice(0, PER_RUN);
+  return LESSONS.filter((l) => !meta.lessons.includes(l.id) && happened(run, l.when)).slice(0, PER_RUN);
 }
 
 /** Writes the finished startup into the founder's record and returns the lessons it gave. */
