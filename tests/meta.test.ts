@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { claimResultTrait, recordResult, restoreResult, collectionLessons, emptyMeta, finish, learn, LESSONS, migrate, pastPitch, raise, traitChoices, traitLevels, TRAITS } from '../src/systems/meta/meta';
+import { bestValuation, claimResultTrait, recordResult, restoreResult, collectionLessons, emptyMeta, finish, learn, LESSONS, migrate, pastPitch, raise, traitChoices, traitLevels, TRAITS } from '../src/systems/meta/meta';
 import { answerLastChance, chooseCard, createRun, IDEAS, isLive, priceMult, shelf, step, TUNING, type Idea } from '../src/systems/run/run';
 
 const idea: Idea = { tech: IDEAS.tech[0], form: IDEAS.form[3], aud: IDEAS.aud[0] };
@@ -17,6 +17,10 @@ function goBroke(seed: number): ReturnType<typeof createRun> {
 }
 
 describe('founder', () => {
+  it('keeps the largest final valuation across old and current runs', () => {
+    expect(bestValuation([])).toBe(0);
+    expect(bestValuation([{}, { value: 320 }, { value: 700 }, {}, { value: 500 }])).toBe(700);
+  });
   it('restores a final report and grants its reward exactly once across reloads', () => {
     const run = goBroke(12);
     run.stats.value = 90000;

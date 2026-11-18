@@ -341,13 +341,21 @@ export function releaseLines(r: {
   if (r.shipped.length > 0) lines.push(L(`выпущено: ${r.shipped.join(', ')}`, `shipped: ${r.shipped.join(', ')}`));
   else lines.push(L('<span>выпущено: ничего. Зато стабильно</span>', '<span>shipped: nothing. But it’s stable</span>'));
   if (r.came > 0 || r.left > 0) {
-    const came =
-      r.came > 0 ? L(`<em>+${r.came}</em> ${r.came === 1 ? 'клиент' : 'клиента'}`, `<em>+${r.came}</em> ${r.came === 1 ? 'client' : 'clients'}`) : L('новых клиентов нет', 'no new clients');
-    const why = r.reasons[0] ? L(`ушёл: нет «${r.reasons[0]}»`, `left: no “${r.reasons[0]}”`) : L('ушёл молча', 'left silently');
+    const came = r.came > 0
+      ? `<em>+${r.came}</em> ${plural(r.came, L(['клиент', 'клиента', 'клиентов'], ['client', 'clients', 'clients']))}`
+      : L('новых клиентов нет', 'no new clients');
+    const departure = plural(r.left, L(['ушёл', 'ушли', 'ушли'], ['left', 'left', 'left']));
+    const why = r.reasons[0] ? L(`${departure}: нет «${r.reasons[0]}»`, `left: no “${r.reasons[0]}”`) : L(`${departure} молча`, 'left silently');
     const left = r.left > 0 ? ` · <strong>−${r.left}</strong> ${why}` : '';
     lines.push(came + left);
   }
-  if (r.closed > 0) lines.push(L(`<span>−${r.closed} клиент закрылся сам: он тоже был стартапом</span>`, `<span>−${r.closed} client shut down by itself: it was a startup too</span>`));
+  if (r.closed > 0) {
+    const reason = plural(r.closed, L(
+      ['клиент закрылся сам: он тоже был стартапом', 'клиента закрылись сами: они тоже были стартапами', 'клиентов закрылись сами: они тоже были стартапами'],
+      ['client shut down by itself: it was a startup too', 'clients shut down by themselves: they were startups too', 'clients shut down by themselves: they were startups too'],
+    ));
+    lines.push(`<span>−${r.closed} ${reason}</span>`);
+  }
   // the same unit as everywhere on the sheet: money per second
   if (r.unpaid) {
     lines.push(

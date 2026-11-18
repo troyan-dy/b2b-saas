@@ -48,6 +48,16 @@ const LESSON_UNLOCK: Record<string, string> = {
   any: L('Закончи любую партию.', 'Finish any run.'),
 };
 
+export type CollectionFilter = 'all' | 'open' | 'locked';
+
+export function collectionCards(cards: readonly CollectionCard[], filter: CollectionFilter): CollectionCard[] {
+  return cards.filter(card => filter === 'all' || (filter === 'locked' ? card.status === 'locked' : card.status !== 'locked'));
+}
+
+export function collectionProgress(progress: CollectionCard['progress']): number {
+  return progress && progress.max > 0 ? Math.max(0, Math.min(1, progress.value / progress.max)) : 0;
+}
+
 export function playerCollectionSummary(meta: Meta): string {
   const traits = TRAITS.filter((trait) => (meta.traits[trait.id] ?? 0) > 0).length;
   const lessons = collectionLessons(meta);
@@ -226,7 +236,7 @@ export function playerCollectionView(meta: Meta, saved: Run | null = null): Coll
             ? L('Разовая помощь', 'One-off help')
             : L('Усиление до финала', 'Upgrade until the final release'),
         description: card.description,
-        effect: current ? [current.impact, ...(current.benefits ?? [])].join(' · ') : card.impact,
+        effect: current ? [current.impact, ...current.benefits].join(' · ') : card.impact,
         penalty: current?.penalties?.length ? current.penalties.join(' · ') : card.tradeoff,
         status:
           current?.status === 'active' || current?.status === 'claimed'

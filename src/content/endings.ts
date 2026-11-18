@@ -67,13 +67,6 @@ function mainPost(run: FinalRun): string[] {
   const downs = `${s.downs} ${plural(s.downs, TIMES)}`;
   switch (run.over) {
     case 'sold':
-      if (run.downWhy === 'supplier') return L([
-        `1/ ${name} встретил финал без поставщика. Подписки временно остановились.`,
-        '2/ Два предыдущих релиза принесли прибыль. После восстановления подписки снова покроют расходы.',
-      ], [
-        `1/ ${name} reached the finish during a supplier outage. Subscription revenue paused.`,
-        '2/ The two previous releases were profitable. Subscriptions will cover costs again when service resumes.',
-      ]);
       return L(
         [
           say(0, `Мы стали частью большой семьи. Тред.`, `Важный день для нашей команды из одного человека. Тред.`),
@@ -91,6 +84,13 @@ function mainPost(run: FinalRun): string[] {
         ],
       );
     case 'profit':
+      if (run.downWhy === 'supplier') return L([
+        `1/ ${name} встретил финал без поставщика. Подписки временно остановились.`,
+        '2/ Два предыдущих релиза принесли прибыль. После восстановления подписки снова покроют расходы.',
+      ], [
+        `1/ ${name} reached the finish during a supplier outage. Subscription revenue paused.`,
+        '2/ The two previous releases were profitable. Subscriptions will cover costs again when service resumes.',
+      ]);
       return L(
         [
           say(0, `Как я вышел на прибыль без инвесторов. Тред.`, `Мы прибыльны. Да, так тоже можно. Тред.`),

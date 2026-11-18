@@ -1,4 +1,6 @@
 import { L } from '../core/lang';
+import { shortcutIndex, tabIndexForKey } from './navigation-view';
+import { collectionCards, collectionProgress, type CollectionFilter as Filter } from './player-collection-view';
 import './player-collection.css';
 
 export interface CollectionCard {
@@ -30,7 +32,7 @@ export interface CollectionView {
   sections: readonly CollectionSection[];
 }
 
-type Filter = 'all' | 'open' | 'locked';
+
 const filters: readonly Filter[] = ['all', 'open', 'locked'];
 const filterLabel: Record<Filter, string> = {
   all: L('Все', 'All'),
@@ -45,8 +47,7 @@ const esc = (text: string): string =>
 
 function cardHtml(card: CollectionCard): string {
   const progress = card.progress;
-  const fraction =
-    progress && progress.max > 0 ? Math.max(0, Math.min(1, progress.value / progress.max)) : 0;
+  const fraction = collectionProgress(progress);
   return (
     `<article class="pc-card pc-${card.status}" data-collection-card="${esc(card.id)}">` +
     `<div class="pc-art"><img src="assets/img/nodes/${encodeURIComponent(card.art)}.webp" alt="" loading="lazy"><span class="pc-state">${esc(card.statusLabel)}</span></div>` +
@@ -122,11 +123,7 @@ export function createPlayerCollection(
     );
     note.textContent = section?.note ?? '';
     scroll.setAttribute('aria-labelledby', `pc-tab-${selected}`);
-    const cards = (section?.cards ?? []).filter(
-      (card) =>
-        filter === 'all' ||
-        (filter === 'locked' ? card.status === 'locked' : card.status !== 'locked'),
-    );
+    const cards = collectionCards(section?.cards ?? [], filter);
     grid.classList.toggle('pc-five', section?.cards.length === 5);
     grid.innerHTML = cards.length
       ? cards.map(cardHtml).join('')
@@ -161,22 +158,13 @@ export function createPlayerCollection(
   return {
     key(event: KeyboardEvent): void {
       const target = event.target as HTMLElement;
-      const digit = /^(?:Digit|Numpad)([1-9])$/.exec(event.code);
-      if (digit && Number(digit[1]) <= tabs.length) {
+      const shortcut = shortcutIndex(event.code, tabs.length);
+      if (shortcut >= 0) {
         event.preventDefault();
-        select(Number(digit[1]) - 1);
+        select(shortcut);
         tabs[selected]?.focus();
       } else if (tabs.length && (target.matches('[role="tab"]') || target === document.body)) {
-        const index =
-          event.code === 'ArrowRight'
-            ? (selected + 1) % tabs.length
-            : event.code === 'ArrowLeft'
-              ? (selected + tabs.length - 1) % tabs.length
-              : event.code === 'Home'
-                ? 0
-                : event.code === 'End'
-                  ? tabs.length - 1
-                  : -1;
+        const index = tabIndexForKey(event.code, selected, tabs.length);
         if (index >= 0) {
           event.preventDefault();
           select(index);

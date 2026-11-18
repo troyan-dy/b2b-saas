@@ -1,5 +1,9 @@
 import { gamePaused } from '../core/pause-clock';
 import Phaser from 'phaser';
+import { nextStep } from './run-hint';
+import { cityBuildings, cityFrame, cityGroups, cityOutlet, payingGroups, visibleBuildings } from './client-city-model';
+import { blocksOnSheet, cashRunway, currentSite, demolitionTargets, deskOffer, outstandingPromises } from './company-panel-model';
+import { workArea } from './layout';
 import { BLOCK_BY_ID } from '../content/blocks';
 import {
   BANK_ANSWERS,
@@ -41,8 +45,8 @@ import { DRAFT_CARDS } from '../systems/run/draft';
 import { PRODUCTION } from '../systems/run/product';
 import { nextReleaseWork } from '../systems/run/production';
 import type { CityView } from '../ui/client-city';
-import { companyContext, companyTotals, customerCount } from '../systems/company/company';
-import { SEGMENTS, schedulePrice, segmentView } from '../systems/company/market';
+import { companyTotals, customerCount } from '../systems/company/company';
+import { schedulePrice } from '../systems/company/market';
 import {
   answerCall,
   answerDilemma,
@@ -53,11 +57,9 @@ import {
   cancelTask,
   canHire,
   cellsMax,
-  agentSlots,
   officeQuote,
   expandOffice,
   OFFICE,
-  clientPay,
   crunch,
   chooseCard,
   deferTask,
@@ -79,7 +81,6 @@ import {
   LANES,
   links,
   linkBonus,
-  logos,
   mortgageSeconds,
   moveTask,
   netPerS,
@@ -87,7 +88,6 @@ import {
   place,
   promiseSprints,
   resumeTask,
-  RULES,
   setLane,
   setReview,
   shelf,
@@ -96,17 +96,16 @@ import {
   TUNING,
   upgrade,
   valuation,
-  type ClientType,
   type Lane,
   type Run,
   type RunEvent,
   type Tier,
   type WorkTask,
 } from '../systems/run/run';
-import { Board, type BlockOnSheet, type SlotOnSheet } from '../view/board';
+import { Board, type SlotOnSheet } from '../view/board';
 import type { Pt } from '../view/iso';
 import { Squares } from '../view/squares';
-import { agentRoute, AGENT_SLOTS, BUS_GAP, BUS_Y, CLIENT_SLOTS, DESK, INFRASTRUCTURE, MARKET, MONEY_RECT, STAGE_VIEW, TRUNK_X, VIEW_AT } from './layout';
+import { agentRoute, AGENT_SLOTS, BUS_GAP, BUS_Y, CLIENT_SLOTS, DESK, INFRASTRUCTURE, MARKET, MONEY_RECT, TRUNK_X, VIEW_AT } from './layout';
 
 const STEP = 1 / 60;
 
@@ -120,14 +119,7 @@ const NO = L('№', '#');
 const ENERGY = L('силы', 'energy');
 const CALL = L('ЗВОНОК', 'CALL');
 
-/** How a client of each type stands on the sheet: the height of its picture and how many squares one payment is. */
-export const CLIENT_LOOK: Record<ClientType, { height: number; squares: number }> = {
-  small: { height: 118, squares: 1 },
-  mid: { height: 136, squares: 1 },
-  startup: { height: 112, squares: 1 },
-  corp: { height: 150, squares: 3 },
-  gov: { height: 158, squares: 4 },
-};
+export { CLIENT_LOOK } from './client-city-model';
 
 export interface GameHooks {
   onHidden?: () => void;
@@ -186,7 +178,7 @@ export class GameScene extends Phaser.Scene {
   private cityCollapsed = false;
   private citySignature = '';
   private cityProductSignature = '';
-  private cityNodes: { id: string; segment: 'small' | 'medium' | 'large'; texture: string; title: string; x: number; y: number; height: number; chain: boolean }[] = [];
+  private cityNodes: ReturnType<typeof cityBuildings> = [];
   private infrastructureArea: { x: number; y: number; height: number } | null = null;
   private infrastructurePoint: Pt = INFRASTRUCTURE;
 
@@ -906,18 +898,7 @@ export class GameScene extends Phaser.Scene {
     this.paper.setZoom(z);
 
     // the product
-    const blocks: BlockOnSheet[] = run.blocks.map((b) => {
-      const landed = Math.min(this.landed.get(b.kind) ?? 0, b.need);
-      // a block under rework stays what it is — a shipped module — with the new work lying on top of it
-      return { kind: b.kind, i: b.i, j: b.j, built: b.live || (b.built && landed >= b.need), up: b.live && b.up, done: landed, need: b.need, debt: 0, logos: b.kind === 'landing' ? logos(run) : 0 };
-    });
-    // debt sticks to the modules, oldest first: the picture of «it all rests on the first thing we wrote»
-    let debt = Math.floor(run.debt);
-    for (const b of blocks) {
-      if (!b.built || debt <= 0) continue;
-      b.debt = Math.min(15, debt);
-      debt -= b.debt;
-    }
+    const blocks = blocksOnSheet(run, this.landed);
     const free = this.picked && !run.draft && !this.paused ? freeCells(run) : [];
     const slots: SlotOnSheet[] = free.map((c) => ({ i: c.i, j: c.j, hot: this.picked !== null && friendsAt(run, this.picked, c.i, c.j) > 0 }));
     board.sync(blocks, slots);
@@ -929,15 +910,12 @@ export class GameScene extends Phaser.Scene {
     });
     // the wrecking tool: every shipped block but the base three can be clicked off the sheet
     if (this.razing && !run.draft && !this.paused) {
-      for (const b of run.blocks) {
-        if (!b.live || b.up || run.tasks.some((task) => task.block === b.kind) || RULES[b.kind].role === 'base' || (this.razing !== '*' && b.kind !== this.razing)) continue;
+      for (const b of demolitionTargets(run, this.razing)) {
         const [x, y] = board.onScreen(...board.top(b));
         cells.push({ id: `x:${b.kind}`, x, y, pulse: true });
       }
     }
-    const next = run.tasks.find((task) => task.status === 'queued');
-    const active = activeWork(run) ?? (next && run.money >= next.cost ? next : undefined);
-    const site = active?.block ? run.blocks.find((block) => block.kind === active.block) : undefined;
+    const site = currentSite(run);
     if (!run.draft && !this.paused && !this.picked && !this.razing && site) {
       // the site itself takes clicks: the founder finishes the work by hand
       const [x, y] = board.onScreen(...board.top(site));
@@ -1040,12 +1018,10 @@ export class GameScene extends Phaser.Scene {
 
     // money and time
     const net = netPerS(run);
-    let sub: string;
-    if (net >= 0) sub = `<b class="good">+${rate(net)}${PER_S}</b> ${L('чистыми', 'net')}`;
-    else {
-      const left = run.money / -net;
-      sub = `<b class="hot">${rate(net)}${PER_S}</b> ${L('чистыми · запас ≈', 'net · cash for ≈')} <b>${Math.floor(left / 60)}:${String(Math.floor(left % 60)).padStart(2, '0')}</b>`;
-    }
+    const runway = cashRunway(run.money, net);
+    const sub = runway === null
+      ? `<b class="good">+${rate(net)}${PER_S}</b> ${L('чистыми', 'net')}`
+      : `<b class="hot">${rate(net)}${PER_S}</b> ${L('чистыми · запас ≈', 'net · cash for ≈')} <b>${runway}</b>`;
     this.paper.setMoney(money(run.money), sub, run.money <= 0);
     const leftS = Math.ceil(TUNING.sprint_s - run.sprintT);
     const sprint = run.sprint;
@@ -1061,10 +1037,9 @@ export class GameScene extends Phaser.Scene {
     const orderHint = order?.kind === 'mobile' ? L('Первый заказ стоматологии: запись пациентов с телефона', 'First dental order: book patients from a phone')
       : order?.kind === 'roles' ? L('Первый заказ комплаенса: разные права для автора и согласующего', 'First compliance order: separate permissions for author and approver') : '';
     const detail = valuationNote ? valuationNote + record : orderHint;
-    const promises = run.clients.filter(client => client.promised && !client.happy).sort((a, b) => a.patience - b.patience);
-    this.paper.setGoal(this.nextStep(net) + (detail && !promises.length ? `<br><small>${detail}</small>` : ''));
-    this.paper.setPromises(promises.map(client => {
-      const deadline = Math.min(TUNING.last_sprint, run.sprint + client.patience - 1);
+    const promises = outstandingPromises(run);
+    this.paper.setGoal(nextStep(run, net, { paused: this.paused, picked: Boolean(this.picked), razing: Boolean(this.razing) }) + (detail && !promises.length ? `<br><small>${detail}</small>` : ''));
+    this.paper.setPromises(promises.map(({ client, deadline }) => {
       const block = BLOCK_BY_ID[client.want]?.name ?? client.want;
       return { block: client.want, label: L(
         `Обещано: ${client.name} · ${block} v${client.wantLevel} · к релизу ${deadline} без сбоев`,
@@ -1171,20 +1146,7 @@ export class GameScene extends Phaser.Scene {
       areas.push({ left: x - 110 * z, right: x + 110 * z, top: y - node.height * z, bottom: y + 70 });
     }
     // Reserve the full control area, so progress, price and ready-state changes never move it.
-    const fits = ({ x, y, height }: { x: number; y: number; height: number }): boolean => areas.every(area => x + 138 < area.left || x - 138 > area.right || y + height < area.top || y > area.bottom);
-    const anchors = [...(this.infrastructureArea ? [this.infrastructureArea] : []), { x: 160, y: 310, height: 180 }, { x: 1180, y: 350, height: 180 }, { x: 1180, y: 810, height: 180 }];
-    // A full city can occupy all three anchors. Use its remaining vertical gap and scroll the rows.
-    const gaps: { x: number; y: number; height: number }[] = [];
-    for (const x of [160, 1180]) {
-      let top = 290;
-      const obstacles = areas.filter(area => x + 138 >= area.left && x - 138 <= area.right).sort((a, b) => a.top - b.top);
-      for (const area of [...obstacles, { top: 1010, bottom: 1010 }]) {
-        const height = Math.min(180, area.top - 10 - top);
-        if (height >= 110) gaps.push({ x, y: top, height });
-        top = Math.max(top, area.bottom + 10);
-      }
-    }
-    const area = this.mapMoved && this.infrastructureArea ? this.infrastructureArea : anchors.find(fits) ?? gaps.sort((a, b) => b.height - a.height)[0];
+    const area = workArea(areas, this.infrastructureArea, this.mapMoved);
     if (!area) return;
     const { x, y, height } = area;
     this.infrastructureArea = area;
@@ -1243,57 +1205,6 @@ export class GameScene extends Phaser.Scene {
    * The line under the sprint ruler: the one thing to do next, in plain words. The first startup is
    * walked through by it step by step: block, landing, payment, client, profit.
    */
-  private nextStep(net: number): string {
-    const run = this.run;
-    const has = (kind: string): boolean => run.blocks.some((block) => block.kind === kind);
-    if (run.draft) return L('Выбери <b>одну из трёх карт</b>: время и деньги стоят до решения.', 'Choose <b>one of three cards</b>: time and money wait for your decision.');
-    if (this.razing) return L('<b>Разобрать здание</b>: клик или Enter. Его клиенты снова начнут ждать.', '<b>Demolish building</b>: click or press Enter. Its customers will wait again.');
-    if (this.picked) return L('<b>Выбери свободную клетку</b>: клик или Tab и Enter. Подсвеченное соседство увеличит доход после выпуска.', '<b>Choose a free cell</b>: click, or use Tab and Enter. Highlighted neighbors increase income after release.');
-    const task = activeWork(run) ?? run.tasks.find((entry) => entry.status === 'queued');
-    if (task?.status === 'queued' && run.money < task.cost) return L(
-      'Для старта ' + (task.kind === 'infrastructure' ? 'инфраструктуры' : 'работы') + ' не хватает <b>' + money(task.cost - run.money) + '</b>. Измени очередь, отложи или отмени работу.',
-      (task.kind === 'infrastructure' ? 'Infrastructure' : 'Work') + ' needs <b>' + money(task.cost - run.money) + '</b> more to start. Reorder, defer or cancel it.',
-    );
-    if (!task && run.tasks.some(entry => entry.status === 'ready')) return L('<b>Работа готова и ждёт релиза</b>. Выпущенное улучшение заработает после отсчёта.', '<b>Work is ready and waiting for release</b>. The upgrade activates when the countdown ends.');
-    if (!task && run.tasks.some(entry => entry.status === 'backlog')) return L('<b>Работа отложена</b>: не выполняется. Нажми ▶ над работой, чтобы вернуть её в очередь; отложенные здания сохраняют клетки.', '<b>Work is deferred</b>: no progress. Press ▶ above the task to resume; deferred buildings keep their cells.');
-    if (this.paused) return L('<b>Пауза</b>: время, работа и деньги стоят.', '<b>Paused</b>: time, work and money are stopped.');
-    if (task && !run.agents.some(agent => agent.lane === 'build')) return L(
-      `<b>На стройке нет агента</b>. Назначь строителя или нажми <b>«${HAND_NAME.build}»</b> справа внизу · 1 сила.`,
-      `<b>No agent is building</b>. Assign a builder or press <b>“${HAND_NAME.build}”</b> at the bottom right · 1 energy.`,
-    );
-    if (!has('core')) return L(`Выбери <b>«${BLOCK_BY_ID.core.name}»</b> справа, затем клетку на чертеже.`, `Pick <b>“${BLOCK_BY_ID.core.name}”</b> on the right, then choose a cell on the blueprint.`);
-    if (!has('landing')) return L('Поставь <b>«Лендинг»</b>: без него клиенты не найдут продукт.', 'Place the <b>“Landing Page”</b> so customers can find your product.');
-    if (!has('pay')) return L('Поставь <b>«Приём оплаты»</b>: он включает подписки после выпуска.', 'Place <b>“Payments”</b>: it enables subscriptions after release.');
-    if (run.down) return run.downWhy === 'supplier'
-      ? L('<strong>Сбой поставщика</strong> до релиза: клиенты не платят. Можно пока улучшить продукт.', '<strong>Provider outage</strong> until release: customers are not paying. Improve your product while you wait.')
-      : L('<strong>Продукт лежит</strong>: назначь агента на починку, снизь техдолг к следующему релизу.', '<strong>The product is down</strong>: assign an agent to fixes and reduce tech debt before release.');
-    if (!isLive(run, 'pay')) return L(
-      `<b>Платежи ещё не выпущены</b>. Помоги стройке кнопкой <b>«${HAND_NAME.build}»</b> справа внизу. Готовые проекты включатся на релизе.`,
-      `<b>Payments have not shipped yet</b>. Use <b>“${HAND_NAME.build}”</b> at the bottom right to help build. Completed projects activate at release.`,
-    );
-    const totals = companyTotals(run);
-    if (totals.utilization > 1) return L(
-      '<strong>Перегруз ' + Math.round(totals.utilization * 100) + '%</strong>: расширь «Инфраструктуру» справа. Выпуск — на релизе; деньги ускоряют строителей.',
-      '<strong>Load ' + Math.round(totals.utilization * 100) + '%</strong>: expand “Infrastructure” on the right. Ships at release; money speeds up builders.',
-    );
-    if (task && !task.block) return L(
-      `Основатель расширяет компанию. Чтобы помочь, нажми <b>«${HAND_NAME.build}»</b> справа внизу.`,
-      `The founder is expanding the company. Press <b>“${HAND_NAME.build}”</b> at the bottom right to help.`,
-    );
-    if (customerCount(run) === 0) return L('После выпуска ядра и лендинга придут первые клиенты. <b>Продвижение</b> пополняет воронку, нужные функции помогают им остаться.', 'The first clients arrive after core and landing ship. <b>Promotion</b> fills the funnel; useful features help them stay.');
-    if (net < 0) return L(
-      `До прибыли не хватает <b>${rate(-net)}${PER_S}</b>. Нажми <b>«Клиенты»</b> на карте или на их здания: там запросы, сроки и выручка.`,
-      `<b>${rate(-net)}${PER_S}</b> short of profit. Click <b>“Clients”</b> on the map or their buildings for needs, deadlines and revenue.`,
-    );
-    if (run.sprint === TUNING.last_sprint) return L(
-      '<em>Последний спринт</em> · выпусти готовые улучшения. После релиза — итог компании.',
-      '<em>Final sprint</em> · ship your ready upgrades. The company result follows this release.',
-    );
-    return L(
-      '<em>В плюсе</em> · оценка ' + money(valuation(run)) + '. Новый уровень остаётся в своей клетке; новые модули выбирай под потребности клиентов.',
-      '<em>In the black</em> · valuation ' + money(valuation(run)) + '. Upgrades stay in their cells; choose new modules around client needs.',
-    );
-  }
 
   /**
    * Teaching through play: Claude says one thing at the moment it matters. Most things once; what stops
@@ -1353,6 +1264,7 @@ export class GameScene extends Phaser.Scene {
   private shelfView(): ShelfSection[] {
     const run = this.run;
 
+    const desk = deskOffer(run);
     // what opens the stronger agents and more desks is written out: it is a goal, not a secret
     const stage3 = `${rate(TUNING.stage3_mrr / TUNING.sprint_s)}${PER_S}`;
     const unlock =
@@ -1364,11 +1276,11 @@ export class GameScene extends Phaser.Scene {
     const rows: ShelfKeys[] = [
       {
         owner: 'office',
-        keys: [{ id: 'desks', title: officeQuote(run, 'desks') === null
-          ? L(`Все ${agentSlots(run)} мест открыты`, `All ${agentSlots(run)} desks unlocked`)
-          : L(`+ Рабочее место · ${money(officeQuote(run, 'desks')!)}`, `+ Agent desk · ${money(officeQuote(run, 'desks')!)}`),
+        keys: [{ id: 'desks', title: desk.price === null
+          ? L(`Все ${desk.slots} мест открыты`, `All ${desk.slots} desks unlocked`)
+          : L(`+ Рабочее место · ${money(desk.price)}`, `+ Agent desk · ${money(desk.price)}`),
           tip: L('Ещё одно место для найма. Сам агент оплачивается отдельно.', 'One more hiring slot. Agent setup is paid separately.'),
-          off: officeQuote(run, 'desks') === null || run.money < officeQuote(run, 'desks')! }],
+          off: desk.disabled }],
       },
       {
         owner: 'hire',
@@ -1394,7 +1306,7 @@ export class GameScene extends Phaser.Scene {
     return [
       {
         id: 'agents',
-        title: L(`АГЕНТЫ · ${run.agents.length} ИЗ ${agentSlots(run)}`, `AGENTS · ${run.agents.length} OF ${agentSlots(run)}`),
+        title: L(`АГЕНТЫ · ${run.agents.length} ИЗ ${desk.slots}`, `AGENTS · ${run.agents.length} OF ${desk.slots}`),
         hint: `${rate(-flows(run).agents)}${PER_S} · ${L('без дела — бесплатно', 'idle — free')}`,
         note: unlock,
         rows,
@@ -1503,14 +1415,9 @@ export class GameScene extends Phaser.Scene {
       this.paper.setCity(null);
       return;
     }
-    const ctx = companyContext(run);
-    const groups = SEGMENTS.map((id) => {
-      const segment = segmentView(run.market, ctx, id);
-      const contracts = run.clients.filter((client) => (client.type === 'corp' || client.type === 'gov' ? 'large' : client.type === 'mid' ? 'medium' : 'small') === id);
-      return {id, segment, contracts, count: segment.count + contracts.length};
-    }).filter((group) => group.count > 0);
+    const groups = cityGroups(run);
     this.syncStage(1100);
-    const outlet = groups.length ? run.blocks.filter((block) => block.live).sort((a,b) => (b.i-b.j)-(a.i-a.j))[0] : undefined;
+    const outlet = cityOutlet(run, groups.length > 0);
     const productSignature = outlet ? `${outlet.kind}:${outlet.i}:${outlet.j}` : '';
     if (productSignature !== this.cityProductSignature) {
       if (outlet) {
@@ -1520,23 +1427,7 @@ export class GameScene extends Phaser.Scene {
       } else board.dropRoute('city-feed');
       this.cityProductSignature = productSignature;
     }
-    const nodes: typeof this.cityNodes = [];
-    groups.forEach((group, column) => {
-      const amount = this.cityCollapsed ? 1 : Math.min(4, group.count);
-      for (let row = 0; row < amount; row++) {
-        const [x,y] = CLIENT_SLOTS[column * 4 + row];
-        const contract = group.contracts[row];
-        const corporate = [...IDEAS.corp, ...IDEAS.gov];
-        const texture = contract?.texture ?? (group.id === 'large' ? corporate[row % corporate.length].texture : run.idea.aud.texture);
-        nodes.push({
-          id: `city:${group.id}:${row}:${contract?.id ?? 'group'}`,
-          segment: group.id, texture,
-          title: contract ? `${contract.name} · ${rate(clientPay(run, contract) / TUNING.sprint_s)}${PER_S}` : L(`${SEGMENT_TITLES[group.id]} компании · потребности и тариф`, `${SEGMENT_TITLES[group.id]} companies · needs and tariff`),
-          x,y,height: contract ? CLIENT_LOOK[contract.type].height : group.id === 'large' ? 150 : 118,
-          chain: contract?.type === 'mid' || (!contract && group.id === 'medium'),
-        });
-      }
-    });
+    const nodes = cityBuildings(run, groups, this.cityCollapsed);
     const signature = JSON.stringify(nodes.map((node) => [node.id, node.texture, node.x, node.y, node.height, node.chain]));
     if (signature !== this.citySignature) {
       const next = new Set(nodes.map((node) => node.id));
@@ -1568,7 +1459,7 @@ export class GameScene extends Phaser.Scene {
         ? {x: this.mapMoved ? hx : Math.min(hx, 1180), y: hy, width: Math.min(420, Math.max(275, groups.length * 225 * z))}
         : {x: 1155, y: 300, width: 275},
       groups: groups.map((group, column) => {
-        const lastRow = this.cityCollapsed ? 0 : Math.min(4, group.count) - 1;
+        const lastRow = visibleBuildings(group.count, this.cityCollapsed) - 1;
         const [sx,sy] = CLIENT_SLOTS[column * 4 + lastRow];
         const [x,y] = board.onScreen(sx,sy+12);
         return {id:group.id,title:SEGMENT_TITLES[group.id],count:group.count,happiness:Math.round(group.segment.satisfaction),x,y,width:210*z};
@@ -1586,40 +1477,26 @@ export class GameScene extends Phaser.Scene {
   /** A new stage: the camera pulls back and shows more of the sheet. */
   private syncStage(ms: number): void {
     if (this.mapMoved) return;
-    const count = customerCount(this.run);
-    const segments = new Set<string>(this.run.market.groups.filter((group) => group.profiles.some((profile) => profile.count > 0)).map((group) => group.id));
-    for (const client of this.run.clients) segments.add(client.type === 'corp' || client.type === 'gov' ? 'large' : client.type === 'mid' ? 'medium' : 'small');
-    const groups = segments.size;
-    const want = this.run.stage >= 3 || count > 4 || groups > 1 || this.run.land > 0 ? 3 : this.run.stage === 2 || count || this.run.market.opened ? 2 : 1;
-    const teamRows = this.run.agents.length > AGENT_SLOTS.length / 2 ? 2 : 1;
-    if (this.stageShown === want * 10 + teamRows && this.cityColumnsShown === groups) return;
-    this.stageShown = want * 10 + teamRows;
-    this.cityColumnsShown = groups;
-    const v = STAGE_VIEW[Math.max(want, teamRows > 1 ? 2 : 1) - 1];
-    // Reserve the whole caption, not just the building centre, before the shelf at x=1340.
-    const rightEdge = groups ? CLIENT_SLOTS[(groups - 1) * 4][0] + 105 : 0;
-    const centre = Math.max(v.x, rightEdge - (1322 - VIEW_AT[0]) / v.zoom);
-    const duration = groups && this.board.onScreen(rightEdge, 0)[0] > 1322 ? 0 : ms;
-    this.board.view(v.zoom, centre, teamRows > 1 ? Math.max(v.y, want <= 2 ? 300 : 225) : v.y, VIEW_AT[0], VIEW_AT[1], duration, () => undefined);
+    const frame = cityFrame(this.run);
+    if (this.stageShown === frame.key && this.cityColumnsShown === frame.columns) return;
+    this.stageShown = frame.key;
+    this.cityColumnsShown = frame.columns;
+    const duration = frame.columns && this.board.onScreen(frame.rightEdge, 0)[0] > 1322 ? 0 : ms;
+    this.board.view(frame.zoom, frame.x, frame.y, VIEW_AT[0], VIEW_AT[1], duration, () => undefined);
   }
 
   /** Subscriptions: green squares keep flying from the clients into the money. */
   private flowMoney(dt: number): void {
     this.payAt -= dt * Math.min(this.speed, 3);
     if (this.payAt > 0) return;
-    const run = this.run;
-    const ctx = companyContext(run);
-    const paying = SEGMENTS.map((id, index) => ({
-      index,
-      income: (segmentView(run.market, ctx, id).income + run.clients.filter((client) => (client.type === 'corp' || client.type === 'gov' ? 'large' : client.type === 'mid' ? 'medium' : 'small') === id).reduce((sum, client) => sum + clientPay(run, client), 0)) / TUNING.sprint_s,
-    })).filter((group) => group.income > 0);
+    const paying = payingGroups(this.run);
     if (paying.length === 0) {
       this.payAt = 0.5;
       return;
     }
     this.payAt = Math.max(0.18, 1.4 / (1 + Math.sqrt(paying.reduce((sum, group) => sum + group.income, 0) / 10)));
     const group = paying[this.payTurn++ % paying.length];
-    const city = this.cityNodes.filter((node) => node.segment === SEGMENTS[group.index]);
+    const city = this.cityNodes.filter((node) => node.segment === group.id);
     const source = city[this.payTurn % Math.max(1, city.length)];
     if (!source) return;
     const [x,y] = this.board.onScreen(source.x,source.y-70);
@@ -1670,7 +1547,4 @@ export class GameScene extends Phaser.Scene {
   }
 }
 
-/** «3 спринта» */
-export function sprints(n: number): string {
-  return `${n} ${plural(n, L(['спринт', 'спринта', 'спринтов'], ['sprint', 'sprints', 'sprints']))}`;
-}
+export { sprints } from './run-hint';

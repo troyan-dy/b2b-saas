@@ -1,5 +1,6 @@
 import { afterGameTime } from '../core/pause-clock';
 import { L } from '../core/lang';
+import { activeCardCount, albumTitle } from './sprint-cards-view';
 import './sprint-cards.css';
 
 export interface SprintCardView {
@@ -146,7 +147,7 @@ export function createSprintCards(parent: HTMLElement, onChoose: (id: string) =>
       ) +
       section(L('Временные события', 'Temporary events'), view.events) +
       section(L('Основатель', 'Founder'), view.founder) +
-      section(L('Вся коллекция · 9 карт', 'Full collection · 9 cards'), view.cards) +
+      section(albumTitle(view.cards.length), view.cards) +
       '</div>' +
       `<footer>${L('Здесь можно только смотреть. Новые карты выбираются между спринтами. Время идёт.', 'This is a reference. Choose new cards between sprints. Time is running.')}</footer></div>`;
     const body = album.querySelector('.sc-album-body');
@@ -224,13 +225,7 @@ export function createSprintCards(parent: HTMLElement, onChoose: (id: string) =>
         chosen = false;
         return;
       }
-      const count =
-        view.cards.reduce(
-          (sum, card) => sum + (card.level ?? (card.status === 'active' ? 1 : 0)),
-          0,
-        ) +
-        view.founder.length +
-        view.events.length;
+      const count = activeCardCount(view);
       opener.textContent = L(`Карты · ${count}`, `Cards · ${count}`);
       opener.setAttribute(
         'aria-label',

@@ -2,7 +2,9 @@ import './workbench.css';
 import { L } from '../core/lang';
 import { BUILD_CATEGORIES, CATEGORY_TITLE, type BuildCategory } from '../content/build-categories';
 import type { BuildReason } from './build-reasons';
-import { dec, money, multiplier, PER_S, rate, whole } from './format';
+import { canConfirmPrice, capacityIndicator, catalogModules, landShortfall } from './workbench-view';
+import { clientPanelPosition } from './map-geometry-view';
+import { dec, money, multiplier, PER_S, primary, rate, signed, whole } from './format';
 
 export type SegmentId = 'small' | 'medium' | 'large';
 export type WorkbenchBuildAction = 'place' | 'upgrade' | 'none';
@@ -170,10 +172,7 @@ const esc = (value: string): string =>
     /[&<>"']/g,
     (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!,
   );
-const signed = (value: number): string =>
-  (value > 0 ? '+' : value < 0 ? '−' : '') + whole(Math.abs(value));
-const primary = (value: string): string =>
-  value.replace(/^(?:v\d+:|Сразу:|Immediately:)\s*/, '').split(' · ')[0];
+
 const buildLabel = (action: WorkbenchBuildAction): string =>
   ({
     place: L('Разместить', 'Place'),
@@ -254,8 +253,8 @@ function moduleCard(module: WorkbenchModule): string {
 function plotControl(office: WorkbenchView['office']): string {
   const usage = L(`Занято клеток: ${office.used}/${office.cells}`, `Building cells: ${office.used}/${office.cells} used`);
   if (office.landCost === null) return '<span>' + usage + ' · ' + L('Предел участка', 'Plot limit reached') + '</span>';
-  const shortfall = Math.max(0, office.landCost - office.money);
-  return '<span>' + usage + (shortfall ? ' · ' + L('Не хватает ', 'Short by ') + money(Math.ceil(shortfall)) : '') + '</span>' +
+  const shortfall = landShortfall(office.landCost, office.money);
+  return '<span>' + usage + (shortfall ? ' · ' + L('Не хватает ', 'Short by ') + money(shortfall) : '') + '</span>' +
     button('expand-office', 'land', L('Расширить участок', 'Expand plot') + ' · ' + money(office.landCost) +
       L(` · +${office.gain} кл.`, ` · +${office.gain} cells`), shortfall > 0, 'wb-plot-button');
 }
@@ -352,15 +351,7 @@ function agentDetail(agent: NonNullable<WorkbenchView['agent']>): string {
 }
 
 function infrastructureCard(infra: NonNullable<WorkbenchView['infrastructure']>): string {
-  const utilization = Math.max(0, infra.utilization ?? 0);
-  const percent = Math.round(utilization * 100);
-  const state = utilization > 1 ? 'overloaded' : utilization >= 0.8 ? 'busy' : 'spare';
-  const stateText =
-    utilization > 1
-      ? L('Перегруз · клиенты уходят', 'Overloaded · clients leave')
-      : utilization >= 0.8
-        ? L('Почти заполнено', 'Nearly full')
-        : L('Есть запас', 'Room to grow');
+  const { percent, state, stateText } = capacityIndicator(infra.utilization);
   const status =
     infra.status === 'ready'
       ? L('Готово · включится на релизе', 'Ready · goes live at release')
@@ -613,10 +604,7 @@ export function createWorkbench(
   };
   function renderCatalog(): void {
     if (!view || view.draft) return;
-    const available = view.modules
-      .filter((module) => category === 'all' || module.category === category)
-      .sort((a, b) => Number(a.disabled) - Number(b.disabled) ||
-        Number(Boolean(b.reason)) - Number(Boolean(a.reason)));
+    const available = catalogModules(view.modules, category);
     for (const tab of root.querySelectorAll<HTMLButtonElement>('.wb-category-tab')) tab.setAttribute('aria-pressed', String(tab.dataset.wbId === category));
     const office = view.office;
     html(find('.wb-office'), plotControl(office));
@@ -714,12 +702,7 @@ export function createWorkbench(
     text(find('.wb-forecast'), segment.forecast);
     const confirm = find<HTMLButtonElement>('[data-wb-action="confirm-price"]');
     confirm.dataset.wbId = segment.id;
-    confirm.disabled = Boolean(
-      view?.draft ||
-      segment.pricePending ||
-      segment.priceDisabled ||
-      Math.abs(segment.previewPrice - segment.price) < 0.001,
-    );
+    confirm.disabled = !canConfirmPrice(segment, Boolean(view?.draft));
     text(
       confirm,
       segment.pricePending
@@ -730,19 +713,12 @@ export function createWorkbench(
 
   function positionClients(): void {
     const anchor = view?.clientAnchor ?? { x: 1110, y: 910 };
-    const left = Math.min(
-      1320 - clientPanel.offsetWidth,
-      Math.max(20, anchor.x - clientPanel.offsetWidth / 2),
-    );
-    const top = Math.min(
-      1004 - clientPanel.offsetHeight,
-      Math.max(272, anchor.y - clientPanel.offsetHeight - 20),
-    );
+    const {left, top, pointer} = clientPanelPosition(anchor, clientPanel.offsetWidth, clientPanel.offsetHeight);
     clientPanel.style.left = `${left}px`;
     clientPanel.style.top = `${top}px`;
     clientPanel.style.setProperty(
       '--client-pointer-x',
-      `${Math.max(24, Math.min(clientPanel.offsetWidth - 24, anchor.x - left))}px`,
+      `${pointer}px`,
     );
   }
 
