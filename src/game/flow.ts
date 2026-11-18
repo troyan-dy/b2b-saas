@@ -1,5 +1,6 @@
 import { CARD_ART } from '../content/cards';
 import { facts, traitCard } from './idea-card';
+import { grownTraits, startingRunwayMinutes } from './company-panel-model';
 import { CREDITS } from '../content/credits';
 import { clock, ENDING_TITLE, endingPost, endingScore, endingStats, releaseRevenueRecord } from '../content/endings';
 import { AGAIN_SAYS } from '../content/texts';
@@ -106,7 +107,7 @@ export async function resume(term: Terminal, meta: Meta): Promise<void> {
     }
   }
   // the traits: what grows with every startup
-  const grown = TRAITS.filter((t) => (meta.traits[t.id] ?? 0) > 0);
+  const grown = grownTraits(meta);
   if (grown.length > 0) {
     term.print('');
     term.print(L('черты основателя:', 'founder’s traits:'), 'dim');
@@ -193,7 +194,7 @@ export async function mixIdea(
 
   // the founder's traits: one of them counts twice in this startup
   let boost = '';
-  const grown = TRAITS.filter((t) => (meta.traits[t.id] ?? 0) > 0);
+  const grown = grownTraits(meta);
   if (grown.length > 0) {
     term.clear();
     term.print(L('Твоя коллекция', 'Your collection'), 'mid');
@@ -235,11 +236,7 @@ export async function mixIdea(
   const idea: Idea = { tech, form, aud };
   term.clear();
   term.print(pitch(idea), 'mid');
-  const minutes = dec(
-    Math.round(
-      (TUNING.start_money / (TUNING.living_per_s + TUNING.tiers.fast.cost_per_s) / 60) * 10,
-    ) / 10,
-  );
+  const minutes = dec(startingRunwayMinutes());
   const lines = [
     CLAUDE,
     L(
