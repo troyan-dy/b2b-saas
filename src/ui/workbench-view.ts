@@ -88,6 +88,30 @@ const taskLabel = (status: WorkTask['status']): string =>
     backlog: L('В бэклоге', 'In backlog'),
   })[status];
 
+export function capacityIndicator(utilization = 0) {
+  const ratio = Math.max(0, utilization);
+  const state = ratio > 1 ? 'overloaded' : ratio >= 0.8 ? 'busy' : 'spare';
+  const labels = {
+    overloaded: L('Перегруз · клиенты уходят', 'Overloaded · clients leave'),
+    busy: L('Почти заполнено', 'Nearly full'),
+    spare: L('Есть запас', 'Room to grow'),
+  };
+  return { percent: Math.round(ratio * 100), state, stateText: labels[state] };
+}
+
+export function canConfirmPrice(segment: WorkbenchSegment, drafting: boolean): boolean {
+  return !(drafting || segment.pricePending || segment.priceDisabled || Math.abs(segment.previewPrice - segment.price) < 0.001);
+}
+
+export function landShortfall(cost: number, cash: number): number {
+  return Math.ceil(Math.max(0, cost - cash));
+}
+
+export function catalogModules(modules: readonly WorkbenchModule[], category: WorkbenchModule['category'] | 'all'): WorkbenchModule[] {
+  return modules.filter(module => category === 'all' || module.category === category)
+    .sort((a, b) => Number(a.disabled) - Number(b.disabled) || Number(Boolean(b.reason)) - Number(Boolean(a.reason)));
+}
+
 export function productEffects(kind: string, level: number): string {
   const names: Record<string, string> = {
     seats: L('мест именных договоров', 'named contract slots'),

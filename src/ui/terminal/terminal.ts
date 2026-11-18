@@ -1,6 +1,7 @@
 import { afterGameTime } from '../../core/pause-clock';
 import './terminal.css';
 import { L } from '../../core/lang';
+import { adjacentIndex, shortcutIndex } from '../navigation-view';
 import { createPlayerCollection, type CollectionView } from '../player-collection';
 
 export interface Option {
@@ -177,14 +178,14 @@ export function createTerminal(root: HTMLElement, sound: (name: 'ui' | 'yes') =>
           }, 70);
         };
         onKey = (e) => {
-          const digit = /^(?:Digit|Numpad)([1-9])$/.exec(e.code);
-          if (digit && Number(digit[1]) <= options.length) pick(Number(digit[1]) - 1);
+          const index = shortcutIndex(e.code, options.length);
+          if (index >= 0) pick(index);
           else if (e.code === 'ArrowDown' || e.code === 'KeyS') {
-            at = (at + 1) % options.length;
+            at = adjacentIndex(at, options.length, 1);
             mark();
             sound('ui');
           } else if (e.code === 'ArrowUp' || e.code === 'KeyW') {
-            at = (at + options.length - 1) % options.length;
+            at = adjacentIndex(at, options.length, -1);
             mark();
             sound('ui');
           } else if (e.code === 'Enter' || e.code === 'NumpadEnter' || e.code === 'Space') pick(at);
@@ -313,19 +314,19 @@ export function createTerminal(root: HTMLElement, sound: (name: 'ui' | 'yes') =>
             !(options.confirm && target.matches('.tm-face'))
           )
             return;
-          const digit = /^(?:Digit|Numpad)([1-9])$/.exec(e.code);
-          if (digit && Number(digit[1]) <= cards.length) {
+          const index = shortcutIndex(e.code, cards.length);
+          if (index >= 0) {
             e.preventDefault();
-            choose(Number(digit[1]) - 1);
+            choose(index);
           } else if (e.code === 'ArrowRight' || e.code === 'KeyD') {
             e.preventDefault();
-            at = (at + 1) % cards.length;
+            at = adjacentIndex(at, cards.length, 1);
             mark();
             all[at].querySelector<HTMLButtonElement>('.tm-face')?.focus();
             sound('ui');
           } else if (e.code === 'ArrowLeft' || e.code === 'KeyA') {
             e.preventDefault();
-            at = at < 0 ? cards.length - 1 : (at + cards.length - 1) % cards.length;
+            at = adjacentIndex(at, cards.length, -1);
             mark();
             all[at].querySelector<HTMLButtonElement>('.tm-face')?.focus();
             sound('ui');
