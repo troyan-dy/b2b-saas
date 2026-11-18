@@ -103,7 +103,7 @@ function cardView(run: Run, card: DraftCard, choosing = false): SprintCardView {
           ? L('В работе', 'In progress')
           : status === 'locked'
             ? L(
-                `Нужен ${missing.map(blockName).join(', ')}`,
+                `Требуется: ${missing.map(blockName).join(', ')}`,
                 `Needs ${missing.map(blockName).join(', ')}`,
               )
             : L('Доступна в раздаче', 'Available in a deal');
