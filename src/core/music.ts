@@ -1,6 +1,6 @@
-import { TRACKS } from './tracks';
+import { channelGain } from './audio-math';
+import { trackById, TRACKS } from './tracks';
 export { TRACKS, nextTrack, trackTitle, type Track } from './tracks';
-const VOLUME = 0.3;
 
 let audio: HTMLAudioElement | null = null;
 let track = TRACKS[0];
@@ -10,7 +10,8 @@ let started = false;
 
 function apply(): void {
   if (!started) return;
-  if (!wanted || level === 0) {
+  const volume = channelGain('music', wanted, level);
+  if (volume === 0) {
     audio?.pause();
     return;
   }
@@ -18,7 +19,7 @@ function apply(): void {
     audio = new Audio(track.file);
     audio.loop = true;
   }
-  audio.volume = VOLUME * level / 100;
+  audio.volume = volume;
   if (audio.paused) void audio.play().catch(() => undefined); // A later user gesture can retry blocked autoplay.
 }
 
@@ -31,7 +32,7 @@ export function setMusicOn(on: boolean, percent = 100): void {
 
 /** Which loop plays; an unknown id leaves the first of the list. */
 export function setTrack(id: string): void {
-  const next = TRACKS.find((t) => t.id === id) ?? TRACKS[0];
+  const next = trackById(id);
   if (next === track) return;
   track = next;
   if (audio) audio.src = track.file;

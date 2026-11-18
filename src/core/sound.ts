@@ -1,5 +1,6 @@
 import { ZZFX, zzfx as synth } from 'zzfx';
 import { logSound } from './metrics';
+import { channelGain, transpose, workNote } from './audio-math';
 
 export type SoundName = 'yes' | 'auto' | 'buffer' | 'waste' | 'buy' | 'quip' | 'scale' | 'finale' | 'ui' | 'all';
 
@@ -10,10 +11,10 @@ let enabled = true;
 const playing = new Set<GainNode>();
 export function setSoundOn(on: boolean, percent = 100): void {
   enabled = on;
-  ZZFX.volume = on ? 0.25 * percent / 100 : 0;
+  ZZFX.volume = channelGain('effects', on, percent);
   for (const gain of playing) gain.gain.value = ZZFX.volume;
 }
-ZZFX.volume = 0.25;
+ZZFX.volume = channelGain('effects', enabled, 100);
 
 function zzfx(...parameters: number[]): void {
   const source = synth(...parameters);
@@ -38,15 +39,15 @@ export function playSound(name: SoundName, step = 0): void {
   if (__TOOLS__) logSound(name);
   switch (name) {
     case 'yes':
-      zzfx(0.9, 0, 392 * 2 ** ((step * 2) / 12), 0.004, 0.02, 0.07, 1, 1.4);
+      zzfx(0.9, 0, transpose(392, step * 2), 0.004, 0.02, 0.07, 1, 1.4);
       break;
     case 'auto':
       // the most frequent sound of the game: each square of an agent lands on its own note of a pentatonic
-      zzfx(0.3, 0, 587 * 2 ** ([0, 2, 4, 7, 9][Math.floor(Math.random() * 5)] / 12), 0.002, 0.01, 0.04, 1, 1.2);
+      zzfx(0.3, 0, workNote(Math.random()), 0.002, 0.01, 0.04, 1, 1.2);
       break;
     case 'buy':
       // `step` — semitones: every kind of purchase has its own pitch
-      zzfx(1, 0, 523 * 2 ** (step / 12), 0.004, 0.09, 0.3, 0, 1.4, 0, 0, 262 * 2 ** (step / 12), 0.06);
+      zzfx(1, 0, transpose(523, step), 0.004, 0.09, 0.3, 0, 1.4, 0, 0, transpose(262, step), 0.06);
       break;
     case 'ui':
       zzfx(0.4, 0, 660, 0.001, 0.008, 0.03, 0, 1.4);
