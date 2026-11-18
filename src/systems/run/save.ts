@@ -453,9 +453,9 @@ export function saveRun(run: Run): boolean {
   }
 }
 
-export function loadRun(): Run | null {
+function decodeRun(raw: string | null): Run | null {
   try {
-    const saved: unknown = JSON.parse(localStorage.getItem(RUN_SAVE_KEY) ?? 'null');
+    const saved: unknown = JSON.parse(raw ?? 'null');
     if (
       !record(saved) ||
       !plain(saved) ||
@@ -504,10 +504,25 @@ export function loadRun(): Run | null {
   }
 }
 
-export function clearRunSave(): void {
+export function loadRun(): Run | null {
   try {
-    localStorage.removeItem(RUN_SAVE_KEY);
+    return decodeRun(localStorage.getItem(RUN_SAVE_KEY));
   } catch {
-    // A disabled browser store must not interrupt a completed company.
+    return null;
+  }
+}
+
+/** A result from a previous tab must never remove another company's checkpoint. */
+export function clearRunSave(completed?: Pick<Run, 'seed' | 'idea'>): boolean {
+  try {
+    if (completed) {
+      const saved = decodeRun(localStorage.getItem(RUN_SAVE_KEY));
+      if (!saved || saved.seed !== completed.seed ||
+        (['tech', 'form', 'aud'] as const).some(deck => saved.idea[deck].id !== completed.idea[deck].id)) return true;
+    }
+    localStorage.removeItem(RUN_SAVE_KEY);
+    return true;
+  } catch {
+    return false;
   }
 }
