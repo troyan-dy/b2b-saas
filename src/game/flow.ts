@@ -1,4 +1,5 @@
 import { CARD_ART } from '../content/cards';
+import { facts, traitCard } from './idea-card';
 import { CREDITS } from '../content/credits';
 import { clock, ENDING_TITLE, endingPost, endingScore, endingStats, releaseRevenueRecord } from '../content/endings';
 import { AGAIN_SAYS } from '../content/texts';
@@ -125,15 +126,6 @@ export async function resume(term: Terminal, meta: Meta): Promise<void> {
   await term.wait(BACK);
 }
 
-/** what a card does, one fact a line: «чек ×1,5, но и токенов уходит ×1,5» → two lines */
-function facts(does: string): string[] {
-  return does === '' ? [] : does.split(', ').map((x) => x.replace(L(/^но и /, /^but /), ''));
-}
-
-function traitCard(t: Trait, level: number, kicker: string, to: number): Card {
-  const now = level > 0 ? L(`сейчас: ${traitGives(t, level)}`, `now: ${traitGives(t, level)}`) : L('сейчас этой черты нет', 'you don’t have this trait yet');
-  return { kicker, title: t.title, note: t.note, art: t.art, facts: [`${traitGives(t, to)}`, now] };
-}
 
 /**
  * Three decks, four cards dealt from each: the idea is mixed by hand. A founder with traits then

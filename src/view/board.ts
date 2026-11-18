@@ -45,10 +45,7 @@ interface Dot {
 
 const DOTS = 220;
 
-/** a connector with one right-angle turn: out along x, then along y */
-export function elbow(a: Pt, b: Pt): Pt[] {
-  return [a, [b[0], a[1]], b];
-}
+export { elbow } from './geometry';
 
 /**
  * The living sheet: the product as a diagram of isometric modules, node pictures (the founder, agents,

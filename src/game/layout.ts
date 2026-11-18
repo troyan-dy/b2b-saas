@@ -81,3 +81,27 @@ export const STAGE_VIEW: readonly { x: number; y: number; zoom: number }[] = [
 
 /** where the money counter is on the screen: squares of subscriptions fly into it */
 export const MONEY_RECT = { x: 560, y: 60, w: 220, h: 90 };
+
+export interface ScreenArea { x: number; y: number; height: number }
+export interface Obstacle { left: number; right: number; top: number; bottom: number }
+
+/** Keep controls clear of buildings. A manually panned map keeps its previous anchor. */
+export function workArea(areas: Obstacle[], previous: ScreenArea | null, mapMoved: boolean): ScreenArea | undefined {
+  if (mapMoved && previous) return previous;
+  const fits = ({ x, y, height }: ScreenArea): boolean => areas.every(area => x + 138 < area.left || x - 138 > area.right || y + height < area.top || y > area.bottom);
+  const anchors = [...(previous ? [previous] : []), { x: 160, y: 310, height: 180 }, { x: 1180, y: 350, height: 180 }, { x: 1180, y: 810, height: 180 }];
+  const free = anchors.find(fits);
+  if (free) return free;
+  // A full city can occupy all three anchors. Use its remaining vertical gap and scroll the rows.
+  const gaps: { x: number; y: number; height: number }[] = [];
+  for (const x of [160, 1180]) {
+    let top = 290;
+    const obstacles = areas.filter(area => x + 138 >= area.left && x - 138 <= area.right).sort((a, b) => a.top - b.top);
+    for (const area of [...obstacles, { top: 1010, bottom: 1010 }]) {
+      const height = Math.min(180, area.top - 10 - top);
+      if (height >= 110) gaps.push({ x, y: top, height });
+      top = Math.max(top, area.bottom + 10);
+    }
+  }
+  return gaps.sort((a, b) => b.height - a.height)[0];
+}

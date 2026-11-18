@@ -8,9 +8,10 @@ export default defineConfig({
       include: [
         'src/systems/**/*.ts',
         'src/content/**/*.ts',
-        'src/core/{args,lang,pause-clock,rng,settings}.ts',
+        'src/core/{args,lang,pause-clock,rng,settings,tracks}.ts',
         'src/ui/{build-reasons,format,*-view}.ts',
-        'src/game/layout.ts',
+        'src/game/{idea-card,layout,run-hint}.ts',
+        'src/view/geometry.ts',
       ],
       reporter: ['text', 'json', 'json-summary'],
       thresholds: { perFile: true, lines: 100, functions: 100, branches: 100, statements: 100 },
