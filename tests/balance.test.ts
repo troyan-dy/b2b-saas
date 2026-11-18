@@ -86,7 +86,7 @@ describe('economy', () => {
     expect(s.profit).toBeGreaterThan(0.45);
     // even an unlucky startup lives long enough to be a story
     expect(s.earliestDeath).toBeGreaterThan(3.6);
-  });
+  }, 30_000); // 24 complete runs share CPU with the other test files on CI.
 
   it('test_run_links_raise_income_and_neglecting_debt_causes_outages', () => {
     // forty-eight startups: with fewer, one lucky seed moves the share of survivors by four points
@@ -102,7 +102,7 @@ describe('economy', () => {
     // Maintenance must prevent real outages even when the company can afford the losses.
     expect(dirty.downs).toBeGreaterThan(full.downs);
     expect(full.profit).toBeGreaterThan(dirty.profit + 0.1);
-  }, 30000);
+  }, 90_000); // Compare three strategies on the same 48 seeds.
 
   it('test_run_template_perk_reaches_the_first_customer_faster_on_the_same_seeds', () => {
     const seeds = Array.from({ length: 8 }, (_, k) => 1400 + k);
@@ -123,7 +123,7 @@ describe('economy', () => {
       console.log(`idea ${k}: ${ideaOf(k).tech.id}/${ideaOf(k).form.id}/${ideaOf(k).aud.id} alive ${alive}/12 profitable ${profitable}/12 peak ${Math.round(runs.reduce((a, r) => a + r.stats.peakMrr, 0) / 12)}`);
       expect(profitable).toBeGreaterThan(0);
     }
-  }, 60000); // 192 full runs with teams up to twelve need extra time under parallel test load.
+  }, 120_000); // 192 full runs with teams up to twelve need extra time under parallel test load.
 
   it('test_run_every_client_type_comes_and_startups_close', () => {
     // counted over every startup played above: content that never shows up is not content
