@@ -65,6 +65,7 @@ npm install
 npm run dev      # the game at http://localhost:5174/
 npm run build    # the build in dist/
 npm test         # formulas, saves, determinism
+npm run test:coverage  # unit-test game rules and UI calculations, enforcing 100% per module
 ```
 
 The pictures of this page are made from the game itself: `npm run build:gym && node tools/readme.mjs`.

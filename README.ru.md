@@ -65,6 +65,7 @@ npm install
 npm run dev      # игра на http://localhost:5174/
 npm run build    # сборка в dist/
 npm test         # формулы, сохранения, детерминизм
+npm run test:coverage  # юнит-тесты игровой логики и расчётов интерфейса, порог 100% по каждому модулю
 ```
 
 Картинки этой страницы сняты с самой игры: `npm run build:gym && node tools/readme.mjs`.

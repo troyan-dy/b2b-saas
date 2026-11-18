@@ -79,9 +79,22 @@ describe('release report', () => {
     expect(releaseLines({ ...quiet, shipped: ['Бот'], came: 1 }).join(' ')).toMatch(/выпущено: Бот.*\+1<\/em> клиент/);
     expect(releaseLines({ ...quiet, came: 2, left: 1, reasons: ['CRM'] }).join(' ')).toMatch(/\+2<\/em> клиента.*−1.*нет «CRM»/);
     expect(releaseLines({ ...quiet, left: 1, closed: 1 }).join(' ')).toMatch(/новых клиентов нет.*ушёл молча.*закрылся сам/);
+    expect(releaseLines({ ...quiet, came: 5, closed: 2 }).join(' ')).toMatch(/\+5<\/em> клиентов.*−2 клиента закрылись сами/);
     const [honest, promise] = callAnswers(0.844, 1.255, 3);
     expect(honest).toContain('скидкой 16%');
     expect(promise).toMatch(/25% больше.*за 3 спринта/);
+  });
+  it('uses English singular and plural independently of Russian number endings', async () => {
+    vi.resetModules();
+    vi.stubGlobal('window', { location: { search: '?lang=en' } });
+    try {
+      const { releaseLines: english } = await import('../src/content/texts');
+      expect(english({ ...quiet, came: 1, closed: 1 }).join(' ')).toMatch(/\+1<\/em> client .*−1 client shut down by itself/);
+      expect(english({ ...quiet, came: 21, closed: 21 }).join(' ')).toMatch(/\+21<\/em> clients .*−21 clients shut down by themselves/);
+    } finally {
+      vi.unstubAllGlobals();
+      vi.resetModules();
+    }
   });
 });
 
@@ -91,12 +104,14 @@ describe('ending reports', () => {
     expect(clock(60.9)).toBe('1:00');
     expect(releaseRevenueRecord(TUNING.sprint_s * 4)).toBe('Рекорд выручки на релизе $4/с');
   });
-  it('reports the deal price separately from valuation and explains a supplier outage', () => {
+  it('reports the deal price separately from valuation even during a supplier outage', () => {
     const run = finished('sold');
     expect(endingScore(run)[0]).toBe(`<em>${money(1010)}</em>`);
     expect(endingPost(run).join(' ')).toContain(`куплен за <em>${money(1010)}`);
     expect(endingStats(run)).toContain('оценка $990');
     run.downWhy = 'supplier';
+    expect(endingPost(run).join(' ')).toContain(`куплен за <em>${money(1010)}`);
+    run.over = 'profit';
     expect(endingPost(run).join(' ')).toContain('без поставщика');
   });
   it('distinguishes earlier profit and actual finish-line profit', () => {
