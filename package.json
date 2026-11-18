@@ -9,6 +9,7 @@
     "build:gym": "node tools/licenses.mjs && tsc --noEmit && vite build --mode gym --outDir dist-gym",
     "preview": "vite preview",
     "test": "tsc --noEmit && vitest run",
+    "test:coverage": "vitest run --coverage --exclude tests/balance.test.ts --exclude tests/market-balance.test.ts",
     "lint": "eslint src tests",
     "capture": "node tools/capture.mjs"
   },
@@ -21,6 +22,7 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/node": "^26.6.6",
+    "@vitest/coverage-v8": "5.1.0",
     "eslint": "^10.14.0",
     "lil-gui": "^0.21.0",
     "playwright": "^1.65.0",
