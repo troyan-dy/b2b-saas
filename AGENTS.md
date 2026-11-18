@@ -87,6 +87,8 @@ changes files. Work on the task and return the contract from your role.
   in any game, never for this game's taste.
 
 ## Git
+- Все изменения `master` проходят через pull request на GitHub. Начинай работу в отдельной ветке, включая правки документации. После успешного `Game checks` сливай PR на GitHub и обновляй локальную `master` через `git pull --ff-only`.
+- GitHub Actions проверяет покрытие каждого модуля игровой логики, запускает полный набор тестов и собирает игру. После слияния в `master` тот же workflow публикует проверенный `dist/` в GitHub Pages.
 - Commit at every step (a decision, closed gates, a locked mechanic):
   `python "<skill>/scripts/studio.py" commit "…"`.
 - Never push or publish unless the user asked for it.
