@@ -26,9 +26,10 @@ import { mountGymKeys } from './gyms/keys';
 import { LookdevScene } from './gyms/lookdev/LookdevScene';
 import { mountMusicDemo } from './gyms/music/MusicDemo';
 import { SheetScene } from './gyms/sheet/SheetScene';
-import { bestValuation, emptyMeta, loadMeta, recordResult, restoreResult, saveMeta, traitLevels } from './systems/meta/meta';
+import { bestValuation, emptyMeta, loadMeta, recordResult, restoreResult, traitLevels, type FinalRun } from './systems/meta/meta';
 import { ACTIVE_TECHS, createRun, IDEAS, type Idea, type Run } from './systems/run/run';
-import { clearRunSave, loadRun, saveRun } from './systems/run/save';
+import { completeCompanyResult, finishCompany, recoverCompanyResult } from './systems/run/result-storage';
+import { loadRun, saveRun } from './systems/run/save';
 import { createHud } from './ui/hud';
 import { createPaper } from './ui/paper';
 import { mountUiScale } from './ui/scale';
@@ -124,6 +125,7 @@ async function play(): Promise<void> {
   const meta = loadMeta();
   const persistent = !(__TOOLS__ && (args.gym !== '' || args.bot || args.capture));
   const saved = persistent ? loadRun() : null;
+  if (!persistent) delete meta.pending; // Practice runs keep their own ending in memory.
   let selected: Run | null = null;
   let restored = false;
   const paper = createPaper(under, over);
@@ -134,21 +136,23 @@ async function play(): Promise<void> {
   });
 
   term.open(L('терминал основателя', 'the founder’s terminal'));
-  const showResult = async (): Promise<void> => {
-    const result = restoreResult(meta)!;
+  const showResult = async (result: FinalRun): Promise<void> => {
     await ending(term, result, meta, persistent);
-    delete meta.pending;
-    if (persistent) saveMeta(meta);
+    while (!completeCompanyResult(result, meta, persistent)) {
+      term.clear();
+      term.print(L('Не удалось сохранить результат компании.', 'Could not save the company result.'), 'mid');
+      const choice = await term.ask([
+        { title: L('Повторить сохранение', 'Retry saving') },
+        { title: L('Загрузить последнее сохранение', 'Reload last save'),
+          note: L('Несохранённые изменения будут потеряны.', 'Unsaved changes will be lost.') },
+      ]);
+      if (choice === 1) { reload(false); return; }
+    }
     reload(true);
   };
-  const finishRun = (run: Run): void => {
-    recordResult(run, meta);
-    if (persistent && saveMeta(meta)) clearRunSave();
-  };
-  if (saved?.over && !meta.pending) finishRun(saved);
-  if (persistent && restoreResult(meta)) {
-    clearRunSave();
-    await showResult();
+  const recovered = persistent ? recoverCompanyResult(meta, saved) : null;
+  if (recovered) {
+    await showResult(recovered);
     return;
   }
   if (!takeAgain() || args.menu || saved) {
@@ -184,7 +188,7 @@ async function play(): Promise<void> {
   const run = selected;
   const persist = (): void => {
     if (!persistent) return;
-    if (run.over) finishRun(run);
+    if (run.over) finishCompany(run, meta, true);
     else saveRun(run);
   };
   persist();
@@ -206,10 +210,10 @@ async function play(): Promise<void> {
       finished = true;
       pause.setQuit(null);
       stopSaving();
-      finishRun(r);
+      const result = finishCompany(r, meta, persistent);
       // the last frame of the startup stays on the sheet for a moment, then the terminal takes over
-      if (r.over === 'sold') void packSale(over, r).then(showResult);
-      else afterGameTime(() => void showResult(), 1400);
+      if (r.over === 'sold') void packSale(over, r).then(() => showResult(result));
+      else afterGameTime(() => void showResult(result), 1400);
     },
   });
   pause.setQuit(() => {
