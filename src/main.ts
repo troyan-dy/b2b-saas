@@ -26,7 +26,7 @@ import { mountGymKeys } from './gyms/keys';
 import { LookdevScene } from './gyms/lookdev/LookdevScene';
 import { mountMusicDemo } from './gyms/music/MusicDemo';
 import { SheetScene } from './gyms/sheet/SheetScene';
-import { emptyMeta, loadMeta, recordResult, restoreResult, saveMeta, traitLevels } from './systems/meta/meta';
+import { bestValuation, emptyMeta, loadMeta, recordResult, restoreResult, saveMeta, traitLevels } from './systems/meta/meta';
 import { ACTIVE_TECHS, createRun, IDEAS, type Idea, type Run } from './systems/run/run';
 import { clearRunSave, loadRun, saveRun } from './systems/run/save';
 import { createHud } from './ui/hud';
@@ -198,7 +198,7 @@ async function play(): Promise<void> {
   const scene = new GameScene(run, rng, paper, {
     onHidden: () => void pause.open(),
     restored,
-    bestValuation: meta.runs.reduce((best, entry) => Math.max(best, entry.value ?? 0), 0),
+    bestValuation: bestValuation(meta.runs),
     // the bot is a tool of the gyms and captures: the release has no code path to it
     beforeStep: __TOOLS__ && args.bot ? (r) => playBot(r) : undefined,
     onEnd: (r: Run) => {

@@ -80,6 +80,8 @@ describe('release report', () => {
     expect(releaseLines({ ...quiet, came: 2, left: 1, reasons: ['CRM'] }).join(' ')).toMatch(/\+2<\/em> клиента.*−1.*нет «CRM»/);
     expect(releaseLines({ ...quiet, left: 1, closed: 1 }).join(' ')).toMatch(/новых клиентов нет.*ушёл молча.*закрылся сам/);
     expect(releaseLines({ ...quiet, came: 5, closed: 2 }).join(' ')).toMatch(/\+5<\/em> клиентов.*−2 клиента закрылись сами/);
+    expect(releaseLines({ ...quiet, left: 2 }).join(' ')).toContain('−2</strong> ушли молча');
+    expect(releaseLines({ ...quiet, left: 5, reasons: ['API'] }).join(' ')).toContain('−5</strong> ушли: нет «API»');
     const [honest, promise] = callAnswers(0.844, 1.255, 3);
     expect(honest).toContain('скидкой 16%');
     expect(promise).toMatch(/25% больше.*за 3 спринта/);

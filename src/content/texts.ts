@@ -344,7 +344,8 @@ export function releaseLines(r: {
     const came = r.came > 0
       ? `<em>+${r.came}</em> ${plural(r.came, L(['клиент', 'клиента', 'клиентов'], ['client', 'clients', 'clients']))}`
       : L('новых клиентов нет', 'no new clients');
-    const why = r.reasons[0] ? L(`ушёл: нет «${r.reasons[0]}»`, `left: no “${r.reasons[0]}”`) : L('ушёл молча', 'left silently');
+    const departure = plural(r.left, L(['ушёл', 'ушли', 'ушли'], ['left', 'left', 'left']));
+    const why = r.reasons[0] ? L(`${departure}: нет «${r.reasons[0]}»`, `left: no “${r.reasons[0]}”`) : L(`${departure} молча`, 'left silently');
     const left = r.left > 0 ? ` · <strong>−${r.left}</strong> ${why}` : '';
     lines.push(came + left);
   }

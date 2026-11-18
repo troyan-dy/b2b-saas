@@ -83,6 +83,10 @@ export function emptyMeta(): Meta {
   return { v: SCHEMA_VERSION, runs: [], lessons: [], traits: {} };
 }
 
+export function bestValuation(history: readonly Pick<Past, 'value'>[]): number {
+  return history.reduce((best, entry) => Math.max(best, entry.value ?? 0), 0);
+}
+
 /** Brings a stored record to the current schema; anything unreadable is a founder with no past. */
 export function migrate(raw: unknown): Meta {
   if (typeof raw !== 'object' || raw === null) return emptyMeta();
