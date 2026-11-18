@@ -114,6 +114,8 @@ export interface MarketTotals {
 }
 
 const rule = (id: SegmentId) => data.segments.find((s) => s.id === id)!;
+const demandOf = (group: MarketGroup) => group.demand ?? 1;
+const comfortOf = (profile: Profile) => profile.priceComfort ?? 0;
 const clamp = (n: number, min: number, max: number) => Math.max(min, Math.min(max, n));
 const linked = (ctx: MarketContext, a: string, b: string) =>
   ctx.links.some((pair) => pair.includes(a) && pair.includes(b));
@@ -243,20 +245,20 @@ export function evolveMarket(
     if (!eligible.length) group.lastShift!.after = profile.share;
   } else if (theme === 'price') {
     const direction = rng.next() < 0.5 ? -1 : 1;
-    const comfort = () => group.profiles.reduce((sum, p) => sum + (p.priceComfort ?? 0) * p.share / 100, 0);
+    const comfort = () => group.profiles.reduce((sum, p) => sum + comfortOf(p) * p.share / 100, 0);
     const before = comfort();
     for (const profile of group.profiles)
       profile.priceComfort = clamp(
-        (profile.priceComfort ?? 0) + direction * marketEvolution.price_change,
+        comfortOf(profile) + direction * marketEvolution.price_change,
         marketEvolution.price_min,
         marketEvolution.price_max,
       );
     group.lastShift = { sprint, theme, before, after: comfort() };
   } else {
     const direction = rng.next() < 0.5 ? -1 : 1;
-    const before = group.demand ?? 1;
+    const before = demandOf(group);
     group.demand = clamp(
-      (group.demand ?? 1) + direction * marketEvolution.demand_change,
+      before + direction * marketEvolution.demand_change,
       marketEvolution.demand_min,
       marketEvolution.demand_max,
     );
@@ -304,7 +306,7 @@ export function acceptedPrice(profile: Profile, _id: SegmentId, ctx: MarketConte
   return (
     data.price.base_comfort +
     data.price.fulfilled_comfort * coverage(profile, ctx) +
-    (profile.priceComfort ?? 0)
+    comfortOf(profile)
   );
 }
 
@@ -382,7 +384,7 @@ export function segmentView(
       },
       id,
     );
-  const totalMarket = reachable(cfg.market * (group.demand ?? 1), ctx);
+  const totalMarket = reachable(cfg.market * demandOf(group), ctx);
   let satisfaction = 0;
   const averages = { needs: 0, price: 0, overload: 0, outage: 0, delay: 0, debt: 0 };
   const needs = new Map<string, MarketNeed>();
@@ -527,7 +529,7 @@ export function advanceMarket(
     left = 0;
   for (const group of state.groups) {
     const cfg = rule(group.id),
-      available = reachable(cfg.market * (group.demand ?? 1), ctx);
+      available = reachable(cfg.market * demandOf(group), ctx);
     const canReach = group.id === 'small' || ctx.stage >= 2;
     for (const p of group.profiles) {
       const happy = happiness(p, group.id, group.price, ctx, utilization);
@@ -542,7 +544,7 @@ export function advanceMarket(
       const promotion =
         ((Math.max(0, leads) * data.acquisition.per_lead * cfg.weight * p.share) / 100) *
         ctx.promotionMult *
-        (group.demand ?? 1);
+        demandOf(group);
       const referral =
         (p.count *
           data.acquisition.referral_rate *
