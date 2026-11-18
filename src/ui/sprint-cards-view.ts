@@ -4,7 +4,7 @@ import { LESSONS, TRAITS, traitGives } from '../systems/meta/meta';
 import { DRAFT_CARDS, previewCardChange, type CardChange, type DraftCard } from '../systems/run/draft';
 import { PRODUCTION, strategyCount, type StrategyId } from '../systems/run/product';
 import { netPerS, TUNING, type Run } from '../systems/run/run';
-import { dec, money, PER_S, rate, whole } from './format';
+import { dec, money, PER_S, plural, rate, whole } from './format';
 import type { SprintCardsView, SprintCardView } from './sprint-cards';
 
 export const SPRINT_CARD_ART: Record<string, string> = {
@@ -68,6 +68,11 @@ function stackEffects(id: StrategyId, count: number) {
   return effects;
 }
 
+type AlbumCard = SprintCardView & { benefits: readonly string[]; penalties: readonly string[] };
+
+// An album entry always describes its ongoing effects. Only a draft preview can hide an ineffective benefit.
+function cardView(run: Run, card: DraftCard): AlbumCard;
+function cardView(run: Run, card: DraftCard, choosing: true): SprintCardView;
 function cardView(run: Run, card: DraftCard, choosing = false): SprintCardView {
   const persistent = card.slot !== 'operation';
   const id = card.id as StrategyId;
@@ -159,11 +164,21 @@ function cardView(run: Run, card: DraftCard, choosing = false): SprintCardView {
   };
 }
 
+export function albumTitle(count: number): string {
+  const forms = L<readonly [string, string, string]>(['карта', 'карты', 'карт'], ['card', 'cards', 'cards']);
+  return L('Вся коллекция', 'Full collection') + ' · ' + count + ' ' + plural(count, forms);
+}
+
+export function activeCardCount(view: SprintCardsView): number {
+  return view.cards.reduce((sum, card) => sum + (card.level ?? (card.status === 'active' ? 1 : 0)), 0)
+    + view.founder.length + view.events.length;
+}
+
 export function sprintCardsView(
   run: Run,
   news?: { readonly title: string; readonly text: string } | null,
   applied?: { readonly title: string; readonly impact: string } | null,
-): SprintCardsView {
+): Omit<SprintCardsView, 'cards'> & { cards: AlbumCard[] } {
   const cards = DRAFT_CARDS.map((card) => cardView(run, card));
   const founder: SprintCardView[] = [
     ...LESSONS.filter((lesson) => run.perks.includes(lesson.id)).map((lesson): SprintCardView => ({
@@ -243,8 +258,8 @@ export function sprintCardsView(
                   L(`Уровень ${card.level}`, `Level ${card.level}`),
                   card.id === 'batch' ? applied.impact : card.impact,
                   ...(card.id === 'instant' ? [applied.impact] : []),
-                  ...(card.benefits ?? []),
-                  ...(card.penalties ?? []).filter((penalty) => card.id !== 'instant' || !penalty.endsWith(L('стоимость токенов', 'token cost'))),
+                  ...card.benefits,
+                  ...card.penalties.filter((penalty) => card.id !== 'instant' || !penalty.endsWith(L('стоимость токенов', 'token cost'))),
                 ].join(' · ')
               : applied.impact;
           })(),

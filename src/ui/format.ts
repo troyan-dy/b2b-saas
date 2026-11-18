@@ -12,6 +12,14 @@ export function dec(n: number): string {
   return LANG === 'en' ? String(n) : String(n).replace('.', ',');
 }
 
+export function signed(value: number): string {
+  return (value > 0 ? '+' : value < 0 ? '−' : '') + whole(Math.abs(value));
+}
+
+export function primary(value: string): string {
+  return value.replace(/^(?:v\d+:|Сразу:|Immediately:)\s*/, '').split(' · ')[0];
+}
+
 export function multiplier(value: number): string {
   return '×' + dec(Number(value.toFixed(2)));
 }

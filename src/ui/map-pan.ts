@@ -1,4 +1,5 @@
 import { L } from '../core/lang';
+import { stageScale, wheelMovement } from './map-geometry-view';
 
 export function enableMapPan(top: HTMLElement, move: (dx: number, dy: number) => void, centre: () => void): void {
   const surface = document.createElement('div');
@@ -25,7 +26,7 @@ export function enableMapPan(top: HTMLElement, move: (dx: number, dy: number) =>
 
   const mapTarget = (e: Event) => (e.target as Element).closest('.bl-pan-surface,.bl-cell,.bl-tag,.client-city');
   let id = -1, x = 0, y = 0, dragging = false, suppress = false;
-  const scale = () => top.getBoundingClientRect().width / 1920;
+  const scale = () => stageScale(top.getBoundingClientRect().width);
   top.addEventListener('pointerdown', e => {
     suppress = false;
     if (!mapTarget(e) || !e.isPrimary || e.button !== 0) return;
@@ -64,7 +65,6 @@ export function enableMapPan(top: HTMLElement, move: (dx: number, dy: number) =>
   top.addEventListener('wheel', e => {
     if (!mapTarget(e) || e.ctrlKey || (e.target as Element).closest('.map-work-list')) return;
     e.preventDefault();
-    const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? 600 : 1;
-    move(-(e.shiftKey ? e.deltaY : e.deltaX) * unit / scale(), -(e.shiftKey ? 0 : e.deltaY) * unit / scale());
+    move(...wheelMovement(e.deltaX, e.deltaY, e.deltaMode, e.shiftKey, scale()));
   }, { passive: false });
 }
