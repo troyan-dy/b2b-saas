@@ -1432,8 +1432,9 @@ function makeClient(run: Run): Client {
   let name = who.name;
   if (pool.length === 0) {
     // the names ran out: the same business opens another branch
-    const tails = [' II', ' III', ' IV'];
-    name += tails.find((x) => !taken.has(name + x)) ?? tails[0];
+    // Even a one-name directory can fill all twelve named-account slots.
+    const tails = [' II', ' III', ' IV', ' V', ' VI', ' VII', ' VIII', ' IX', ' X', ' XI', ' XII'];
+    name += tails.find((tail) => !taken.has(name + tail))!;
   }
   // how long this market waits: the idea, the shipped blocks and, for its own audience, the audience itself
   const patience =
@@ -1841,7 +1842,6 @@ export function finishAtSprintLimit(run: Run, previousStreak = 0): void {
 }
 
 function end(run: Run, ending: Ending): void {
-  if (run.over) return;
   run.over = ending;
   run.events.push({ type: 'end', ending });
 }
