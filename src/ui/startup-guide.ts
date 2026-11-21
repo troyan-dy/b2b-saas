@@ -99,7 +99,7 @@ function advice(step: GuideStep, run: Run, target: HTMLElement, example?: DraftC
     case 'release': return { body: releaseResult(run) + ' ' + L('Готовые блоки выходят в конце спринта. Теперь выбери любую карту.', 'Ready blocks ship at sprint end. Now pick any card.'), choice };
     case 'subscribed': {
       const first = run.guide!.subscription!;
-      return { title: L('Первая подписка', 'First subscription'),
+      return { title: L('На момент первой подписки', 'At your first subscription'),
         figure: L(`Выручка ${perSecond(first.income)} · чистый поток ${netRate(first.net)}`, `Revenue ${perSecond(first.income)} · net ${netRate(first.net)}`),
         body: (run.draft && run.lastReport?.sprint === 1 ? `${releaseResult(run)} ` : '') +
           L('Разовые деньги пополняют счёт. Для прибыльного релиза нужно, чтобы подписки приносили больше, чем уходит каждую секунду.', 'One-off cash tops up your balance. For a profitable release, subscriptions must bring in more each second than you spend.'), choice };
