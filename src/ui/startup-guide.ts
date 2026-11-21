@@ -7,18 +7,19 @@ import { companyTotals } from '../systems/company/company';
 import { MARKET } from '../systems/company/market';
 import { chooseCard, draftCards, previewCardChange, type DraftCard } from '../systems/run/draft';
 import { PRODUCTION } from '../systems/run/product';
-import { clientsMax, flows, leadsPerWork, sellable, TUNING, type Run } from '../systems/run/run';
+import { clientsMax, flows, leadsPerWork, RULES, sellable, TUNING, type Run } from '../systems/run/run';
 import { dec, money, PER_S, whole } from './format';
 import { projectName } from './workbench-view';
 import './startup-guide.css';
 
 const cells = '.bl-cell[data-c*=","]';
 const choices = '[data-sc-choice]:enabled';
+const allCategories = '[data-wb-action="category"][data-wb-id="all"][aria-pressed="false"]:enabled';
 const tile = (id: string) => `.wb-builds [data-wb-action="place"][data-wb-id="${id}"]:enabled`;
 const hand = (lane: string) => `[data-o="hand"][data-l="${lane}"]:enabled`;
-const selectors: Record<Exclude<GuideStep, 'assign-promo' | 'park-agent'>, string> = {
+const selectors: Record<Exclude<GuideStep, 'assign-promo' | 'park-agent' | 'client-block'>, string> = {
   core: tile('core'), landing: tile('landing'), pay: tile('pay'),
-  'core-cell': cells, 'landing-cell': cells, 'pay-cell': cells,
+  'core-cell': cells, 'landing-cell': cells, 'pay-cell': cells, 'client-cell': cells,
   code: hand('build'), post: hand('promo'), 'fix-debt': hand('fix'),
   release: choices, subscribed: '.bl-ledger p:first-child',
   ledger: '.bl-ledger', compare: '.bl-ledger', profitable: '.bl-ledger',
@@ -100,7 +101,24 @@ function releaseResult(run: Run): string {
 
 interface Tip { title?: string; figure?: string; body: string; choice?: string }
 
-function advice(step: GuideStep, run: Run, target: HTMLElement, example?: CardPreview, liveRates?: Rates): Tip {
+function clientRequestTip(run: Run, block: string, target: HTMLElement): Tip {
+  const name = projectName(block);
+  if (target.matches(cells)) return { title: L(`Место для блока «${name}»`, `A place for “${name}”`),
+    body: L('Нажми на любую свободную клетку, чтобы поставить блок в очередь. Клиент увидит его на релизе после завершения стройки.', 'Pick any free cell to queue the block. Customers get it at the release after construction finishes.') };
+  const waiting = run.clients.filter(c => !c.happy && c.want === block && c.wantLevel === 1);
+  const earliest = waiting.reduce((a, b) => a.patience <= b.patience ? a : b);
+  const deadline = Math.min(TUNING.last_sprint, run.sprint + earliest.patience - 1);
+  const title = L(`Запрос на «${name}»`, `Request for “${name}”`);
+  const figure = L(`Ждут по договору: ${waiting.length}. ${earliest.name} просит к релизу №${deadline}.`, `Contracts waiting: ${waiting.length}. ${earliest.name} needs it by release #${deadline}.`);
+  if (target.matches(allCategories)) return { title, figure,
+    body: L(`В этой категории нет блока «${name}». Нажми «Все», чтобы увидеть его в каталоге.`, `This category doesn’t list “${name}”. Select “All” to find it in the catalog.`) };
+  const host = perSecond(RULES[block].host * flows(run).living / TUNING.living_per_s);
+  const label = target.querySelector('strong')?.textContent ?? name;
+  return { title, figure,
+    body: L(`Выбери «${label}». Выпуск в срок поможет удержать клиентов: они получат то, чего ждали. После выпуска хостинг вырастет на ${host}.`, `Choose “${label}”. Shipping what these customers asked for by their deadline can help keep them. Once live, it adds ${host} in hosting.`) };
+}
+
+function advice(step: Exclude<GuideStep, 'client-block' | 'client-cell'>, run: Run, target: HTMLElement, example?: CardPreview, liveRates?: Rates): Tip {
   const name = target.querySelector('strong')?.textContent;
   const choice = example ? L(`Например, «${example.title}». `, `One option: “${example.title}”. `) + cardReason(example, run, target) : undefined;
   switch (step) {
@@ -277,9 +295,19 @@ export function createGuideView(onDismiss: () => void, onSkip: () => void) {
         focusSuggestion = !!run.draft;
       }
       const suggested = draft && (step === 'release' || step === 'subscribed' || step === 'compare') ? example : undefined;
-      const selector = draft ? (suggested ? `[data-sc-choice="${suggested.id}"]:enabled` : '.sc-report')
-        : step === 'assign-promo' || step === 'park-agent' ? `[data-o="a${profitLesson(run).agentId}"][data-l="${step === 'assign-promo' ? 'promo' : 'build'}"]:enabled:not(.on)` : selectors[step];
-      const viewKey = `${step}:${selector}:${run.lastReport?.sprint ?? 0}`;
+      const clientStep = step === 'client-block' || step === 'client-cell';
+      const block = clientStep ? profitLesson(run).blockId : null;
+      if (clientStep && !block) return unavailable();
+      let selector: string;
+      if (draft) selector = suggested ? `[data-sc-choice="${suggested.id}"]:enabled` : '.sc-report';
+      else if (step === 'assign-promo' || step === 'park-agent')
+        selector = `[data-o="a${profitLesson(run).agentId}"][data-l="${step === 'assign-promo' ? 'promo' : 'build'}"]:enabled:not(.on)`;
+      else if (step === 'client-block') {
+        const id = CSS.escape(block!);
+        // Switch categories only when the requested module is absent, never for a disabled/offscreen tile.
+        selector = paper.querySelector(`.wb-builds [data-wb-id="${id}"]`) ? tile(id) : allCategories;
+      } else selector = selectors[step];
+      const viewKey = `${step}:${selector}:${block ?? ''}:${run.lastReport?.sprint ?? 0}`;
       const stage = paper.getBoundingClientRect(), scale = stage.width / paper.clientWidth;
       if (!scale) return unavailable();
       const same = card.dataset.viewKey === viewKey && card.parentElement === parent;
@@ -292,7 +320,7 @@ export function createGuideView(onDismiss: () => void, onSkip: () => void) {
           if (revealed !== viewKey && !draft) revealInShelf(node, scale);
           if (reachable(node, card)) { target = node; break; }
         }
-        revealed = viewKey;
+        if (candidates.length) revealed = viewKey;
       }
       if (!target) return unavailable();
       const changed = marked !== target || !same;
@@ -314,7 +342,7 @@ export function createGuideView(onDismiss: () => void, onSkip: () => void) {
       const ratesKey = rates ? Object.values(rates).join(':') : '';
       if (changed || ratesKey !== lastRates) {
         lastRates = ratesKey;
-        const tip = advice(step, run, target, target.matches(choices) ? example : undefined, rates);
+        const tip = clientStep ? clientRequestTip(run, block!, target) : advice(step, run, target, target.matches(choices) ? example : undefined, rates);
         const heading = tip.title ?? L('Первый стартап', 'First startup');
         if (title.textContent !== heading) title.textContent = heading;
         if (figure.hidden !== !tip.figure) figure.hidden = !tip.figure;
