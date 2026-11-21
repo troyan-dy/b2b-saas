@@ -528,8 +528,6 @@ export class GameScene extends Phaser.Scene {
       return;
     }
     this.hands++;
-    if ((lane === 'promo' && this.visibleTip === 'post') || (lane === 'fix' && this.visibleTip === 'fix-debt'))
-      dismissGuideStep(run, this.visibleTip);
     playSound('yes', this.hands % 6);
     const [fx, fy] = this.board.onScreen(DESK[0] - 40, DESK[1] - 130);
     const to: Pt = lane === 'build' ? site ? this.board.top(site) : this.infrastructurePoint : lane === 'fix' ? this.board.cell(0, 0) : MARKET;
@@ -569,17 +567,12 @@ export class GameScene extends Phaser.Scene {
     }
     if (owner === 'team') {
       for (const agent of this.run.agents) setLane(this.run, agent.id, key as Lane);
-      if (key === 'promo' && this.visibleTip === 'assign-promo') dismissGuideStep(this.run, 'assign-promo');
       playSound('ui');
       return;
     }
     const id = Number(owner.slice(1));
     if (key === 'drop') fire(this.run, id);
-    else {
-      setLane(this.run, id, key as Lane);
-      if (key === 'promo' && this.visibleTip === 'assign-promo' && this.run.agents.some(a => a.id === id && a.lane === 'promo'))
-        dismissGuideStep(this.run, 'assign-promo');
-    }
+    else setLane(this.run, id, key as Lane);
     playSound('ui');
   }
 
