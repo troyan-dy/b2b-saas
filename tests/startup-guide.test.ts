@@ -110,16 +110,14 @@ describe('first startup guide', () => {
     expect(run.guide?.subscription).toBeUndefined();
   });
 
-  it.each([{ lastChance: 100 }, { over: 'broke' }])(
-    'yields to the company decision %j', decision => {
-      const run = startup();
-      startGuide(run);
-      Object.assign(run, decision);
-      expect(guideStep(run, null)).toBeNull();
-      run.draft = ['credits', 'leads', 'rest'];
-      expect(guideStep(run, null)).toBeNull();
-    },
-  );
+  it('yields to the company ending even with draft cards', () => {
+    const run = startup();
+    startGuide(run);
+    run.over = 'broke';
+    expect(guideStep(run, null)).toBeNull();
+    run.draft = ['credits', 'leads', 'rest'];
+    expect(guideStep(run, null)).toBeNull();
+  });
 
   it.each([{ offer: 250 }, { dilemma: { id: 'press' } }])('coaches a draft before its hidden decision %j', decision => {
     const run = startup();
@@ -128,6 +126,20 @@ describe('first startup guide', () => {
     Object.assign(run, decision);
     expect(guideStep(run, null)).toBe('release');
     chooseCard(run, run.draft![0]);
+    expect(guideStep(run, null)).toBeNull();
+  });
+
+  it('shows the release before the bank when a broken promise empties the account during settlement', () => {
+    const run = startup();
+    startGuide(run);
+    product(run, ['core', 'landing', 'pay']);
+    run.clients = [client(1, { promised: true, patience: 1 })];
+    run.money = 20;
+    release(run, 1);
+    expect(run.events.some(e => e.type === 'refund')).toBe(true);
+    expect(run.lastChance).not.toBeNull();
+    expect(guideStep(run, null)).toBe('release');
+    expect(chooseCard(run, run.draft![0])).toBe(true);
     expect(guideStep(run, null)).toBeNull();
   });
 

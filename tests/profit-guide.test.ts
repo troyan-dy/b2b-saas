@@ -198,6 +198,28 @@ describe('profit lesson in a running company', () => {
     expect(guideStep(run, null)).toBeNull();
   });
 
+  it('reserves cash to the later release when debt accumulated by a builder delays expansion', () => {
+    const run = startup();
+    product(run, ['core', 'landing', 'pay']);
+    run.market.opened = true;
+    run.market.groups[0].profiles[0].count = 80;
+    run.sprintT = 25; // 39 seconds until release #2. At today's speed the order appears to take 38.4.
+    resumeProfitGuide(run);
+    dismissGuideStep(run, 'ledger');
+    run.money = 1450;
+    expect(guideStep(run, null)).toBeNull();
+    run.money = 2200;
+    expect(guideStep(run, null)).toBe('expand-capacity');
+    expect(expandInfrastructure(run)).toBe(true);
+    for (let tick = 0; tick < 39 * 10; tick++) {
+      if (run.draft) chooseCard(run, run.draft.find(id => id !== 'maintenance')!);
+      step(run, 0.1);
+    }
+    expect(run.lastReport?.sprint).toBe(2);
+    expect(run.infrastructure).toBe(0);
+    expect(run.debt).toBeGreaterThan(0);
+  });
+
   it('picks an affordable idle agent by id, keeping people on active jobs and yielding during an outage', () => {
     const run = startup();
     product(run, ['core', 'landing', 'pay']);

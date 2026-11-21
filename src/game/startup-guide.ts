@@ -1,6 +1,6 @@
 import { companyTotals } from '../systems/company/company';
 import { PRODUCTION } from '../systems/run/product';
-import { agentWorkRate, buildCapacity, busy, clientPay, clientsMax, clientTokens, flows, freeCells, handy, netPerS, remainingBuildCapacity, sellable, shelf, TUNING, workNeed, type CashFlow, type Report, type Run } from '../systems/run/run';
+import { agentDebtPerWork, agentWorkRate, buildCapacity, busy, clientPay, clientsMax, clientTokens, flows, freeCells, handy, netPerS, remainingBuildCapacity, sellable, shelf, TUNING, workNeed, type CashFlow, type Report, type Run } from '../systems/run/run';
 
 const BLOCKS = ['core', 'landing', 'pay'] as const;
 export const GUIDE_STEPS = [...BLOCKS, 'core-cell', 'landing-cell', 'pay-cell', 'code', 'release', 'subscribed',
@@ -148,10 +148,12 @@ function canFundExpansion(run: Run, net: number) {
   const queue = run.tasks.filter(t => t.status === 'active' || t.status === 'queued');
   const work = rule.work + rule.work_growth * run.infrastructure + queue.reduce((n, t) => n + t.work - t.done, 0);
   const fees = Math.round(rule.cost * rule.cost_growth ** run.infrastructure) + queue.reduce((n, t) => n + (t.status === 'queued' ? t.cost : 0), 0);
-  // A boost on an existing task won't continue into the infrastructure project.
-  const unboosted = { ...run, tasks: [] };
-  const rate = builders.reduce((sum, a) => sum + agentWorkRate(unboosted, a), 0);
-  const duration = work / rate;
+  // Budget for the slowest rates the remaining work can cause; existing API boosts expire.
+  const debtCeiling = run.debt + work * Math.max(...builders.map(a => agentDebtPerWork(run, a)));
+  const forecast = { ...run, tasks: [], debt: debtCeiling };
+  const rate = builders.reduce((sum, a) => sum + agentWorkRate(forecast, a), 0);
+  // Fractional work is private to each builder; do not pool their unfinished squares.
+  const duration = (work + builders.length - 1) / rate;
   const settlement = Math.ceil((run.sprintT + duration) / TUNING.sprint_s) * TUNING.sprint_s - run.sprintT;
   const wages = builders.reduce((n, a) => n + TUNING.tiers[a.tier].cost_per_s, 0);
   const idleNet = net + (handy(run, 'build') ? wages : 0);
@@ -160,9 +162,9 @@ function canFundExpansion(run: Run, net: number) {
 
 export function guideStep(run: Run, picked: string | null): GuideStep | null {
   const guide = run.guide;
-  if (!guide || run.over || run.lastChance !== null) return null;
-  // Pending calls, dilemmas and offers are behind the draft until a card is chosen.
-  if (!run.draft && (run.call || run.dilemma || run.offer !== null)) return null;
+  if (!guide || run.over) return null;
+  // All pending decisions, including a bank call triggered by a refund, sit behind the draft.
+  if (!run.draft && (run.call || run.dilemma || run.offer !== null || run.lastChance !== null)) return null;
   const tip = (step: GuideStep): GuideStep | null => guide.dismissed.includes(step) ? null : step;
   if (guide.subscription && tip('subscribed')) return 'subscribed';
   if (won(guide)) return 'profitable';
