@@ -127,6 +127,7 @@ export interface GameHooks {
   onHidden?: () => void;
   /** Resuming a save skips the welcome speech. */
   restored?: boolean;
+  terminalShown?: () => boolean;
   bestValuation?: number;
   /** called every simulated step, before it: a bot plays here */
   beforeStep?: (run: Run) => void;
@@ -152,6 +153,7 @@ export class GameScene extends Phaser.Scene {
   private picked: string | null = null;
   private guide?: ReturnType<typeof createGuideView>;
   private visibleTip: GuideStep | null = null;
+  private waitingForTerminal?: () => boolean;
   /** «снести блок» is on: the next click on a shipped block takes it off the sheet */
   private razing: string | null = null;
   /** squares that have arrived at each block: the sheet shows work when it lands, not when it is sent */
@@ -192,6 +194,7 @@ export class GameScene extends Phaser.Scene {
     this.rng = rng;
     this.paper = paper;
     this.hooks = hooks;
+    this.waitingForTerminal = run.guide ? hooks.terminalShown : undefined;
   }
 
   preload(): void {
@@ -286,6 +289,13 @@ export class GameScene extends Phaser.Scene {
 
   update(_time: number, deltaMs: number): void {
     if (gamePaused) return;
+    if (this.waitingForTerminal) {
+      if (this.waitingForTerminal()) return;
+      // create() may have rendered behind the terminal. Resolve the tip and discard this transition frame's delta.
+      this.syncGuide();
+      this.waitingForTerminal = undefined;
+      return;
+    }
     if (this.ended) {
       this.squares.step(deltaMs / 1000);
       this.board.step(deltaMs / 1000);
@@ -1139,11 +1149,7 @@ export class GameScene extends Phaser.Scene {
     const run = this.run;
     const step = !this.ended && !this.paused && !this.razing && (run.draft || !this.workbenchSelection.panel)
       ? guideStep(run, this.picked) : null;
-    if (step && this.guide.show(step, run)) this.visibleTip = step;
-    else {
-      this.visibleTip = null;
-      this.guide.hide();
-    }
+    this.visibleTip = this.guide.show(step, run) ? step : null;
   }
 
   private taskCaption(task: WorkTask): string {

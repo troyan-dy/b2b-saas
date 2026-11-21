@@ -43,7 +43,7 @@ function advice(step: GuideStep, run: Run, target: HTMLElement): string {
       const income = rate(first.income) + PER_S, net = rate(first.net) + PER_S;
       const result = run.lastReport?.sprint === 1 ? `${releaseResult(run)} ` : '';
       const next = run.draft ? L('Выбери любую карту.', 'Pick any card.') : L('Дальше ты решаешь, что строить.', 'What you build next is up to you.');
-      return result + L(`Первые подписки: ${income}. Чистый поток после расходов: ${net}.`, `First subscription revenue: ${income}. Net cash flow after expenses: ${net}.`) + ` ${next}`;
+      return result + L(`На момент первой подписки: выручка ${income}, чистый поток после расходов ${net}.`, `At the time of your first subscription, revenue was ${income} and net cash flow after expenses was ${net}.`) + ` ${next}`;
     }
   }
 }
@@ -108,6 +108,7 @@ export function createGuideView(onDismiss: () => void, onSkip: () => void) {
     `<button type="button" data-guide-skip>${L('Пропустить обучение', 'Skip tutorial')}</button></footer>`;
   const title = card.querySelector('strong')!, text = card.querySelector('p')!;
   let paper: HTMLElement | null = null, marked: HTMLElement | null = null;
+  // A temporarily hidden tip must not pull the shelf back after the player scrolls away.
   let revealed: GuideStep | null = null;
   let placementKey = '';
   function unmark() {
@@ -132,7 +133,8 @@ export function createGuideView(onDismiss: () => void, onSkip: () => void) {
   });
 
   return {
-    show(step: GuideStep, run: Run): boolean {
+    show(step: GuideStep | null, run: Run): boolean {
+      if (!step) return unavailable();
       paper ??= document.querySelector<HTMLElement>('#top .bl-over');
       if (!paper || document.hidden || document.querySelector('.tm.on, dialog[open], .sc-album:not([hidden])')) return unavailable();
       const draft = run.draft ? paper.querySelector<HTMLElement>('.sc-draft:not([hidden])') : null;
@@ -178,10 +180,6 @@ export function createGuideView(onDismiss: () => void, onSkip: () => void) {
         placementKey = key;
       }
       return true;
-    },
-    hide(): void {
-      revealed = null;
-      unavailable();
     },
   };
 }

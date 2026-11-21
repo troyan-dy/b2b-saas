@@ -237,6 +237,7 @@ export interface Client {
 
 export interface Report {
   promises?: { name: string; block: string; level: number; refund?: number }[];
+  /** First release with revenue; a contract may already have started paying between releases. */
   firstSubscriptions?: boolean;
   profitableStreak?: number;
   sprint: number;

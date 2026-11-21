@@ -203,6 +203,7 @@ async function play(): Promise<void> {
   let finished = false;
   const scene = new GameScene(run, rng, paper, {
     onHidden: () => void pause.open(),
+    terminalShown: () => term.shown,
     restored,
     bestValuation: bestValuation(meta.runs),
     // the bot is a tool of the gyms and captures: the release has no code path to it
