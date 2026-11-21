@@ -12,11 +12,13 @@ export function installPause(settings: Settings) {
   dialog.innerHTML = `<h1 id="pause-title">${L('Пауза', 'Paused')}</h1>
     <div class="pause-mix"></div><button class="pause-track" type="button"></button>
     <div class="pause-help"></div><footer><button class="pause-resume" type="button" autofocus>${L('Продолжить', 'Resume')} <kbd>Esc</kbd></button>
+    <button type="button" data-profit-guide hidden>${L('Обучение: как выйти в прибыль', 'Guide: how to turn a profit')}</button>
     <button class="pause-quit" type="button" hidden>${L('Сохранить и выйти в меню', 'Save and return to menu')}</button></footer>`;
   document.body.append(dialog);
   const track = dialog.querySelector<HTMLButtonElement>('.pause-track')!;
   const resume = dialog.querySelector<HTMLButtonElement>('.pause-resume')!;
   const quit = dialog.querySelector<HTMLButtonElement>('.pause-quit')!;
+  const guide = dialog.querySelector<HTMLButtonElement>('[data-profit-guide]')!;
   const apply = (): void => {
     setSoundOn(settings.sound, settings.soundVolume);
     setMusicOn(settings.music, settings.musicVolume);
@@ -89,7 +91,10 @@ export function installPause(settings: Settings) {
   };
   window.addEventListener('keydown', keyboard, true);
   window.addEventListener('keyup', keyboard, true);
-  return { open, setQuit(callback: (() => void) | null) {
+  return { open, setGuide(callback: (() => void) | null) {
+    guide.hidden = !callback;
+    guide.onclick = callback ? () => { close(); callback(); } : null;
+  }, setQuit(callback: (() => void) | null) {
     quit.hidden = !callback;
     quit.onclick = callback;
   } };

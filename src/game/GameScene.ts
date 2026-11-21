@@ -1,6 +1,8 @@
 import { gamePaused } from '../core/pause-clock';
 import Phaser from 'phaser';
 import { nextStep } from './run-hint';
+import { dismissGuideStep, guideStep, resumeProfitGuide, stopGuide, type GuideStep } from './startup-guide';
+import { createGuideView } from '../ui/startup-guide';
 import { cityBuildings, cityFrame, cityGroups, cityOutlet, payingGroups, visibleBuildings } from './client-city-model';
 import { blocksOnSheet, cashRunway, currentSite, demolitionTargets, deskOffer, outstandingPromises } from './company-panel-model';
 import { workArea } from './layout';
@@ -123,8 +125,9 @@ export { CLIENT_LOOK } from './client-city-model';
 
 export interface GameHooks {
   onHidden?: () => void;
-  /** Resuming a save does not replay the first-run tutorial. */
+  /** Resuming a save skips the welcome speech. */
   restored?: boolean;
+  terminalShown?: () => boolean;
   bestValuation?: number;
   /** called every simulated step, before it: a bot plays here */
   beforeStep?: (run: Run) => void;
@@ -148,6 +151,9 @@ export class GameScene extends Phaser.Scene {
   private readonly hooks: GameHooks;
   /** the block picked on the shelf and waiting for a cell */
   private picked: string | null = null;
+  private guide?: ReturnType<typeof createGuideView>;
+  private visibleTip: GuideStep | null = null;
+  private waitingForTerminal?: () => boolean;
   /** «снести блок» is on: the next click on a shipped block takes it off the sheet */
   private razing: string | null = null;
   /** squares that have arrived at each block: the sheet shows work when it lands, not when it is sent */
@@ -188,6 +194,7 @@ export class GameScene extends Phaser.Scene {
     this.rng = rng;
     this.paper = paper;
     this.hooks = hooks;
+    this.waitingForTerminal = run.guide ? hooks.terminalShown : undefined;
   }
 
   preload(): void {
@@ -195,7 +202,32 @@ export class GameScene extends Phaser.Scene {
     for (const key of keys) this.load.image(`node_${key}`, `assets/img/nodes/${key}.webp`);
   }
 
+  /** Opt in from the pause menu without replacing the company or replaying its pitch. */
+  openGuide(): void {
+    if (this.ended || this.run.over) return;
+    if (!this.run.guide) resumeProfitGuide(this.run);
+    this.workbenchSelection.panel = null;
+    this.workbenchAt = -Infinity;
+    this.mountGuide();
+    if (this.board) this.show();
+  }
+
+  private mountGuide(): void {
+    this.guide ??= createGuideView(
+      () => {
+        if (this.visibleTip) dismissGuideStep(this.run, this.visibleTip);
+        this.syncGuide();
+      },
+      () => { stopGuide(this.run); this.syncGuide(); },
+    );
+  }
+
   create(): void {
+    if (this.run.guide) {
+      const picked = this.run.guide.picked;
+      this.pickBlock(picked && !this.run.draft && shelf(this.run).includes(picked) && freeCells(this.run).length ? picked : null);
+      this.mountGuide();
+    }
     this.board = new Board(this);
     this.paper.enableMapPan((dx, dy) => {
       if (this.ended || this.run.draft || this.paused) return;
@@ -254,7 +286,7 @@ export class GameScene extends Phaser.Scene {
     for (const b of this.run.blocks) this.landed.set(b.kind, b.done);
     this.newsAt = 6;
     this.paper.setNews(`${pitch(this.run.idea)}. ${this.hooks.restored ? L('Стартап вернулся к работе', 'The startup is back at work') : L('Пока что это три слова и один человек', 'So far it is three words and one person')}`, this.newsHint());
-    if (!this.hooks.restored) this.say(
+    if (!this.hooks.restored && !this.guide) this.say(
       [
         CLAUDE,
         ...L(
@@ -271,19 +303,29 @@ export class GameScene extends Phaser.Scene {
 
   update(_time: number, deltaMs: number): void {
     if (gamePaused) return;
+    if (this.waitingForTerminal) {
+      if (this.waitingForTerminal()) return;
+      // create() may have rendered behind the terminal. Resolve the tip and discard this transition frame's delta.
+      this.syncGuide();
+      this.waitingForTerminal = undefined;
+      return;
+    }
     if (this.ended) {
       this.squares.step(deltaMs / 1000);
       this.board.step(deltaMs / 1000);
       return;
     }
     const dt = Math.min(deltaMs / 1000, 0.25);
+    // A placement or a founder click still gets its sound and feedback during a reading pause.
+    if (this.visibleTip && !this.run.draft && this.run.events.length) this.drain();
     // The bot must still be able to make its draft choice while simulation time stands still.
     if (this.run.draft) {
       this.acc = 0;
       if (!this.paused) this.hooks.beforeStep?.(this.run);
       if (this.run.events.length > 0) this.drain();
     }
-    if (!this.paused && !this.run.draft) {
+    const held = this.paused || this.visibleTip !== null;
+    if (!held && !this.run.draft) {
       this.acc += dt * this.speed;
       while (this.acc >= STEP) {
         this.hooks.beforeStep?.(this.run);
@@ -299,7 +341,7 @@ export class GameScene extends Phaser.Scene {
         this.tickNews(dt);
       }
     }
-    const visualDt = this.paused || this.run.draft ? 0 : dt * Math.min(this.speed, 3);
+    const visualDt = held || this.run.draft ? 0 : dt * Math.min(this.speed, 3);
     this.board.step(visualDt);
     this.squares.step(visualDt);
     this.show();
@@ -318,6 +360,11 @@ export class GameScene extends Phaser.Scene {
     }
     if (action.type === 'choose-card') {
       if (chooseCard(run, action.id)) {
+        if (run.guide) {
+          const tip = this.visibleTip;
+          if (tip === 'subscribed' || tip === 'compare' || tip === 'profitable' || tip === 'ledger') dismissGuideStep(run, tip);
+          dismissGuideStep(run, 'release');
+        }
         this.acc = 0;
         this.paused = false;
         playSound('buy', 2);
@@ -342,7 +389,7 @@ export class GameScene extends Phaser.Scene {
         break;
       case 'upgrade': changed = upgrade(run, action.block); break;
       case 'demolish':
-        this.picked = null;
+        this.pickBlock(null);
         this.workbenchSelection.panel = null;
         this.razing = action.block;
         break;
@@ -358,7 +405,10 @@ export class GameScene extends Phaser.Scene {
         changed = rushTask(run, action.task);
         if (changed) this.paper.pop(1120, 360, L('Ускорение: строители работают ×2', 'Boost: builders work ×2'), 'good');
         break;
-      case 'expand-infrastructure': changed = expandInfrastructure(run); break;
+      case 'expand-infrastructure':
+        changed = expandInfrastructure(run);
+        if (changed && this.visibleTip === 'expand-capacity') dismissGuideStep(run, 'expand-capacity');
+        break;
       case 'select-segment':
         this.workbenchSelection.selectedSegment = action.segment;
         this.workbenchSelection.panel = 'clients';
@@ -387,7 +437,7 @@ export class GameScene extends Phaser.Scene {
     if (item === 'x') {
       // the wrecking tool: on, then a click on the block that has to go
       this.razing = this.razing ? null : '*';
-      this.picked = null;
+      this.pickBlock(null);
       playSound('ui');
       return;
     }
@@ -406,7 +456,7 @@ export class GameScene extends Phaser.Scene {
       playSound('waste');
       return;
     }
-    this.picked = this.picked === item ? null : item;
+    this.pickBlock(this.picked === item ? null : item);
     playSound('ui');
   }
 
@@ -458,7 +508,7 @@ export class GameScene extends Phaser.Scene {
     }
     if (!this.picked) return;
     const [i, j] = id.split(',').map(Number);
-    if (place(this.run, this.picked, i, j)) this.picked = null;
+    if (place(this.run, this.picked, i, j)) this.pickBlock(null);
   }
 
   /** The founder's own square of work on a lane: thrown from the desk to where that work goes. */
@@ -610,7 +660,7 @@ export class GameScene extends Phaser.Scene {
         this.landed.set(e.kind, 0);
         playSound('buy', 0);
         logEvent(`placed:${e.kind}`);
-        if (run.blocks.length === 2 && !this.hooks.restored) {
+        if (run.blocks.length === 2 && !this.hooks.restored && !this.guide) {
           this.say(
             [
               CLAUDE,
@@ -641,7 +691,7 @@ export class GameScene extends Phaser.Scene {
         // the founder checks this lane: for every square of work an ink square leaves his desk
         if (e.agent !== 0 && e.lane === run.review && this.speed <= 2 && this.board.hasRoute('me') && (e.lane !== 'build' || block)) {
           this.board.flow('me', PALETTE.ink, 600);
-          if (!this.hooks.restored && !this.said.has('t:review') && (this.termUntil === 0 || this.clock > this.termUntil - 4)) {
+          if (!this.hooks.restored && !this.guide && !this.said.has('t:review') && (this.termUntil === 0 || this.clock > this.termUntil - 4)) {
             this.said.add('t:review');
             this.say(
               [
@@ -670,7 +720,7 @@ export class GameScene extends Phaser.Scene {
         if (e.kind === 'core') this.news(NEWS_EVENT.firstBlock);
         break;
       case 'release': {
-        this.picked = null;
+        this.pickBlock(null);
         this.razing = null;
         this.syncStage(1100);
         metrics.completed = true;
@@ -692,7 +742,7 @@ export class GameScene extends Phaser.Scene {
           this.said.add('link');
           this.news(NEWS_EVENT.link);
         }
-        if (netPerS(run) >= 0 && e.report.mrr > 0 && !this.said.has('profit')) {
+        if ((e.report.profitableStreak ?? 0) > 0 && !this.said.has('profit')) {
           this.said.add('profit');
           this.news(NEWS_EVENT.profit);
         }
@@ -1038,7 +1088,17 @@ export class GameScene extends Phaser.Scene {
       : order?.kind === 'roles' ? L('Первый заказ комплаенса: разные права для автора и согласующего', 'First compliance order: separate permissions for author and approver') : '';
     const detail = valuationNote ? valuationNote + record : orderHint;
     const promises = outstandingPromises(run);
-    this.paper.setGoal(nextStep(run, net, { paused: this.paused, picked: Boolean(this.picked), razing: Boolean(this.razing) }) + (detail && !promises.length ? `<br><small>${detail}</small>` : ''));
+    const trackingProfit = run.guide?.dismissed.includes('subscribed') && !this.visibleTip && !run.down &&
+      !run.draft && !run.dilemma && !run.call && run.offer === null && run.lastChance === null &&
+      !this.paused && !this.picked && !this.razing && !promises.length && !run.tasks.length;
+    const goal = trackingProfit
+      ? (net > 0
+        ? L('Сейчас подписки покрывают расходы. Если плюс сохранится <b>на релизе</b>, цель достигнута.',
+          'Subscriptions cover costs now. Stay above zero <b>at release</b> to reach your goal.')
+        : L('Спринт идёт. <b>На релизе</b> сравним выручку и расходы и выберем следующий ход.',
+          'The sprint is running. <b>At release</b> we’ll compare revenue and costs and choose the next move.'))
+      : nextStep(run, net, { paused: this.paused, picked: Boolean(this.picked), razing: Boolean(this.razing) });
+    this.paper.setGoal(goal + (detail && !promises.length ? `<br><small>${detail}</small>` : ''));
     this.paper.setPromises(promises.map(({ client, deadline }) => {
       const block = BLOCK_BY_ID[client.want]?.name ?? client.want;
       return { block: client.want, label: L(
@@ -1047,7 +1107,7 @@ export class GameScene extends Phaser.Scene {
       ) };
     }));
     this.paper.setLedger(this.ledger());
-    if (!this.ended) this.teach();
+    if (!this.ended && !this.guide) this.teach();
 
     this.paper.setShelf(this.shelfView());
     if (!this.ended && (run.t - this.workbenchAt >= 0.2 || this.draftShown !== Boolean(run.draft) || this.workbenchSelection.paused !== this.paused)) {
@@ -1103,6 +1163,24 @@ export class GameScene extends Phaser.Scene {
       this.termUntil = 0;
       this.paper.term(null);
     }
+    this.syncGuide();
+  }
+
+  private pickBlock(kind: string | null): void {
+    this.picked = kind;
+    if (this.run.guide) {
+      if (kind !== null) this.run.guide.picked = kind;
+      else delete this.run.guide.picked;
+    }
+  }
+
+  /** Hold the simulation only while a tip has a visible, usable target. Input stays live. */
+  private syncGuide(): void {
+    if (!this.guide) return;
+    const run = this.run;
+    const step = !this.ended && !this.paused && !this.razing && (run.draft || !this.workbenchSelection.panel)
+      ? guideStep(run, this.picked) : null;
+    this.visibleTip = this.guide.show(step, run) ? step : null;
   }
 
   private taskCaption(task: WorkTask): string {

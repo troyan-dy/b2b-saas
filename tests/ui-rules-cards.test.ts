@@ -120,7 +120,7 @@ describe('sprint card decisions', () => {
       sprintCardsView(run, null, { title: 'Старое событие', impact: '$100' }).applied?.impact,
     ).toBe('$100');
   });
-  it('reports both promise outcomes, first subscriptions and the next pending decision in priority order', () => {
+  it('reports both promise outcomes, the first release with revenue and the next pending decision in priority order', () => {
     const run = newRun();
     run.draft = ['rest'];
     run.lastReport = report({
@@ -138,7 +138,7 @@ describe('sprint card decisions', () => {
       expect.stringContaining('Обещание выполнено'),
       expect.stringContaining('Возврат $200'),
     ]);
-    expect(draft().firstSubscriptions).toContain('выручка $10/с');
+    expect(draft().firstSubscriptions).toContain('Первый релиз с выручкой: $10/с');
     expect(draft().summary).toContain('звонок: Вектор');
     run.call = null;
     expect(draft().summary).toContain('предложение покупателя');

@@ -28,7 +28,9 @@ export interface Past {
   value?: number;
 }
 
-export type FinalRun = Pick<Run, 'idea' | 'stats' | 't' | 'over' | 'mortgaged' | 'seed' | 'downWhy'>;
+export type FinalRun = Pick<Run, 'idea' | 'stats' | 't' | 'over' | 'mortgaged' | 'seed' | 'downWhy'> & {
+  guideProfit?: { release: number; net: number };
+};
 
 export interface PendingResult {
   run: Omit<FinalRun, 'idea'>;
@@ -184,7 +186,9 @@ export function recordResult(run: Run, meta: Meta): PendingResult {
   const lessons = finish(run, meta).map(lesson => lesson.id);
   const { seed, t, over, mortgaged, downWhy } = run;
   const stats = { ...run.stats, value: valuation(run) };
-  return meta.pending = { run: { seed, t, over, mortgaged, downWhy, stats }, lessons, stage: 'report' };
+  const result = run.guide?.result;
+  const milestone = result && result.net > 0 ? { guideProfit: { release: result.release, net: result.net } } : {};
+  return meta.pending = { run: { seed, t, over, mortgaged, downWhy, stats, ...milestone }, lessons, stage: 'report' };
 }
 
 export function restoreResult(meta: Meta): FinalRun | null {

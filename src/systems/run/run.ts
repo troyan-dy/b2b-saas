@@ -1,5 +1,6 @@
 import { L, LANG, worded } from '../../core/lang';
 import { createRng, type Rng } from '../../core/rng';
+import { dismissGuideStep, recordGuideRelease, type StartupGuide } from '../../game/startup-guide';
 import blocksData from '../../data/balance/blocks.json';
 import clientsData from '../../data/balance/clients.json';
 import dilemmasEn from '../../data/balance/dilemmas.en.json';
@@ -236,8 +237,11 @@ export interface Client {
 
 export interface Report {
   promises?: { name: string; block: string; level: number; refund?: number }[];
+  /** First release with revenue; a contract may already have started paying between releases. */
   firstSubscriptions?: boolean;
   profitableStreak?: number;
+  /** Rates at settlement, before the next card, job or call changes them. */
+  cashFlow?: CashFlow & { previousNet: number | null };
   sprint: number;
   shipped: string[];
   /** Completed non-building projects; these do not have a cell on the sheet. */
@@ -316,6 +320,7 @@ export interface Run {
   seed: number;
   rng: Rng;
   idea: Idea;
+  guide?: StartupGuide;
   firstIndustryOrder?: boolean;
   perks: readonly string[];
   /** levels of the founder's traits this startup is played with */
@@ -777,13 +782,16 @@ export function burnPerS(run: Run): number {
 }
 
 /** Where the money goes and comes from, $ per second: the sheet shows every line of it. */
-export function flows(run: Run): {
+export interface CashFlow {
   living: number;
   agents: number;
   hosting: number;
   tokens: number;
   income: number;
-} {
+  net: number;
+}
+
+export function flows(run: Run): Omit<CashFlow, 'net'> {
   return {
     living: TUNING.living_per_s * (1 - trait(run, 'thrift')),
     agents: agentCost(run),
@@ -1021,7 +1029,11 @@ export function upgrade(run: Run, kind: string): boolean {
 export function setLane(run: Run, agentId: number, lane: Lane): void {
   if (run.over || run.draft || !LANES.includes(lane)) return;
   const a = run.agents.find((x) => x.id === agentId);
-  if (a) a.lane = lane;
+  if (a && a.lane !== lane) {
+    if (lane === 'promo') dismissGuideStep(run, 'assign-promo');
+    if (a.lane === 'promo' && lane === 'build') dismissGuideStep(run, 'park-agent');
+    a.lane = lane;
+  }
 }
 
 /** The founder picks what to check; the choice holds until the release. */
@@ -1062,14 +1074,17 @@ export function crunch(run: Run, lane: Lane = 'build'): boolean {
     case 'build': {
       run.debt += TUNING.crunch.debt;
       work(run, 0, true);
+      if (run.guide) run.guide.coded = true;
       break;
     }
     case 'fix':
       run.debt = Math.max(0, run.debt - TUNING.fix_per_work);
+      dismissGuideStep(run, 'fix-debt');
       run.events.push({ type: 'work', agent: 0, lane });
       break;
     case 'promo':
       run.leads += leadsPerWork(run);
+      dismissGuideStep(run, 'post');
       run.events.push({ type: 'work', agent: 0, lane });
       break;
   }
@@ -1189,6 +1204,13 @@ export function answerCall(run: Run, sure: boolean): void {
     run.stats.promises++;
   } else c.deal = honestMult(run);
   seat(run, c);
+  rememberFirstSubscription(run);
+}
+
+function rememberFirstSubscription(run: Run, income?: number, net?: number): void {
+  if (!run.guide || run.guide.subscription) return;
+  income ??= incomePerS(run);
+  if (income > 0) run.guide.subscription = { income, net: net ?? netPerS(run) };
 }
 
 export function firstIndustryOrder(run: Run): { kind: string; text: string } | undefined {
@@ -1735,9 +1757,13 @@ function release(run: Run): void {
   const previousStreak = run.lastReport?.sprint === run.sprint - 1
     ? (run.lastReport.profitableStreak ?? 0)
     : 0;
-  const net = netPerS(run);
+  const rates = flows(run);
+  const net = rates.income - (rates.living + rates.agents + rates.hosting + rates.tokens);
+  report.cashFlow = { ...rates, net, previousNet: run.lastReport?.cashFlow?.net ?? null };
   report.profitableStreak = net > 0 ? previousStreak + 1 : 0;
-  if (run.stats.profitAt === 0 && net >= 0 && income > 0) run.stats.profitAt = run.t;
+  if (run.guide) recordGuideRelease(run.guide, run.sprint, report.cashFlow);
+  rememberFirstSubscription(run, report.mrr / TUNING.sprint_s, net);
+  if (run.stats.profitAt === 0 && net > 0 && income > 0) run.stats.profitAt = run.t;
   run.lastReport = report;
   run.events.push({ type: 'release', report });
 

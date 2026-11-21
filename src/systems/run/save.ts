@@ -1,4 +1,5 @@
 import { createRng } from '../../core/rng';
+import { GUIDE_STEPS, restoreGuideWin } from '../../game/startup-guide';
 import draftCards from '../../data/balance/draft.json';
 import { createMarket, MARKET } from '../company/market';
 import marketEvolution from '../../data/balance/market-evolution.json';
@@ -59,6 +60,42 @@ function integer(value: unknown): value is number {
 
 function strings(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((item) => typeof item === 'string');
+}
+
+function cashFlow(value: unknown): value is RecordValue {
+  return record(value) && Number.isFinite(value.net) &&
+    (value.previousNet === null || Number.isFinite(value.previousNet)) &&
+    ['income', 'living', 'agents', 'hosting', 'tokens'].every(key => nonnegative(value[key]));
+}
+
+/** A damaged optional tutorial must not cost the player the company. */
+function restoreGuide(state: RecordValue): void {
+  if (record(state.lastReport) && state.lastReport.cashFlow !== undefined && !cashFlow(state.lastReport.cashFlow)) {
+    const restored = { ...state.lastReport };
+    delete restored.cashFlow;
+    state.lastReport = restored;
+  }
+  const guide = state.guide;
+  if (guide === undefined) return;
+  if (
+    !record(guide) || !Array.isArray(guide.dismissed) ||
+    !guide.dismissed.every(step => GUIDE_STEPS.some(id => id === step)) ||
+     (guide.coded !== undefined && guide.coded !== true) ||
+    (guide.baselineNet !== undefined && !Number.isFinite(guide.baselineNet)) ||
+    (guide.result !== undefined && (!cashFlow(guide.result) || !integer(guide.result.release))) ||
+    (guide.legacyWin !== undefined && (!record(guide.legacyWin) || !integer(guide.legacyWin.release) ||
+      !nonnegative(guide.legacyWin.income) || !nonnegative(guide.legacyWin.tokens))) ||
+    (guide.subscription !== undefined && (
+      !record(guide.subscription) || !nonnegative(guide.subscription.income) ||
+      guide.subscription.income === 0 || !Number.isFinite(guide.subscription.net)
+    ))
+  ) {
+    delete state.guide;
+  } else if (guide.picked !== undefined && !kind(guide.picked)) {
+    const restored = { ...guide };
+    delete restored.picked;
+    state.guide = restored;
+  }
 }
 
 function kind(value: unknown): value is string {
@@ -444,6 +481,7 @@ export function saveRun(run: Run): boolean {
       Object.entries(run).filter(([key]) => !TRANSIENT.has(key) && !RETIRED.has(key)),
     );
     state.idea = { tech: run.idea.tech.id, form: run.idea.form.id, aud: run.idea.aud.id };
+    restoreGuide(state);
     const saved = { v: SCHEMA_VERSION, rngState: run.rng.state(), run: state };
     if (!plain(state) || !validRun(state, run)) return false;
     localStorage.setItem(RUN_SAVE_KEY, JSON.stringify(saved));
@@ -466,6 +504,7 @@ function decodeRun(raw: string | null): Run | null {
     )
       return null;
     const state = saved.run;
+    restoreGuide(state);
     if ((saved.v as number) < 4) {
       if (state.review === 'research') state.review = 'build';
       if (Array.isArray(state.agents))
@@ -497,6 +536,7 @@ function decodeRun(raw: string | null): Run | null {
     run.rng = createRng(run.seed, saved.rngState);
     run.events = [];
     refreshRun(run);
+    restoreGuideWin(run);
     if (run.sprint > TUNING.last_sprint) finishAtSprintLimit(run);
     return run;
   } catch {

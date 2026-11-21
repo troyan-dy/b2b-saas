@@ -21,6 +21,7 @@ import { playSound, unlockSound } from './core/sound';
 import { ending, menu, mixIdea } from './game/flow';
 import { packSale } from './game/sale';
 import { GameScene } from './game/GameScene';
+import { startGuide } from './game/startup-guide';
 import { playBot, SENSIBLE } from './gyms/bot';
 import { mountGymKeys } from './gyms/keys';
 import { LookdevScene } from './gyms/lookdev/LookdevScene';
@@ -184,6 +185,7 @@ async function play(): Promise<void> {
     if (!draft) { reload(false); return; }
     const { idea, boost } = draft;
     selected = createRun(args.seed, idea, meta.lessons, traitLevels(meta, boost));
+    if (persistent && !saved && meta.runs.length === 0) startGuide(selected);
   }
   const run = selected;
   const persist = (): void => {
@@ -201,6 +203,7 @@ async function play(): Promise<void> {
   let finished = false;
   const scene = new GameScene(run, rng, paper, {
     onHidden: () => void pause.open(),
+    terminalShown: () => term.shown,
     restored,
     bestValuation: bestValuation(meta.runs),
     // the bot is a tool of the gyms and captures: the release has no code path to it
@@ -208,6 +211,7 @@ async function play(): Promise<void> {
     onEnd: (r: Run) => {
       if (finished) return;
       finished = true;
+      pause.setGuide(null);
       pause.setQuit(null);
       stopSaving();
       const result = finishCompany(r, meta, persistent);
@@ -215,6 +219,10 @@ async function play(): Promise<void> {
       if (r.over === 'sold') void packSale(over, r).then(() => showResult(result));
       else afterGameTime(() => void showResult(result), 1400);
     },
+  });
+  if (persistent) pause.setGuide(() => {
+    scene.openGuide();
+    persist();
   });
   pause.setQuit(() => {
     persist();

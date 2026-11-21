@@ -68,13 +68,19 @@ export async function menu(term: Terminal, meta: Meta, version: string, saved: R
           'Выбери три карты питча, затем поставь ядро, лендинг и оплату на свободные клетки.',
           'Готовые блоки включаются на релизе. Нажми «Кодить», чтобы помочь агентам.',
           'Кликни по зданиям клиентов, чтобы увидеть запросы и сроки. Именные договоры платят отдельно от общего тарифа.',
-          'Подписки дают выручку. Чистый поток под балансом учитывает расходы. Выйди в плюс к финалу или продай компанию.',
+          'Смотри на «чистыми» под балансом: из подписок вычитаются жизнь основателя, работа агентов, хостинг и токены. Разовая выплата на карте даёт запас денег, но не увеличивает доход в секунду.',
+          'Нужны клиенты? В строке «руками» нажми «пост». Он тратит силу и добавляет заявки, а не деньги. Результат продвижения смотри на релизе.',
+          'Если клиенты уходят, нажми «Клиенты» и посмотри, какой блок они ждут и сколько спринтов осталось. Один вовремя выпущенный блок может помочь сразу нескольким договорам.',
+          'Для первого прибыльного релиза подписки должны покрыть расходы с запасом. Если застрял, нажми Esc → «Обучение: как выйти в прибыль» прямо в своей компании. Цель партии — выйти в плюс к финалу или продать компанию.',
         ],
         [
           'Pick three pitch cards, then place the core, landing page and payments on free cells.',
           'Finished blocks go live at release. Press “Code” to help your agents.',
           'Click the customer buildings to see needs and deadlines. Named contracts pay separately from the shared tariff.',
-          'Subscriptions bring in revenue. Net cash flow below the balance includes expenses. Turn a profit by the final release or sell the company.',
+          'Check “net” under your balance: living costs, working agents, hosting and tokens come out of subscriptions. A one-off cash card tops up your balance without increasing recurring income.',
+          'Need customers? Press “post” in the “by hand” row. It spends energy to bring in leads, not money. Check what promotion achieved at the next release.',
+          'Losing customers? Open “Clients” to see which block they need and how many sprints they will wait. Shipping one block on time can help several contracts.',
+          'A profitable release means subscriptions exceeded expenses when it shipped. If you get stuck, press Esc → “Guide: how to turn a profit” in your company. Turn a profit by the final release or sell the company.',
         ],
       )) term.print(line, 'small');
       await term.wait(BACK);
@@ -329,6 +335,10 @@ export async function ending(term: Terminal, run: FinalRun, meta: Meta, persist 
     term.print(score, 'big');
     term.print(caption, 'dim small');
     term.print(endingStats(run), 'small');
+    const lesson = run.guideProfit;
+    if (lesson && Number.isInteger(lesson.release) && Number.isFinite(lesson.net) && lesson.net > 0)
+      term.print(L(`Обучение пройдено: на релизе №${lesson.release} подписки превысили расходы.`,
+        `Guide complete: on release #${lesson.release}, subscriptions exceeded expenses.`), 'small');
     term.print('');
     // then what the founder takes into the next startup
     for (const l of got) term.print(`${L('урок', 'lesson')}: <b>${l.title}</b> — <em>${l.gives}</em>`, 'small');

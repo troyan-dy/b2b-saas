@@ -271,8 +271,8 @@ export function sprintCardsView(
           limit: TUNING.last_sprint,
           promises,
           firstSubscriptions: report?.firstSubscriptions ? L(
-            `Первые подписки · выручка ${rate(report.mrr / TUNING.sprint_s)}${PER_S} · после расходов ${rate(netPerS(run))}${PER_S}`,
-            `First subscriptions · revenue ${rate(report.mrr / TUNING.sprint_s)}${PER_S} · after expenses ${rate(netPerS(run))}${PER_S}`,
+            `Первый релиз с выручкой: ${rate(report.mrr / TUNING.sprint_s)}${PER_S} · после расходов ${rate(netPerS(run))}${PER_S}`,
+            `First release with revenue: ${rate(report.mrr / TUNING.sprint_s)}${PER_S} · after expenses ${rate(netPerS(run))}${PER_S}`,
           ) : undefined,
           cards: run.draft.flatMap((id) => {
             const card = DRAFT_CARDS.find((entry) => entry.id === id);
