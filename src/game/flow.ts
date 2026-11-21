@@ -70,6 +70,7 @@ export async function menu(term: Terminal, meta: Meta, version: string, saved: R
           'Кликни по зданиям клиентов, чтобы увидеть запросы и сроки. Именные договоры платят отдельно от общего тарифа.',
           'Смотри на «чистыми» под балансом: из подписок вычитаются жизнь основателя, работа агентов, хостинг и токены. Разовая выплата на карте даёт запас денег, но не увеличивает доход в секунду.',
           'Нужны клиенты? В строке «руками» нажми «пост». Он тратит силу и добавляет заявки, а не деньги. Результат продвижения смотри на релизе.',
+          'Если клиенты уходят, нажми «Клиенты» и посмотри, какой блок они ждут и сколько спринтов осталось. Один вовремя выпущенный блок может помочь сразу нескольким договорам.',
           'Для первого прибыльного релиза подписки должны покрыть расходы с запасом. Если застрял, нажми Esc → «Обучение: как выйти в прибыль» прямо в своей компании. Цель партии — выйти в плюс к финалу или продать компанию.',
         ],
         [
@@ -78,6 +79,7 @@ export async function menu(term: Terminal, meta: Meta, version: string, saved: R
           'Click the customer buildings to see needs and deadlines. Named contracts pay separately from the shared tariff.',
           'Check “net” under your balance: living costs, working agents, hosting and tokens come out of subscriptions. A one-off cash card tops up your balance without increasing recurring income.',
           'Need customers? Press “post” in the “by hand” row. It spends energy to bring in leads, not money. Check what promotion achieved at the next release.',
+          'Losing customers? Open “Clients” to see which block they need and how many sprints they will wait. Shipping one block on time can help several contracts.',
           'A profitable release means subscriptions exceeded expenses when it shipped. If you get stuck, press Esc → “Guide: how to turn a profit” in your company. Turn a profit by the final release or sell the company.',
         ],
       )) term.print(line, 'small');
