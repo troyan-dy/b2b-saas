@@ -202,7 +202,7 @@ export class GameScene extends Phaser.Scene {
   create(): void {
     if (this.run.guide) {
       const picked = this.run.guide.picked;
-      if (picked && !this.run.draft && shelf(this.run).includes(picked) && freeCells(this.run).length) this.picked = picked;
+      this.pickBlock(picked && !this.run.draft && shelf(this.run).includes(picked) && freeCells(this.run).length ? picked : null);
       this.guide = createGuideView(
         () => {
           if (this.visibleTip) dismissGuideStep(this.run, this.visibleTip);
@@ -269,7 +269,7 @@ export class GameScene extends Phaser.Scene {
     for (const b of this.run.blocks) this.landed.set(b.kind, b.done);
     this.newsAt = 6;
     this.paper.setNews(`${pitch(this.run.idea)}. ${this.hooks.restored ? L('Стартап вернулся к работе', 'The startup is back at work') : L('Пока что это три слова и один человек', 'So far it is three words and one person')}`, this.newsHint());
-    if (!this.hooks.restored && !this.run.guide) this.say(
+    if (!this.hooks.restored && !this.guide) this.say(
       [
         CLAUDE,
         ...L(
@@ -336,7 +336,7 @@ export class GameScene extends Phaser.Scene {
     }
     if (action.type === 'choose-card') {
       if (chooseCard(run, action.id)) {
-        if (this.visibleTip === 'release' || this.visibleTip === 'subscribed') dismissGuideStep(run, this.visibleTip);
+        if (run.guide) dismissGuideStep(run, this.visibleTip === 'subscribed' ? 'subscribed' : 'release');
         this.acc = 0;
         this.paused = false;
         playSound('buy', 2);
@@ -361,7 +361,7 @@ export class GameScene extends Phaser.Scene {
         break;
       case 'upgrade': changed = upgrade(run, action.block); break;
       case 'demolish':
-        this.picked = null;
+        this.pickBlock(null);
         this.workbenchSelection.panel = null;
         this.razing = action.block;
         break;
@@ -406,7 +406,7 @@ export class GameScene extends Phaser.Scene {
     if (item === 'x') {
       // the wrecking tool: on, then a click on the block that has to go
       this.razing = this.razing ? null : '*';
-      this.picked = null;
+      this.pickBlock(null);
       playSound('ui');
       return;
     }
@@ -425,7 +425,7 @@ export class GameScene extends Phaser.Scene {
       playSound('waste');
       return;
     }
-    this.picked = this.picked === item ? null : item;
+    this.pickBlock(this.picked === item ? null : item);
     playSound('ui');
   }
 
@@ -477,7 +477,7 @@ export class GameScene extends Phaser.Scene {
     }
     if (!this.picked) return;
     const [i, j] = id.split(',').map(Number);
-    if (place(this.run, this.picked, i, j)) this.picked = null;
+    if (place(this.run, this.picked, i, j)) this.pickBlock(null);
   }
 
   /** The founder's own square of work on a lane: thrown from the desk to where that work goes. */
@@ -630,7 +630,7 @@ export class GameScene extends Phaser.Scene {
         this.landed.set(e.kind, 0);
         playSound('buy', 0);
         logEvent(`placed:${e.kind}`);
-        if (run.blocks.length === 2 && !this.hooks.restored && !run.guide) {
+        if (run.blocks.length === 2 && !this.hooks.restored && !this.guide) {
           this.say(
             [
               CLAUDE,
@@ -661,7 +661,7 @@ export class GameScene extends Phaser.Scene {
         // the founder checks this lane: for every square of work an ink square leaves his desk
         if (e.agent !== 0 && e.lane === run.review && this.speed <= 2 && this.board.hasRoute('me') && (e.lane !== 'build' || block)) {
           this.board.flow('me', PALETTE.ink, 600);
-          if (!this.hooks.restored && !run.guide && !this.said.has('t:review') && (this.termUntil === 0 || this.clock > this.termUntil - 4)) {
+          if (!this.hooks.restored && !this.guide && !this.said.has('t:review') && (this.termUntil === 0 || this.clock > this.termUntil - 4)) {
             this.said.add('t:review');
             this.say(
               [
@@ -690,7 +690,7 @@ export class GameScene extends Phaser.Scene {
         if (e.kind === 'core') this.news(NEWS_EVENT.firstBlock);
         break;
       case 'release': {
-        this.picked = null;
+        this.pickBlock(null);
         this.razing = null;
         this.syncStage(1100);
         metrics.completed = true;
@@ -1067,7 +1067,7 @@ export class GameScene extends Phaser.Scene {
       ) };
     }));
     this.paper.setLedger(this.ledger());
-    if (!this.ended && !run.guide) this.teach();
+    if (!this.ended && !this.guide) this.teach();
 
     this.paper.setShelf(this.shelfView());
     if (!this.ended && (run.t - this.workbenchAt >= 0.2 || this.draftShown !== Boolean(run.draft) || this.workbenchSelection.paused !== this.paused)) {
@@ -1126,14 +1126,18 @@ export class GameScene extends Phaser.Scene {
     this.syncGuide();
   }
 
+  private pickBlock(kind: string | null): void {
+    this.picked = kind;
+    if (this.run.guide) {
+      if (kind === 'core' || kind === 'landing' || kind === 'pay') this.run.guide.picked = kind;
+      else delete this.run.guide.picked;
+    }
+  }
+
   /** Hold the simulation only while a tip has a visible, usable target. Input stays live. */
   private syncGuide(): void {
     if (!this.guide) return;
     const run = this.run;
-    if (run.guide) {
-      if (this.picked === 'core' || this.picked === 'landing' || this.picked === 'pay') run.guide.picked = this.picked;
-      else delete run.guide.picked;
-    }
     const step = !this.ended && !this.paused && !this.razing && (run.draft || !this.workbenchSelection.panel)
       ? guideStep(run, this.picked) : null;
     if (step && this.guide.show(step, run)) this.visibleTip = step;
