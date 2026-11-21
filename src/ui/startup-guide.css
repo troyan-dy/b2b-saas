@@ -1,0 +1,67 @@
+.startup-guide {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 12;
+  box-sizing: border-box;
+  width: 430px;
+  padding: 16px 20px;
+  border: 1.5px solid var(--ink);
+  border-left: 6px solid var(--blue);
+  border-radius: 8px;
+  background: var(--card);
+  color: var(--ink);
+  box-shadow: 3px 4px 0 rgb(38 38 36 / 12%);
+  font: 400 22px/1.3 var(--serif);
+  pointer-events: none;
+}
+.startup-guide > strong {
+  color: #365d78;
+  font: 700 16px/1.3 var(--mono);
+}
+.startup-guide p { margin: 6px 0 14px; }
+.startup-guide footer { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
+.startup-guide button {
+  border: 1px solid var(--ink);
+  border-radius: 5px;
+  padding: 6px 10px;
+  background: var(--sage);
+  color: var(--ink);
+  font: 400 16px/1.3 var(--mono);
+  cursor: pointer;
+  pointer-events: auto;
+}
+.startup-guide [data-guide-skip] {
+  border-color: transparent;
+  padding-inline: 3px;
+  background: transparent;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.startup-guide button:is(:hover, :focus-visible) { outline: 2px solid #426581; outline-offset: 2px; }
+.bl-over [data-guide-target] { outline: 4px solid #426581; outline-offset: -3px; }
+.bl-over .sc-report[data-guide-target] { outline-color: var(--blue); outline-offset: 4px; }
+.bl-cell[data-guide-target]::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: #426581;
+  clip-path: polygon(evenodd, 50% 0, 100% 50%, 50% 100%, 0 50%, 50% 0, 50% 6%, 6% 50%, 50% 94%, 94% 50%, 50% 6%);
+  pointer-events: none;
+}
+/* The draft owns keyboard focus. Dock the note beside the entire deal, clear of all three cards. */
+.sc-draft > .startup-guide {
+  position: relative;
+  flex: 0 0 338px;
+  order: -1;
+  margin-right: 24px;
+  transform: none !important;
+}
+@media (max-width: 1440px), (max-height: 810px) {
+  .startup-guide { width: 460px; font-size: 25px; }
+  .startup-guide > strong, .startup-guide button { font-size: 20px; }
+  .sc-draft > .startup-guide { flex-basis: 355px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .bl-cell.pulse[data-guide-target] { animation: none; }
+}
