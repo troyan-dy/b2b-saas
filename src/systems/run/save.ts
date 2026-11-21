@@ -1,4 +1,5 @@
 import { createRng } from '../../core/rng';
+import { GUIDE_STEPS, isGuideBlock } from '../../game/startup-guide';
 import draftCards from '../../data/balance/draft.json';
 import { createMarket, MARKET } from '../company/market';
 import marketEvolution from '../../data/balance/market-evolution.json';
@@ -59,6 +60,27 @@ function integer(value: unknown): value is number {
 
 function strings(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((item) => typeof item === 'string');
+}
+
+/** A damaged optional tutorial must not cost the player the company. */
+function restoreGuide(state: RecordValue): void {
+  const guide = state.guide;
+  if (guide === undefined) return;
+  if (
+    !record(guide) || !Array.isArray(guide.dismissed) ||
+    !guide.dismissed.every(step => GUIDE_STEPS.some(id => id === step)) ||
+    (guide.coded !== undefined && guide.coded !== true) ||
+    (guide.subscription !== undefined && (
+      !record(guide.subscription) || !nonnegative(guide.subscription.income) ||
+      guide.subscription.income === 0 || !Number.isFinite(guide.subscription.net)
+    ))
+  ) {
+    delete state.guide;
+  } else if (guide.picked !== undefined && !isGuideBlock(guide.picked)) {
+    const restored = { ...guide };
+    delete restored.picked;
+    state.guide = restored;
+  }
 }
 
 function kind(value: unknown): value is string {
@@ -444,6 +466,7 @@ export function saveRun(run: Run): boolean {
       Object.entries(run).filter(([key]) => !TRANSIENT.has(key) && !RETIRED.has(key)),
     );
     state.idea = { tech: run.idea.tech.id, form: run.idea.form.id, aud: run.idea.aud.id };
+    restoreGuide(state);
     const saved = { v: SCHEMA_VERSION, rngState: run.rng.state(), run: state };
     if (!plain(state) || !validRun(state, run)) return false;
     localStorage.setItem(RUN_SAVE_KEY, JSON.stringify(saved));
@@ -466,6 +489,7 @@ function decodeRun(raw: string | null): Run | null {
     )
       return null;
     const state = saved.run;
+    restoreGuide(state);
     if ((saved.v as number) < 4) {
       if (state.review === 'research') state.review = 'build';
       if (Array.isArray(state.agents))

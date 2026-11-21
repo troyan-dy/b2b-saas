@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createRng } from '../src/core/rng';
+import { dismissGuideStep, guideStep, startGuide, stopGuide } from '../src/game/startup-guide';
 import { segmentRevenueMultiplier } from '../src/systems/run/product';
 import {
   createMarket,
@@ -32,6 +33,7 @@ import {
 } from '../src/systems/run/run';
 import { enqueueTask } from '../src/systems/run/production';
 import { clearRunSave, loadRun, RUN_SAVE_KEY, saveRun } from '../src/systems/run/save';
+import { client, product, release } from './run-rules-fixtures';
 
 const idea = { tech: IDEAS.tech[0], form: IDEAS.form[3], aud: IDEAS.aud[0] };
 const memory = new Map<string, string>();
@@ -87,6 +89,58 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('company save', () => {
+  it('resumes the actual selected cell tip, its acknowledgement, and a skipped guide', () => {
+    const run = createRun(70, idea);
+    startGuide(run);
+    run.guide!.picked = 'core';
+    expect(saveRun(run)).toBe(true);
+    const loaded = loadRun()!;
+    expect(guideStep(loaded, loaded.guide!.picked!)).toBe('core-cell');
+    dismissGuideStep(loaded, 'core-cell');
+    expect(saveRun(loaded)).toBe(true);
+    const acknowledged = loadRun()!;
+    expect(guideStep(acknowledged, acknowledged.guide!.picked!)).toBeNull();
+    stopGuide(acknowledged);
+    expect(saveRun(acknowledged)).toBe(true);
+    expect(loadRun()).not.toHaveProperty('guide');
+  });
+
+  it('keeps the first subscription rates through Continue and retires the guide when read', () => {
+    const run = createRun(70, idea);
+    startGuide(run);
+    product(run, ['core', 'landing', 'pay']);
+    run.clients = [client(1)];
+    release(run, 1);
+    const subscription = run.guide!.subscription!;
+    expect(subscription.income).toBeGreaterThan(0);
+    expect(subscription.net).toBeLessThan(0);
+    expect(saveRun(run)).toBe(true);
+    const loaded = loadRun()!;
+    expect(guideStep(loaded, null)).toBe('subscribed');
+    expect(loaded.guide?.subscription).toEqual(subscription);
+    dismissGuideStep(loaded, 'subscribed');
+    expect(saveRun(loaded)).toBe(true);
+    expect(guideStep(loadRun()!, null)).toBeNull();
+  });
+
+  it('keeps company progress when legacy data lacks a guide or the optional guide is damaged', () => {
+    const run = marketCompany();
+    expect(saveRun(run)).toBe(true);
+    const data = savedData();
+    for (const guide of [undefined, null, {}, { dismissed: ['missing'] }, { dismissed: [], coded: 'yes' },
+      { dismissed: [], subscription: { income: 0, net: -1 } },
+      { dismissed: [], subscription: { income: 1, net: 'unknown' } }]) {
+      memory.set(RUN_SAVE_KEY, JSON.stringify({ ...data, run: { ...data.run, guide } }));
+      const loaded = loadRun()!;
+      expect(loaded).not.toHaveProperty('guide');
+      expect(loaded.money).toBe(run.money);
+      expect(loaded.rng.state()).toBe(data.rngState);
+    }
+    memory.set(RUN_SAVE_KEY, JSON.stringify({ ...data, run: { ...data.run, guide: { dismissed: ['core'], picked: 'bogus' } } }));
+    const loaded = loadRun()!;
+    expect(loaded.guide).toEqual({ dismissed: ['core'] });
+  });
+
   it.each([1, 2, 3])('migrates retired research jobs in schema %s without refunds or changing company progress', (version) => {
     const run = marketCompany();
     run.reviewLocked = true;

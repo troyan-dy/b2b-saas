@@ -1,5 +1,6 @@
 import { L, LANG, worded } from '../../core/lang';
 import { createRng, type Rng } from '../../core/rng';
+import type { StartupGuide } from '../../game/startup-guide';
 import blocksData from '../../data/balance/blocks.json';
 import clientsData from '../../data/balance/clients.json';
 import dilemmasEn from '../../data/balance/dilemmas.en.json';
@@ -316,6 +317,7 @@ export interface Run {
   seed: number;
   rng: Rng;
   idea: Idea;
+  guide?: StartupGuide;
   firstIndustryOrder?: boolean;
   perks: readonly string[];
   /** levels of the founder's traits this startup is played with */
@@ -1062,6 +1064,7 @@ export function crunch(run: Run, lane: Lane = 'build'): boolean {
     case 'build': {
       run.debt += TUNING.crunch.debt;
       work(run, 0, true);
+      if (run.guide) run.guide.coded = true;
       break;
     }
     case 'fix':
@@ -1189,6 +1192,13 @@ export function answerCall(run: Run, sure: boolean): void {
     run.stats.promises++;
   } else c.deal = honestMult(run);
   seat(run, c);
+  rememberFirstSubscription(run);
+}
+
+function rememberFirstSubscription(run: Run, income?: number, net?: number): void {
+  if (!run.guide || run.guide.subscription) return;
+  income ??= incomePerS(run);
+  if (income > 0) run.guide.subscription = { income, net: net ?? netPerS(run) };
 }
 
 export function firstIndustryOrder(run: Run): { kind: string; text: string } | undefined {
@@ -1737,6 +1747,7 @@ function release(run: Run): void {
     : 0;
   const net = netPerS(run);
   report.profitableStreak = net > 0 ? previousStreak + 1 : 0;
+  rememberFirstSubscription(run, report.mrr / TUNING.sprint_s, net);
   if (run.stats.profitAt === 0 && net >= 0 && income > 0) run.stats.profitAt = run.t;
   run.lastReport = report;
   run.events.push({ type: 'release', report });
