@@ -1,10 +1,11 @@
 import { BLOCK_BY_ID } from '../content/blocks';
 import { HAND_NAME } from '../content/texts';
 import { L } from '../core/lang';
+import { createRng } from '../core/rng';
 import { profitLesson, type GuideStep } from '../game/startup-guide';
 import { companyTotals } from '../systems/company/company';
 import { MARKET } from '../systems/company/market';
-import { draftCards, previewCardChange, type DraftCard } from '../systems/run/draft';
+import { chooseCard, draftCards, previewCardChange, type DraftCard } from '../systems/run/draft';
 import { PRODUCTION } from '../systems/run/product';
 import { clientsMax, flows, leadsPerWork, sellable, TUNING, type Run } from '../systems/run/run';
 import { dec, money, PER_S, whole } from './format';
@@ -28,8 +29,9 @@ const selectors: Record<Exclude<GuideStep, 'assign-promo' | 'park-agent'>, strin
 const dollars = (n: number) => `${n < 0 ? '−' : ''}$${Math.abs(n).toLocaleString(L('ru-RU', 'en-US'), Math.abs(n) < 0.01 ? { maximumSignificantDigits: 1 } : { maximumFractionDigits: 2 })}`;
 const perSecond = (n: number) => dollars(n) + PER_S;
 const netRate = (n: number) => (n > 0 ? '+' : '') + perSecond(n);
-type Lesson = ReturnType<typeof profitLesson>;
-const expenses = (f: Lesson) => f.living + f.agents + f.hosting + f.tokens;
+type Rates = ReturnType<typeof flows>;
+const expenses = (f: Rates) => f.living + f.agents + f.hosting + f.tokens;
+const net = (f: Rates) => f.income - expenses(f);
 
 function gap(net: number): string {
   return net < 0 ? L(`До нуля не хватает ${perSecond(-net)}.`, `Still ${perSecond(-net)} short of breaking even.`)
@@ -37,24 +39,36 @@ function gap(net: number): string {
     : L('Сейчас подписки покрывают расходы. Проверь, сохранится ли плюс на релизе.', 'Subscriptions cover costs now. See if that margin holds at release.');
 }
 
-/** Prefer a concrete benefit this deal can deliver, before taking on another hosting bill. */
-function suggestedCard(run: Run): DraftCard | undefined {
-  const cards = draftCards(run);
+type CardPreview = DraftCard & { before: Rates; after: Rates };
+
+/** Play each dealt card once on a private copy. No sprint, new customers or RNG rolls are forecast. */
+function suggestedCard(run: Run): CardPreview | undefined {
+  const before = flows(run);
+  const cards = draftCards(run).flatMap(card => {
+    const copy: Run = {
+      ...structuredClone({ ...run, rng: undefined, events: [] }),
+      rng: createRng(run.seed, run.rng.state()),
+    };
+    return chooseCard(copy, card.id) ? [{ ...card, before, after: flows(copy) }] : [];
+  });
+  if (!cards.length) return undefined;
   const find = (id: string) => cards.find(card => card.id === id);
-  const cash = flows(run), batch = find('batch'), leads = find('leads');
-  const tokens = batch && previewCardChange(run, batch);
-  const savesTokens = tokens && tokens.after < tokens.before;
-  const repair = find('maintenance');
+  const best = cards.reduce((a, b) => net(b.after) > net(a.after) ? b : a);
+  if (net(before) <= 0 && net(best.after) > 0) return best;
+  const repair = find('maintenance'), leads = find('leads');
   if (repair && run.debt >= TUNING.debt.down_at + (repair.debt ?? 0)) return repair;
-  if (batch && savesTokens && cash.tokens >= cash.living && cash.tokens >= cash.hosting) return batch;
+  const improves = net(best.after) > net(before);
+  if (improves && (best.id !== 'batch' || before.tokens >= Math.max(before.living, before.hosting))) return best;
   if (leads && !run.down && sellable(run) && run.live.has('pay') && run.clients.length < clientsMax(run)) return leads;
-  if (batch && savesTokens) return batch;
+  if (improves) return best;
   return cards.find(card => card.money || (card.debt && run.debt > 0) || (card.energy && run.energy < TUNING.crunch.max))
-    ?? cards.find(card => card.slot === 'operation') ?? cards[0];
+    ?? cards.find(card => card.slot === 'operation') ?? best;
 }
 
-function cardReason(card: DraftCard, run: Run, target: HTMLElement): string {
-  if (card.money) return L(`${money(card.money)} на счёт один раз. Это запас времени; поток от подписок не изменится.`, `${money(card.money)} in cash, once. It buys time; subscription cash flow stays the same.`);
+function cardReason(card: CardPreview, run: Run, target: HTMLElement): string {
+  const { before, after } = card;
+  const margin = L('Чистый поток сейчас: ', 'Net cash flow now: ') + `${netRate(net(before))} → ${netRate(net(after))}.`;
+  if (card.money) return L(`${money(card.money)} на счёт один раз. Это запас времени; выручка от подписок не изменится.`, `${money(card.money)} in cash, once. It buys time; subscription revenue stays the same.`);
   if (card.leads) {
     const hosts: Readonly<Record<string, number>> = PRODUCTION.strategy_host;
     const other = draftCards(run).find(c => hosts[c.id] > 0);
@@ -63,17 +77,18 @@ function cardReason(card: DraftCard, run: Run, target: HTMLElement): string {
     return L(`+${card.leads} лида бесплатно. На релизе часть может стать клиентами.`, `Get ${card.leads} free leads. Some may become customers at release.`) + cost;
   }
   if (card.id === 'batch') {
-    const change = previewCardChange(run, card)!;
-    const bill = `${perSecond(change.before / TUNING.sprint_s)} → ${perSecond(change.after / TUNING.sprint_s)}`;
-    return L(`Токены: ${bill}. Цена экономии — задержка ответов: крупные клиенты менее довольны.`, `Tokens: ${bill}. The trade-off is slower replies and less satisfied large customers.`);
+    const bill = `${perSecond(before.tokens)} → ${perSecond(after.tokens)}`;
+    return L(`Токены: ${bill}. Крупным клиентам придётся ждать ответа.`, `Tokens: ${bill}. Large customers have to wait longer for replies.`) + ` ${margin}`;
   }
   if (card.debt || card.energy) {
     const impact = target.querySelector('.sc-impact')?.textContent;
     const change = previewCardChange(run, card);
     if (change?.before === change?.after) return `${impact}. ` + L('Сейчас бонус ничего не изменит, зато и расходы не вырастут.', 'No benefit right now, but no new costs either.');
-    return `${impact}. ` + L('Разовый эффект, без новой платы за хостинг.', 'A one-off effect with no new hosting bill.');
+    return `${impact}. ` + L('Разовый эффект, без новой платы за хостинг.', 'A one-off effect with no new hosting bill.') + (net(after) !== net(before) ? ` ${margin}` : '');
   }
-  return `${target.querySelector('.sc-impact')?.textContent}. ${card.tradeoff}`;
+  const income = netRate(after.income - before.income), host = netRate(after.hosting - before.hosting);
+  const tokens = after.tokens !== before.tokens ? L(`, токены ${netRate(after.tokens - before.tokens)}`, `, token cost ${netRate(after.tokens - before.tokens)}`) : '';
+  return L(`С нынешними клиентами: выручка ${income}, плата за хостинг ${host}${tokens}.`, `With your current customers: revenue ${income}, hosting cost ${host}${tokens}.`) + ` ${margin}`;
 }
 
 function releaseResult(run: Run): string {
@@ -85,7 +100,7 @@ function releaseResult(run: Run): string {
 
 interface Tip { title?: string; figure?: string; body: string; choice?: string }
 
-function advice(step: GuideStep, run: Run, target: HTMLElement, example?: DraftCard): Tip {
+function advice(step: GuideStep, run: Run, target: HTMLElement, example?: CardPreview, liveRates?: Rates): Tip {
   const name = target.querySelector('strong')?.textContent;
   const choice = example ? L(`Например, «${example.title}». `, `One option: “${example.title}”. `) + cardReason(example, run, target) : undefined;
   switch (step) {
@@ -105,10 +120,10 @@ function advice(step: GuideStep, run: Run, target: HTMLElement, example?: DraftC
           L('Разовые деньги пополняют счёт. Для прибыльного релиза нужно, чтобы подписки приносили больше, чем уходит каждую секунду.', 'One-off cash tops up your balance. For a profitable release, subscriptions must bring in more each second than you spend.'), choice };
     }
     case 'ledger': {
-      const f = profitLesson(run);
+      const f = liveRates ?? flows(run);
       return { title: L('Выручка минус расходы', 'Revenue minus costs'),
-        figure: `${perSecond(f.income)} − ${perSecond(expenses(f))} = ${netRate(f.net)}`,
-        body: L(`Каждую секунду: еда и жильё ${dollars(f.living)}, агенты ${dollars(f.agents)}, хостинг ${dollars(f.hosting)}, токены клиентов ${dollars(f.tokens)}.`, `Each second: food and rent ${dollars(f.living)}, agents ${dollars(f.agents)}, hosting ${dollars(f.hosting)}, customer tokens ${dollars(f.tokens)}.`) + ' ' + gap(f.net) };
+        figure: `${perSecond(f.income)} − ${perSecond(expenses(f))} = ${netRate(net(f))}`,
+        body: L(`Каждую секунду: еда и жильё ${dollars(f.living)}, агенты ${dollars(f.agents)}, хостинг ${dollars(f.hosting)}, токены клиентов ${dollars(f.tokens)}.`, `Each second: food and rent ${dollars(f.living)}, agents ${dollars(f.agents)}, hosting ${dollars(f.hosting)}, customer tokens ${dollars(f.tokens)}.`) + ' ' + gap(net(f)) };
     }
     case 'post': {
       const leads = dec(Number(leadsPerWork(run).toFixed(2)));
@@ -223,7 +238,8 @@ export function createGuideView(onDismiss: () => void, onSkip: () => void) {
   let paper: HTMLElement | null = null, marked: HTMLElement | null = null;
   // A temporarily hidden tip must not pull the shelf back after the player scrolls away.
   let revealed = '';
-  let lastDeal: Run['draft'] = null, example: DraftCard | undefined, focusSuggestion = false;
+  let lastDeal: Run['draft'] = null, example: CardPreview | undefined, focusSuggestion = false;
+  let lastRates = '';
   let placementKey = '';
   function unmark() {
     marked?.removeAttribute('data-guide-target');
@@ -287,19 +303,25 @@ export function createGuideView(onDismiss: () => void, onSkip: () => void) {
         target.setAttribute('aria-describedby', description.id);
         card.dataset.viewKey = viewKey;
         card.dataset.guideStep = step;
-        const tip = advice(step, run, target, target.matches(choices) ? example : undefined);
-        title.textContent = tip.title ?? L('Первый стартап', 'First startup');
-        figure.hidden = !tip.figure;
-        figure.textContent = tip.figure ?? '';
-        text.textContent = tip.body;
-        choice.hidden = !tip.choice;
-        choice.textContent = tip.choice ?? '';
         // The deal initially focuses its first card. Match that initial focus to the example,
         // then leave all mouse, number-key and Tab choices to the player.
         if (focusSuggestion && target.matches(choices) && document.activeElement === draft?.querySelector(choices)) {
           target.focus({ preventScroll: true });
         }
         focusSuggestion = false;
+      }
+      const rates = step === 'ledger' ? flows(run) : undefined;
+      const ratesKey = rates ? Object.values(rates).join(':') : '';
+      if (changed || ratesKey !== lastRates) {
+        lastRates = ratesKey;
+        const tip = advice(step, run, target, target.matches(choices) ? example : undefined, rates);
+        const heading = tip.title ?? L('Первый стартап', 'First startup');
+        if (title.textContent !== heading) title.textContent = heading;
+        if (figure.hidden !== !tip.figure) figure.hidden = !tip.figure;
+        if (figure.textContent !== (tip.figure ?? '')) figure.textContent = tip.figure ?? '';
+        if (text.textContent !== tip.body) text.textContent = tip.body;
+        if (choice.hidden !== !tip.choice) choice.hidden = !tip.choice;
+        if (choice.textContent !== (tip.choice ?? '')) choice.textContent = tip.choice ?? '';
       }
       if (card.parentElement !== parent) {
         if (draft) draft.append(card); // included in the deal's existing Tab loop
