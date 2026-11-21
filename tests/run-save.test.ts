@@ -27,6 +27,7 @@ import {
   place,
   refreshRun,
   RULES,
+  shelf,
   step,
   TUNING,
   type Run,
@@ -103,6 +104,18 @@ describe('company save', () => {
     stopGuide(acknowledged);
     expect(saveRun(acknowledged)).toBe(true);
     expect(loadRun()).not.toHaveProperty('guide');
+  });
+
+  it('resumes an off-route block selection without coaching a different placement', () => {
+    const run = createRun(70, idea, ['template']);
+    startGuide(run);
+    const picked = shelf(run).find(id => id !== 'landing' && id !== 'pay')!;
+    run.guide!.picked = picked;
+    expect(saveRun(run)).toBe(true);
+    const loaded = loadRun()!;
+    expect(loaded.guide?.picked).toBe(picked);
+    expect(guideStep(loaded, loaded.guide!.picked!)).toBeNull();
+    expect(place(loaded, loaded.guide!.picked!, 1, 0)).toBe(true);
   });
 
   it('keeps the first subscription rates through Continue and retires the guide when read', () => {

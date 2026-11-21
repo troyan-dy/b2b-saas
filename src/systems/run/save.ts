@@ -1,5 +1,5 @@
 import { createRng } from '../../core/rng';
-import { GUIDE_STEPS, isGuideBlock } from '../../game/startup-guide';
+import { GUIDE_STEPS } from '../../game/startup-guide';
 import draftCards from '../../data/balance/draft.json';
 import { createMarket, MARKET } from '../company/market';
 import marketEvolution from '../../data/balance/market-evolution.json';
@@ -76,7 +76,7 @@ function restoreGuide(state: RecordValue): void {
     ))
   ) {
     delete state.guide;
-  } else if (guide.picked !== undefined && !isGuideBlock(guide.picked)) {
+  } else if (guide.picked !== undefined && !kind(guide.picked)) {
     const restored = { ...guide };
     delete restored.picked;
     state.guide = restored;
