@@ -211,6 +211,7 @@ async function play(): Promise<void> {
     onEnd: (r: Run) => {
       if (finished) return;
       finished = true;
+      pause.setGuide(null);
       pause.setQuit(null);
       stopSaving();
       const result = finishCompany(r, meta, persistent);
@@ -218,6 +219,10 @@ async function play(): Promise<void> {
       if (r.over === 'sold') void packSale(over, r).then(() => showResult(result));
       else afterGameTime(() => void showResult(result), 1400);
     },
+  });
+  if (persistent) pause.setGuide(() => {
+    scene.openGuide();
+    persist();
   });
   pause.setQuit(() => {
     persist();

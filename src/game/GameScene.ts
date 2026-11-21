@@ -1,7 +1,7 @@
 import { gamePaused } from '../core/pause-clock';
 import Phaser from 'phaser';
 import { nextStep } from './run-hint';
-import { dismissGuideStep, guideStep, stopGuide, type GuideStep } from './startup-guide';
+import { dismissGuideStep, guideStep, resumeProfitGuide, stopGuide, type GuideStep } from './startup-guide';
 import { createGuideView } from '../ui/startup-guide';
 import { cityBuildings, cityFrame, cityGroups, cityOutlet, payingGroups, visibleBuildings } from './client-city-model';
 import { blocksOnSheet, cashRunway, currentSite, demolitionTargets, deskOffer, outstandingPromises } from './company-panel-model';
@@ -202,17 +202,31 @@ export class GameScene extends Phaser.Scene {
     for (const key of keys) this.load.image(`node_${key}`, `assets/img/nodes/${key}.webp`);
   }
 
+  /** Opt in from the pause menu without replacing the company or replaying its pitch. */
+  openGuide(): void {
+    if (this.ended || this.run.over) return;
+    if (!this.run.guide) resumeProfitGuide(this.run);
+    this.workbenchSelection.panel = null;
+    this.workbenchAt = -Infinity;
+    this.mountGuide();
+    if (this.board) this.show();
+  }
+
+  private mountGuide(): void {
+    this.guide ??= createGuideView(
+      () => {
+        if (this.visibleTip) dismissGuideStep(this.run, this.visibleTip);
+        this.syncGuide();
+      },
+      () => { stopGuide(this.run); this.syncGuide(); },
+    );
+  }
+
   create(): void {
     if (this.run.guide) {
       const picked = this.run.guide.picked;
       this.pickBlock(picked && !this.run.draft && shelf(this.run).includes(picked) && freeCells(this.run).length ? picked : null);
-      this.guide = createGuideView(
-        () => {
-          if (this.visibleTip) dismissGuideStep(this.run, this.visibleTip);
-          this.syncGuide();
-        },
-        () => { stopGuide(this.run); this.syncGuide(); },
-      );
+      this.mountGuide();
     }
     this.board = new Board(this);
     this.paper.enableMapPan((dx, dy) => {
@@ -346,7 +360,11 @@ export class GameScene extends Phaser.Scene {
     }
     if (action.type === 'choose-card') {
       if (chooseCard(run, action.id)) {
-        if (run.guide) dismissGuideStep(run, this.visibleTip === 'subscribed' ? 'subscribed' : 'release');
+        if (run.guide) {
+          const tip = this.visibleTip;
+          if (tip === 'subscribed' || tip === 'compare' || tip === 'profitable' || tip === 'ledger') dismissGuideStep(run, tip);
+          dismissGuideStep(run, 'release');
+        }
         this.acc = 0;
         this.paused = false;
         playSound('buy', 2);
@@ -387,7 +405,10 @@ export class GameScene extends Phaser.Scene {
         changed = rushTask(run, action.task);
         if (changed) this.paper.pop(1120, 360, L('Ускорение: строители работают ×2', 'Boost: builders work ×2'), 'good');
         break;
-      case 'expand-infrastructure': changed = expandInfrastructure(run); break;
+      case 'expand-infrastructure':
+        changed = expandInfrastructure(run);
+        if (changed && this.visibleTip === 'expand-capacity') dismissGuideStep(run, 'expand-capacity');
+        break;
       case 'select-segment':
         this.workbenchSelection.selectedSegment = action.segment;
         this.workbenchSelection.panel = 'clients';
@@ -507,6 +528,8 @@ export class GameScene extends Phaser.Scene {
       return;
     }
     this.hands++;
+    if ((lane === 'promo' && this.visibleTip === 'post') || (lane === 'fix' && this.visibleTip === 'fix-debt'))
+      dismissGuideStep(run, this.visibleTip);
     playSound('yes', this.hands % 6);
     const [fx, fy] = this.board.onScreen(DESK[0] - 40, DESK[1] - 130);
     const to: Pt = lane === 'build' ? site ? this.board.top(site) : this.infrastructurePoint : lane === 'fix' ? this.board.cell(0, 0) : MARKET;
@@ -546,12 +569,17 @@ export class GameScene extends Phaser.Scene {
     }
     if (owner === 'team') {
       for (const agent of this.run.agents) setLane(this.run, agent.id, key as Lane);
+      if (key === 'promo' && this.visibleTip === 'assign-promo') dismissGuideStep(this.run, 'assign-promo');
       playSound('ui');
       return;
     }
     const id = Number(owner.slice(1));
     if (key === 'drop') fire(this.run, id);
-    else setLane(this.run, id, key as Lane);
+    else {
+      setLane(this.run, id, key as Lane);
+      if (key === 'promo' && this.visibleTip === 'assign-promo' && this.run.agents.some(a => a.id === id && a.lane === 'promo'))
+        dismissGuideStep(this.run, 'assign-promo');
+    }
     playSound('ui');
   }
 
