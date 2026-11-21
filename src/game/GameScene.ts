@@ -1088,7 +1088,17 @@ export class GameScene extends Phaser.Scene {
       : order?.kind === 'roles' ? L('Первый заказ комплаенса: разные права для автора и согласующего', 'First compliance order: separate permissions for author and approver') : '';
     const detail = valuationNote ? valuationNote + record : orderHint;
     const promises = outstandingPromises(run);
-    this.paper.setGoal(nextStep(run, net, { paused: this.paused, picked: Boolean(this.picked), razing: Boolean(this.razing) }) + (detail && !promises.length ? `<br><small>${detail}</small>` : ''));
+    const trackingProfit = run.guide?.dismissed.includes('subscribed') && !this.visibleTip && !run.down &&
+      !run.draft && !run.dilemma && !run.call && run.offer === null && run.lastChance === null &&
+      !this.paused && !this.picked && !this.razing && !promises.length && !run.tasks.length;
+    const goal = trackingProfit
+      ? (net > 0
+        ? L('Сейчас подписки покрывают расходы. Если плюс сохранится <b>на релизе</b>, цель достигнута.',
+          'Subscriptions cover costs now. Stay above zero <b>at release</b> to reach your goal.')
+        : L('Спринт идёт. <b>На релизе</b> сравним выручку и расходы и выберем следующий ход.',
+          'The sprint is running. <b>At release</b> we’ll compare revenue and costs and choose the next move.'))
+      : nextStep(run, net, { paused: this.paused, picked: Boolean(this.picked), razing: Boolean(this.razing) });
+    this.paper.setGoal(goal + (detail && !promises.length ? `<br><small>${detail}</small>` : ''));
     this.paper.setPromises(promises.map(({ client, deadline }) => {
       const block = BLOCK_BY_ID[client.want]?.name ?? client.want;
       return { block: client.want, label: L(
