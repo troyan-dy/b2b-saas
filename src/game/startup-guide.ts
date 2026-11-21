@@ -149,7 +149,10 @@ function canFundExpansion(run: Run, net: number) {
   const work = rule.work + rule.work_growth * run.infrastructure + queue.reduce((n, t) => n + t.work - t.done, 0);
   const fees = Math.round(rule.cost * rule.cost_growth ** run.infrastructure) + queue.reduce((n, t) => n + (t.status === 'queued' ? t.cost : 0), 0);
   // Budget for the slowest rates the remaining work can cause; existing API boosts expire.
-  const debtCeiling = run.debt + work * Math.max(...builders.map(a => agentDebtPerWork(run, a)));
+  const promoAddsDebt = run.agents.some(a => a.lane === 'promo' && busy(run, a) && agentDebtPerWork(run, a) > 0);
+  const debtCeiling = promoAddsDebt
+    ? TUNING.debt.slow_max / TUNING.debt.slow_per_point
+    : run.debt + work * Math.max(...builders.map(a => agentDebtPerWork(run, a)));
   const forecast = { ...run, tasks: [], debt: debtCeiling };
   const rate = builders.reduce((sum, a) => sum + agentWorkRate(forecast, a), 0);
   // Fractional work is private to each builder; do not pool their unfinished squares.

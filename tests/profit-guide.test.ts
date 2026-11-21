@@ -220,6 +220,23 @@ describe('profit lesson in a running company', () => {
     expect(run.debt).toBeGreaterThan(0);
   });
 
+  it('reserves for a debt-producing promoter even when the builder is debt-free', () => {
+    const run = startup();
+    product(run, ['core', 'landing', 'pay']);
+    run.market.opened = true;
+    run.market.groups[0].profiles[0].count = 80;
+    run.sprintT = 20; // A think builder alone can just finish the 12 work before this release.
+    run.agents = [{ id: 1, tier: 'think', lane: 'build', carry: 0 }];
+    resumeProfitGuide(run);
+    dismissGuideStep(run, 'ledger');
+    run.money = 1500;
+    expect(guideStep(run, null)).toBe('expand-capacity');
+    run.agents.push({ id: 2, tier: 'fast', lane: 'promo', carry: 0 });
+    expect(guideStep(run, null)).toBeNull();
+    run.money = 2800;
+    expect(guideStep(run, null)).toBe('expand-capacity');
+  });
+
   it('picks an affordable idle agent by id, keeping people on active jobs and yielding during an outage', () => {
     const run = startup();
     product(run, ['core', 'landing', 'pay']);
