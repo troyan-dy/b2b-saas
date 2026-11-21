@@ -14,7 +14,7 @@ export default defineConfig({
         'src/core/{metrics,music,sound}.ts', // capture instrumentation and audio device adapters
         'src/game/{GameScene,flow,sale}.ts', // scene, menu and animation orchestration
         'src/view/{HelloScene,board,iso,lines,squares}.ts', // Phaser drawing and animation
-        'src/ui/{client-city,hud,map-pan,paper,pause,player-collection,scale,sprint-cards,workbench}.ts',
+        'src/ui/{client-city,hud,map-pan,paper,pause,player-collection,scale,sprint-cards,startup-guide,workbench}.ts',
         'src/ui/terminal/terminal.ts', // DOM interaction and HTML rendering
       ],
       reporter: ['text', 'json', 'json-summary'],
