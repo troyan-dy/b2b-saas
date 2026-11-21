@@ -62,14 +62,29 @@ function strings(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((item) => typeof item === 'string');
 }
 
+function cashFlow(value: unknown): value is RecordValue {
+  return record(value) && Number.isFinite(value.net) &&
+    (value.previousNet === null || Number.isFinite(value.previousNet)) &&
+    ['income', 'living', 'agents', 'hosting', 'tokens'].every(key => nonnegative(value[key]));
+}
+
 /** A damaged optional tutorial must not cost the player the company. */
 function restoreGuide(state: RecordValue): void {
+  if (record(state.lastReport) && state.lastReport.cashFlow !== undefined && !cashFlow(state.lastReport.cashFlow)) {
+    const restored = { ...state.lastReport };
+    delete restored.cashFlow;
+    state.lastReport = restored;
+  }
   const guide = state.guide;
   if (guide === undefined) return;
   if (
     !record(guide) || !Array.isArray(guide.dismissed) ||
     !guide.dismissed.every(step => GUIDE_STEPS.some(id => id === step)) ||
-    (guide.coded !== undefined && guide.coded !== true) ||
+     (guide.coded !== undefined && guide.coded !== true) ||
+    (guide.baselineNet !== undefined && !Number.isFinite(guide.baselineNet)) ||
+    (guide.result !== undefined && (!cashFlow(guide.result) || !integer(guide.result.release))) ||
+    (guide.legacyWin !== undefined && (!record(guide.legacyWin) || !integer(guide.legacyWin.release) ||
+      !nonnegative(guide.legacyWin.income) || !nonnegative(guide.legacyWin.tokens))) ||
     (guide.subscription !== undefined && (
       !record(guide.subscription) || !nonnegative(guide.subscription.income) ||
       guide.subscription.income === 0 || !Number.isFinite(guide.subscription.net)

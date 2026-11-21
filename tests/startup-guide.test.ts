@@ -121,7 +121,7 @@ describe('first startup guide', () => {
     },
   );
 
-  it('keeps the paid release rates across card effects and finishes on acknowledgement', () => {
+  it('keeps the first subscription across drafts, then bridges into the live ledger', () => {
     const run = startup();
     startGuide(run);
     product(run, ['core', 'landing', 'pay']);
@@ -143,7 +143,7 @@ describe('first startup guide', () => {
     run.dilemma = null;
     expect(guideStep(run, null)).toBe('subscribed');
     dismissGuideStep(run, 'subscribed');
-    expect(guideStep(run, null)).toBeNull();
+    expect(run.guide).toBeDefined();
   });
 
   it('recognizes a first paying contract signed on the phone between releases', () => {

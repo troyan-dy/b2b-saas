@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createRng } from '../src/core/rng';
-import { dismissGuideStep, guideStep, startGuide, stopGuide } from '../src/game/startup-guide';
+import { dismissGuideStep, guideStep, profitLesson, resumeProfitGuide, startGuide, stopGuide } from '../src/game/startup-guide';
 import { segmentRevenueMultiplier } from '../src/systems/run/product';
 import {
   createMarket,
@@ -118,7 +118,7 @@ describe('company save', () => {
     expect(place(loaded, loaded.guide!.picked!, 1, 0)).toBe(true);
   });
 
-  it('keeps the first subscription rates through Continue and retires the guide when read', () => {
+  it('continues from first subscription to ledger and archives both sides of a later comparison', () => {
     const run = createRun(70, idea);
     startGuide(run);
     product(run, ['core', 'landing', 'pay']);
@@ -133,7 +133,18 @@ describe('company save', () => {
     expect(loaded.guide?.subscription).toEqual(subscription);
     dismissGuideStep(loaded, 'subscribed');
     expect(saveRun(loaded)).toBe(true);
-    expect(guideStep(loadRun()!, null)).toBeNull();
+    const lesson = loadRun()!;
+    expect(chooseCard(lesson, lesson.draft![2])).toBe(true);
+    if (lesson.call) lesson.call = null;
+    expect(guideStep(lesson, null)).toBe('ledger');
+    dismissGuideStep(lesson, 'ledger');
+    release(lesson, 2);
+    const comparison = profitLesson(lesson);
+    expect(comparison.previousNet).toBe(subscription.net);
+    expect(comparison.release).toBe(2);
+    expect(chooseCard(lesson, lesson.draft![0])).toBe(true);
+    expect(saveRun(lesson)).toBe(true);
+    expect(profitLesson(loadRun()!)).toEqual(comparison);
   });
 
   it('keeps company progress when legacy data lacks a guide or the optional guide is damaged', () => {
@@ -142,7 +153,10 @@ describe('company save', () => {
     const data = savedData();
     for (const guide of [undefined, null, {}, { dismissed: ['missing'] }, { dismissed: [], coded: 'yes' },
       { dismissed: [], subscription: { income: 0, net: -1 } },
-      { dismissed: [], subscription: { income: 1, net: 'unknown' } }]) {
+      { dismissed: [], subscription: { income: 1, net: 'unknown' } },
+      { dismissed: [], baselineNet: [] }, { dismissed: [], result: { net: 400 } },
+      { dismissed: [], result: { release: 2, income: 2, net: -4, living: 4, agents: 1, hosting: 1, tokens: 0, previousNet: 'bad' } },
+      { dismissed: [], legacyWin: { release: 1, income: 1, tokens: 'bad' } }]) {
       memory.set(RUN_SAVE_KEY, JSON.stringify({ ...data, run: { ...data.run, guide } }));
       const loaded = loadRun()!;
       expect(loaded).not.toHaveProperty('guide');
@@ -152,6 +166,41 @@ describe('company save', () => {
     memory.set(RUN_SAVE_KEY, JSON.stringify({ ...data, run: { ...data.run, guide: { dismissed: ['core'], picked: 'bogus' } } }));
     const loaded = loadRun()!;
     expect(loaded.guide).toEqual({ dismissed: ['core'] });
+  });
+
+  it('bridges an old subscription-only checkpoint and keeps the acknowledgement after reload', () => {
+    const run = createRun(70, idea);
+    product(run, ['core', 'landing', 'pay']);
+    run.clients = [client(1)];
+    run.guide = { dismissed: ['code'], subscription: { income: 3, net: -5 } };
+    expect(saveRun(run)).toBe(true);
+    const loaded = loadRun()!;
+    expect(guideStep(loaded, null)).toBe('subscribed');
+    dismissGuideStep(loaded, 'subscribed');
+    expect(guideStep(loaded, null)).toBe('ledger');
+    dismissGuideStep(loaded, 'ledger');
+    expect(crunch(loaded, 'promo')).toBe(true);
+    expect(saveRun(loaded)).toBe(true);
+    const read = loadRun()!;
+    expect(guideStep(read, null)).toBe('assign-promo');
+    release(read, 1);
+    expect(profitLesson(read).previousNet).toBe(-5);
+  });
+
+  it('drops an unreadable optional rate archive rather than losing a valid older company', () => {
+    const run = createRun(70, idea);
+    product(run, ['core', 'landing', 'pay']);
+    run.clients = [client(1, { pay: 1000 })];
+    release(run, 1);
+    expect(saveRun(run)).toBe(true);
+    const data = savedData();
+    (data.run.lastReport as Record<string, unknown>).cashFlow = { net: 'damaged' };
+    memory.set(RUN_SAVE_KEY, JSON.stringify(data));
+    const loaded = loadRun()!;
+    expect(loaded?.money).toBe(run.money);
+    expect(loaded.lastReport?.cashFlow).toBeUndefined();
+    resumeProfitGuide(loaded);
+    expect(profitLesson(loaded)).toMatchObject({ historicalRatesMissing: true, release: 1 });
   });
 
   it.each([1, 2, 3])('migrates retired research jobs in schema %s without refunds or changing company progress', (version) => {
