@@ -1763,7 +1763,7 @@ function release(run: Run): void {
   report.profitableStreak = net > 0 ? previousStreak + 1 : 0;
   if (run.guide) recordGuideRelease(run.guide, run.sprint, report.cashFlow);
   rememberFirstSubscription(run, report.mrr / TUNING.sprint_s, net);
-  if (run.stats.profitAt === 0 && net >= 0 && income > 0) run.stats.profitAt = run.t;
+  if (run.stats.profitAt === 0 && net > 0 && income > 0) run.stats.profitAt = run.t;
   run.lastReport = report;
   run.events.push({ type: 'release', report });
 

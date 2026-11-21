@@ -203,6 +203,21 @@ describe('company save', () => {
     expect(profitLesson(loaded)).toMatchObject({ historicalRatesMissing: true, release: 1 });
   });
 
+  it('migrates an active old paid guide: first payment is unread, but its profitable release already counts', () => {
+    const run = createRun(70, idea);
+    product(run, ['core', 'landing', 'pay']);
+    run.clients = [client(1, {pay: 1000})];
+    release(run, 1);
+    delete run.lastReport!.cashFlow;
+    run.guide = { dismissed: ['code'], subscription: { income: 3, net: -5 } };
+    expect(saveRun(run)).toBe(true);
+    const loaded = loadRun()!;
+    expect(guideStep(loaded, null)).toBe('subscribed');
+    dismissGuideStep(loaded, 'subscribed');
+    expect(guideStep(loaded, null)).toBe('profitable');
+    expect(profitLesson(loaded)).toMatchObject({ historicalRatesMissing: true, release: 1 });
+  });
+
   it.each([1, 2, 3])('migrates retired research jobs in schema %s without refunds or changing company progress', (version) => {
     const run = marketCompany();
     run.reviewLocked = true;

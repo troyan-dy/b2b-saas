@@ -53,10 +53,10 @@ describe('profit lesson in a running company', () => {
     expect(run.guide).toBeUndefined();
   });
 
-  it('parks a paid promoter after a lead rather than buying redundant work or taking away a builder', () => {
+  it('stops paying for promotion when one more ordinary contract could cover the deficit', () => {
     const run = startup();
     product(run, ['core', 'landing', 'pay']);
-    run.clients = [client(1)];
+    run.clients = [client(1, {pay: 200})];
     resumeProfitGuide(run);
     dismissGuideStep(run, 'ledger');
     setLane(run, 1, 'promo');
@@ -65,6 +65,23 @@ describe('profit lesson in a running company', () => {
     expect(profitLesson(run).agentId).toBe(1);
     setLane(run, 1, 'build');
     expect(guideStep(run, null)).toBeNull();
+  });
+
+  it('keeps prospecting beyond the named-account lead when its margin cannot cover bills, then parks before settlement', () => {
+    const run = startup();
+    product(run, ['core', 'landing', 'pay']);
+    run.clients = [client(1, { pay: 55 })];
+    resumeProfitGuide(run);
+    dismissGuideStep(run, 'ledger');
+    setLane(run, 1, 'promo');
+    run.leads = 1;
+    expect(guideStep(run, null)).toBeNull();
+    step(run, 28);
+    expect(crunch(run, 'fix')).toBe(true);
+    expect(run.leads).toBeGreaterThan(1);
+    expect(guideStep(run, null)).toBe('park-agent');
+    setLane(run, 1, 'build');
+    expect(flows(run).agents).toBe(0);
   });
 
   it('helps find a buyer if payments shipped after the initial free client already left', () => {
@@ -126,10 +143,12 @@ describe('profit lesson in a running company', () => {
     const run = createRun(7, { tech: IDEAS.tech[0], form: IDEAS.form[3], aud: IDEAS.aud[0] });
     product(run, ['pay']);
     run.clients = [client(1, { type: 'corp', pay: 32, deal: 4.88 })];
+    run.t = TUNING.sprint_s;
     resumeProfitGuide(run);
     dismissGuideStep(run, 'ledger');
     release(run, 1);
     expect(run.lastReport!.cashFlow!.net).toBe(0);
+    expect(run.stats.profitAt).toBe(0);
     run.money += 1200;
     dismissGuideStep(run, 'profitable');
     expect(guideStep(run, null)).toBe('compare');
@@ -146,13 +165,36 @@ describe('profit lesson in a running company', () => {
     resumeProfitGuide(run);
     dismissGuideStep(run, 'ledger');
     expect(guideStep(run, null)).toBe('expand-capacity');
-    run.money = 50;
+    run.money = 900;
     expect(guideStep(run, null)).toBeNull();
     run.money = 1050;
+    expect(guideStep(run, null)).toBeNull();
+    run.money = 2200;
+    const order = shelf(run)[0];
+    expect(place(run, order, 0, -1)).toBe(true);
+    run.tasks[0].work = 90;
+    expect(guideStep(run, null)).toBeNull();
+    step(run, 1); // Today's active builder is already in the ledger; the queue still needs funding.
+    expect(guideStep(run, null)).toBeNull();
+    run.tasks = [];
     run.agents = [];
     expect(guideStep(run, null)).toBeNull();
     run.agents = [{id: 4, tier: 'fast', lane: 'build', carry: 0}];
     expect(expandInfrastructure(run)).toBe(true);
+    expect(guideStep(run, null)).toBeNull();
+  });
+
+  it('presents a paid release before an offer or dilemma hidden behind its draft', () => {
+    const run = startup();
+    startGuide(run);
+    product(run, ['core', 'landing', 'pay']);
+    run.clients = [client(1, {pay: 2000})];
+    release(run, 1);
+    run.offer = 500;
+    expect(guideStep(run, null)).toBe('subscribed');
+    dismissGuideStep(run, 'subscribed');
+    expect(guideStep(run, null)).toBe('profitable');
+    chooseCard(run, run.draft![1]);
     expect(guideStep(run, null)).toBeNull();
   });
 
@@ -193,6 +235,23 @@ describe('profit lesson in a running company', () => {
     expect(guideStep(run, null)).toBeNull();
   });
 
+  it('retains two customers with one deliverable module; a different selection does not coach the wrong cell', () => {
+    const run = startup();
+    product(run, ['core', 'landing', 'pay']);
+    const kind = shelf(run)[0];
+    run.clients = [client(1,{pay:30,want:kind}), client(2,{pay:40,want:kind})];
+    resumeProfitGuide(run);
+    dismissGuideStep(run, 'ledger');
+    expect(guideStep(run,null)).toBe('client-block');
+    expect(profitLesson(run).blockId).toBe(kind);
+    dismissGuideStep(run, 'client-block');
+    expect(guideStep(run,shelf(run)[1])).toBeNull();
+    expect(guideStep(run,kind)).toBe('client-cell');
+    const cell = freeCells(run)[0];
+    place(run,kind,cell.i,cell.j);
+    expect(guideStep(run,null)).toBe('post');
+  });
+
   it('rejoins when revenue only exists in an old report; does not infer profit from old income alone', () => {
     const run = startup();
     product(run, ['core', 'landing', 'pay']);
@@ -210,10 +269,11 @@ describe('profit lesson in a running company', () => {
   });
 });
 
-// Only perform highlighted actions. Cards vary independently of their value; calls are answered honestly.
-function walk(seed: number) {
+// Only perform highlighted actions. Card choices are independent of their value.
+function walk(seed: number, varied = false) {
   const { tech, form, aud } = dealIdea(seed, 0);
-  const run = createRun(seed, { tech: tech[0], form: form[0], aud: aud[0] });
+  const run = createRun(seed, { tech: tech[varied ? seed % 3 : 0], form: form[varied ? Math.floor(seed / 3) % 3 : 0],
+    aud: aud[varied ? Math.floor(seed / 9) % 3 : 0] });
   startGuide(run);
   let picked: string | null = null;
   const paid: number[] = [];
@@ -221,24 +281,29 @@ function walk(seed: number) {
     const tip = guideStep(run, picked);
     if (tip === 'profitable') {
       expect(run.lastReport!.profitableStreak).toBeGreaterThan(0);
-      return { seed, success: true, paid };
+      return { seed, success: true, paid, release: profitLesson(run).release };
     }
     if (tip === 'core' || tip === 'landing' || tip === 'pay') picked = tip;
+    else if (tip === 'client-block') picked = profitLesson(run).blockId!;
     else if (tip?.endsWith('-cell')) {
-      const cell = freeCells(run)[0];
+      const cells = freeCells(run);
+      const cell = cells[varied ? (seed + run.blocks.length) % cells.length : 0];
       expect(place(run, picked!, cell.i, cell.j)).toBe(true);
       picked = null;
     } else if (tip === 'code' || tip === 'post' || tip === 'fix-debt') {
       expect(crunch(run, tip === 'code' ? 'build' : tip === 'post' ? 'promo' : 'fix')).toBe(true);
-    } else if (tip === 'assign-promo' || tip === 'park-agent') setLane(run, profitLesson(run).agentId!, tip === 'park-agent' ? 'build' : 'promo');
-    else if (tip === 'expand-capacity') expect(expandInfrastructure(run)).toBe(true);
+    } else if (tip === 'assign-promo' || tip === 'park-agent') {
+      setLane(run, profitLesson(run).agentId!, tip === 'park-agent' ? 'build' : 'promo');
+    } else if (tip === 'expand-capacity') expect(expandInfrastructure(run)).toBe(true);
     if (tip) { dismissGuideStep(run, tip); continue; }
     if (run.draft) chooseCard(run, run.draft[(seed + run.sprint) % 3]);
-    else if (run.call) answerCall(run, false);
+    else if (run.call) answerCall(run, varied && (seed + run.sprint) % 3 === 0);
     else if (run.offer !== null) answerOffer(run, 'no');
     else if (run.lastChance !== null) answerLastChance(run, true);
-    else if (run.dilemma) answerDilemma(run, dilemmaOf(run)!.options.length - 1);
-    else {
+    else if (run.dilemma) {
+      const choices = dilemmaOf(run)!.options.length;
+      answerDilemma(run, varied ? (seed + run.sprint) % choices : choices - 1);
+    } else {
       step(run, 0.5);
       if (run.draft && run.lastReport!.mrr > 0) paid.push(netPerS(run));
     }
@@ -253,6 +318,21 @@ it('following only the guide reaches a profitable release across varied ordinary
   console.log('guided profitable releases:', wins.length, '/', walks.length,
     '; initially losing paid releases recovered:', wins.filter(w => w.paid[0] < 0).length,
     '; example seed', example.seed, 'paid release net/s:', example.paid.map(n => n.toFixed(2)));
-  expect(wins.length).toBeGreaterThanOrEqual(44);
+  expect(wins.length).toBe(48);
   expect(wins.filter(w => w.paid[0] < 0).length).toBeGreaterThanOrEqual(24);
+}, 60000);
+
+it('survives the short-patience coffee startup with the original card choices', () => {
+  const result = walk(129);
+  console.log('seed 129, recurring net/s at paid releases:', result.paid.map(n => n.toFixed(2)), 'first profit at release', result.release);
+  expect(result.success).toBe(true);
+  expect(result.paid[0]).toBeLessThan(0);
+});
+
+it('handles varied placements, pitches, card choices and risky promises on independent seeds', () => {
+  const walks = Array.from({ length: 240 }, (_, i) => walk(2001 + i, true));
+  const losses = walks.filter(w => !w.success);
+  console.log('independent guided startups:', walks.length - losses.length, '/', walks.length,
+    '; losing seeds:', losses.map(w => w.seed).join(', '));
+  expect(losses.length).toBeLessThanOrEqual(24);
 }, 60000);

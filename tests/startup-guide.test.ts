@@ -110,7 +110,7 @@ describe('first startup guide', () => {
     expect(run.guide?.subscription).toBeUndefined();
   });
 
-  it.each([{ offer: 250 }, { lastChance: 100 }, { over: 'broke' }, { dilemma: { id: 'press' } }])(
+  it.each([{ lastChance: 100 }, { over: 'broke' }])(
     'yields to the company decision %j', decision => {
       const run = startup();
       startGuide(run);
@@ -120,6 +120,16 @@ describe('first startup guide', () => {
       expect(guideStep(run, null)).toBeNull();
     },
   );
+
+  it.each([{ offer: 250 }, { dilemma: { id: 'press' } }])('coaches a draft before its hidden decision %j', decision => {
+    const run = startup();
+    startGuide(run);
+    release(run, 1);
+    Object.assign(run, decision);
+    expect(guideStep(run, null)).toBe('release');
+    chooseCard(run, run.draft![0]);
+    expect(guideStep(run, null)).toBeNull();
+  });
 
   it('keeps the first subscription across drafts, then bridges into the live ledger', () => {
     const run = startup();

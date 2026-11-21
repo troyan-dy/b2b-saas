@@ -1,5 +1,5 @@
 import { createRng } from '../../core/rng';
-import { GUIDE_STEPS } from '../../game/startup-guide';
+import { GUIDE_STEPS, restoreGuideWin } from '../../game/startup-guide';
 import draftCards from '../../data/balance/draft.json';
 import { createMarket, MARKET } from '../company/market';
 import marketEvolution from '../../data/balance/market-evolution.json';
@@ -536,6 +536,7 @@ function decodeRun(raw: string | null): Run | null {
     run.rng = createRng(run.seed, saved.rngState);
     run.events = [];
     refreshRun(run);
+    restoreGuideWin(run);
     if (run.sprint > TUNING.last_sprint) finishAtSprintLimit(run);
     return run;
   } catch {
