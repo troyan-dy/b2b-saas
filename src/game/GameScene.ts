@@ -1,7 +1,7 @@
 import { gamePaused } from '../core/pause-clock';
 import Phaser from 'phaser';
 import { nextStep } from './run-hint';
-import { dismissGuideStep, guideStep, isGuideBlock, stopGuide, type GuideStep } from './startup-guide';
+import { dismissGuideStep, guideStep, stopGuide, type GuideStep } from './startup-guide';
 import { createGuideView } from '../ui/startup-guide';
 import { cityBuildings, cityFrame, cityGroups, cityOutlet, payingGroups, visibleBuildings } from './client-city-model';
 import { blocksOnSheet, cashRunway, currentSite, demolitionTargets, deskOffer, outstandingPromises } from './company-panel-model';
@@ -1128,7 +1128,7 @@ export class GameScene extends Phaser.Scene {
   private pickBlock(kind: string | null): void {
     this.picked = kind;
     if (this.run.guide) {
-      if (isGuideBlock(kind)) this.run.guide.picked = kind;
+      if (kind !== null) this.run.guide.picked = kind;
       else delete this.run.guide.picked;
     }
   }
