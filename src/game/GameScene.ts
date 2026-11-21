@@ -1,7 +1,7 @@
 import { gamePaused } from '../core/pause-clock';
 import Phaser from 'phaser';
 import { nextStep } from './run-hint';
-import { dismissGuideStep, guideStep, stopGuide, type GuideStep } from './startup-guide';
+import { dismissGuideStep, guideStep, isGuideBlock, stopGuide, type GuideStep } from './startup-guide';
 import { createGuideView } from '../ui/startup-guide';
 import { cityBuildings, cityFrame, cityGroups, cityOutlet, payingGroups, visibleBuildings } from './client-city-model';
 import { blocksOnSheet, cashRunway, currentSite, demolitionTargets, deskOffer, outstandingPromises } from './company-panel-model';
@@ -497,7 +497,6 @@ export class GameScene extends Phaser.Scene {
       return;
     }
     this.hands++;
-    if (lane === 'build' && run.guide) dismissGuideStep(run, 'code');
     playSound('yes', this.hands % 6);
     const [fx, fy] = this.board.onScreen(DESK[0] - 40, DESK[1] - 130);
     const to: Pt = lane === 'build' ? site ? this.board.top(site) : this.infrastructurePoint : lane === 'fix' ? this.board.cell(0, 0) : MARKET;
@@ -1129,7 +1128,7 @@ export class GameScene extends Phaser.Scene {
   private pickBlock(kind: string | null): void {
     this.picked = kind;
     if (this.run.guide) {
-      if (kind === 'core' || kind === 'landing' || kind === 'pay') this.run.guide.picked = kind;
+      if (isGuideBlock(kind)) this.run.guide.picked = kind;
       else delete this.run.guide.picked;
     }
   }
