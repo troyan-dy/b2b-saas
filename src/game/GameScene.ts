@@ -742,7 +742,7 @@ export class GameScene extends Phaser.Scene {
           this.said.add('link');
           this.news(NEWS_EVENT.link);
         }
-        if (netPerS(run) >= 0 && e.report.mrr > 0 && !this.said.has('profit')) {
+        if ((e.report.profitableStreak ?? 0) > 0 && !this.said.has('profit')) {
           this.said.add('profit');
           this.news(NEWS_EVENT.profit);
         }

@@ -333,6 +333,10 @@ export async function ending(term: Terminal, run: FinalRun, meta: Meta, persist 
     term.print(score, 'big');
     term.print(caption, 'dim small');
     term.print(endingStats(run), 'small');
+    const lesson = run.guideProfit;
+    if (lesson && Number.isInteger(lesson.release) && Number.isFinite(lesson.net) && lesson.net > 0)
+      term.print(L(`Обучение пройдено: на релизе №${lesson.release} подписки превысили расходы.`,
+        `Guide complete: on release #${lesson.release}, subscriptions exceeded expenses.`), 'small');
     term.print('');
     // then what the founder takes into the next startup
     for (const l of got) term.print(`${L('урок', 'lesson')}: <b>${l.title}</b> — <em>${l.gives}</em>`, 'small');

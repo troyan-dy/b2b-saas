@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { bestValuation, claimResultTrait, recordResult, restoreResult, collectionLessons, emptyMeta, finish, learn, LESSONS, migrate, pastPitch, raise, traitChoices, traitLevels, TRAITS } from '../src/systems/meta/meta';
 import { answerLastChance, chooseCard, createRun, IDEAS, isLive, priceMult, shelf, step, TUNING, type Idea } from '../src/systems/run/run';
+import { startGuide } from '../src/game/startup-guide';
+import { client, product, release, startup } from './run-rules-fixtures';
 
 const idea: Idea = { tech: IDEAS.tech[0], form: IDEAS.form[3], aud: IDEAS.aud[0] };
 
@@ -17,6 +19,19 @@ function goBroke(seed: number): ReturnType<typeof createRun> {
 }
 
 describe('founder', () => {
+  it('keeps the guide milestone when the first profitable release opens the ending instead of a draft', () => {
+    const run = startup();
+    startGuide(run);
+    product(run, ['core', 'landing', 'pay']);
+    run.clients = [client(1, { pay: 1000 })];
+    release(run, TUNING.last_sprint);
+    expect(run.over).toBe('profit');
+    const meta = emptyMeta();
+    recordResult(run, meta);
+    expect(restoreResult(migrate(JSON.parse(JSON.stringify(meta))))).toMatchObject({
+      guideProfit: { release: TUNING.last_sprint, net: run.lastReport!.cashFlow!.net },
+    });
+  });
   it('keeps the largest final valuation across old and current runs', () => {
     expect(bestValuation([])).toBe(0);
     expect(bestValuation([{}, { value: 320 }, { value: 700 }, {}, { value: 500 }])).toBe(700);
