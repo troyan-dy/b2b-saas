@@ -21,6 +21,7 @@ import { playSound, unlockSound } from './core/sound';
 import { ending, menu, mixIdea } from './game/flow';
 import { packSale } from './game/sale';
 import { GameScene } from './game/GameScene';
+import { startGuide } from './game/startup-guide';
 import { playBot, SENSIBLE } from './gyms/bot';
 import { mountGymKeys } from './gyms/keys';
 import { LookdevScene } from './gyms/lookdev/LookdevScene';
@@ -184,6 +185,7 @@ async function play(): Promise<void> {
     if (!draft) { reload(false); return; }
     const { idea, boost } = draft;
     selected = createRun(args.seed, idea, meta.lessons, traitLevels(meta, boost));
+    if (persistent && !saved && meta.runs.length === 0) startGuide(selected);
   }
   const run = selected;
   const persist = (): void => {
